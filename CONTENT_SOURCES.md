@@ -35,3 +35,9 @@ These are widely cited but rounded or popularized. Verify them before using them
 - **Crust abundance:** approximate CRC Handbook values in ppm by mass. The "Found in Earth's crust" 3D view uses a log scale.
 - **The atom model:** a teaching picture. The shell (Bohr) view puts electrons on circles. The cloud view hints at the modern probability picture. Nuclei with more than 300 particles are drawn with 300 representative particles.
 - **"Where it's found" notes:** simplified. Discovery years follow the usual textbook dates, and several elements (like Mg, Ba, Pt, and Bi) have disputed or multi-step discovery stories.
+
+## Soil Builders
+
+- **Soil composition** (`src/data/soilElements.ts`): rounded world-average dry-weight values after Bowen (1979, *Environmental Chemistry of the Elements*) and Vinogradov (1959). Real soils vary a lot. A peat soil is mostly carbon, and a beach sand is mostly silicon and oxygen.
+- **Hydrogen:** given no single percentage, because most of it is in soil water, which changes from day to day.
+- **Roles are simplified.** Many elements do several jobs. Iron, for example, is both a framework element and a micronutrient. Co is listed as a micronutrient because legume root-nodule bacteria need it, even though most plants don't. Pb, Cd, As, and Hg occur naturally in trace amounts. They're grouped as "harmful" because pollution can raise them to toxic levels.

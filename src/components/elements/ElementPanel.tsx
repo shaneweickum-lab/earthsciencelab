@@ -1,8 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useState } from "react";
 import { CATEGORY_INFO, getElement, neutrons, type ChemElement } from "@/data/elements";
+import { LESSONS } from "@/content/soil/lessons";
+import { formatSoilPercent, SOIL_BY_Z, SOIL_ROLES, type SoilElementInfo } from "@/data/soilElements";
+import { useElementsPanel } from "@/store/elementsPanel";
 
 const AtomModel3D = dynamic(() => import("./AtomModel3D"), {
   ssr: false,
@@ -88,6 +92,7 @@ export function ElementPanel({ el, onSelect }: { el: ChemElement; onSelect: (z: 
       </div>
 
       <div className="px-4 pb-4">
+        {SOIL_BY_Z.has(el.z) && <InSoilCard info={SOIL_BY_Z.get(el.z)!} />}
         <h3 className="mb-2 font-black">Where it&apos;s found</h3>
         <div className="grid gap-2 sm:grid-cols-2">
           {found.map((f) => (
@@ -121,4 +126,41 @@ function formatPpm(ppm: number) {
   if (ppm >= 1) return `${Math.round(ppm).toLocaleString()} parts`;
   if (ppm >= 0.001) return `${ppm.toPrecision(2)} parts`;
   return "a tiny trace (far less than 0.001 parts)";
+}
+
+function InSoilCard({ info }: { info: SoilElementInfo }) {
+  const close = useElementsPanel((s) => s.close);
+  const harmful = info.roles.includes("harmful");
+  const lesson = LESSONS.find((l) => l.slug === SOIL_ROLES[info.roles[0]].lesson);
+  return (
+    <section
+      aria-label="In soil"
+      className={`mb-4 rounded-2xl border-2 p-4 ${harmful ? "border-danger/50 bg-danger/5" : "border-soil/40 bg-[#f3e8d6]"}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="mr-auto font-black">{harmful ? "⚠️ In soil (watch out)" : "🪱 In soil: a building block"}</h3>
+        {info.roles.map((r) => (
+          <span key={r} className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ background: SOIL_ROLES[r].color }}>
+            {SOIL_ROLES[r].icon} {SOIL_ROLES[r].label}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-sm">{info.soilJob}</p>
+      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <div className="rounded-xl bg-white/70 px-3 py-2">
+          <dt className="text-[11px] font-bold uppercase tracking-wide text-muted">Share of soil</dt>
+          <dd className="font-black">{info.soilPercent !== undefined ? `${formatSoilPercent(info.soilPercent)} by weight` : "Everywhere, in soil water and organic matter"}</dd>
+        </div>
+        <div className="rounded-xl bg-white/70 px-3 py-2">
+          <dt className="text-[11px] font-bold uppercase tracking-wide text-muted">Found as</dt>
+          <dd className="font-semibold">{info.forms}</dd>
+        </div>
+      </dl>
+      {lesson && (
+        <Link href={`/soil/learn/${lesson.slug}`} onClick={close} className="mt-3 inline-block text-sm font-bold text-soil underline">
+          Learn more in “{lesson.title}” →
+        </Link>
+      )}
+    </section>
+  );
 }

@@ -2,7 +2,7 @@ export type BadgeId =
   | "dirt-detective" | "texture-master" | "layer-explorer" | "health-inspector" | "erosion-fighter"
   | "regen-rookie" | "soil-scholar" | "first-harvest" | "field-restorer" | "soil-legend"
   | "globe-trotter" | "soil-explorer" | "world-soil-expert"
-  | "element-spotter" | "lab-regular" | "table-master";
+  | "element-spotter" | "lab-regular" | "table-master" | "soil-chemist";
 
 export interface Badge {
   id: BadgeId;
@@ -28,6 +28,7 @@ export const BADGES: Record<BadgeId, Badge> = {
   "element-spotter": { id: "element-spotter", name: "Element Spotter", icon: "⚛️", description: "Look up your first element." },
   "lab-regular": { id: "lab-regular", name: "Lab Regular", icon: "🧪", description: "Explore 25 different elements." },
   "table-master": { id: "table-master", name: "Table Master", icon: "👑", description: "Explore all 118 elements." },
+  "soil-chemist": { id: "soil-chemist", name: "Soil Chemist", icon: "🧑‍🔬", description: "Explore every element that builds soil." },
 };
 
 export const LESSON_BADGES: Record<string, BadgeId> = {

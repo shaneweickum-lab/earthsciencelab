@@ -3,10 +3,12 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { CATEGORY_INFO, ELEMENTS, findElements, getElement, type ElementCategory } from "@/data/elements";
+import type { SoilRole } from "@/data/soilElements";
 import { useProgress } from "@/store/progress";
 import { TOTAL_ELEMENTS } from "@/store/progressLogic";
 import { ElementPanel } from "./ElementPanel";
 import { PeriodicGrid2D } from "./PeriodicGrid2D";
+import { SoilLens } from "./SoilLens";
 import type { HeightMode } from "./PeriodicTable3D";
 
 const PeriodicTable3D = dynamic(() => import("./PeriodicTable3D"), {
@@ -18,6 +20,7 @@ const HEIGHT_MODES: { id: HeightMode; label: string; hint: string }[] = [
   { id: "flat", label: "Flat", hint: "The classic table." },
   { id: "mass", label: "Atomic mass", hint: "Taller tiles have heavier atoms." },
   { id: "crust", label: "Found in Earth's crust", hint: "Taller tiles are more common in rocks and soil (log scale)." },
+  { id: "soil", label: "In soil", hint: "Taller tiles make up more of soil (log scale). Oxygen and silicon tower over the rest." },
 ];
 
 export function ElementsExplorer({ initialZ, onClose }: { initialZ: number | null; onClose?: () => void }) {
@@ -26,6 +29,8 @@ export function ElementsExplorer({ initialZ, onClose }: { initialZ: number | nul
   const [heightMode, setHeightMode] = useState<HeightMode>("flat");
   const [filter, setFilter] = useState<ElementCategory | null>(null);
   const [query, setQuery] = useState("");
+  const [soilLens, setSoilLens] = useState(false);
+  const [soilRole, setSoilRole] = useState<SoilRole | null>(null);
   const viewElement = useProgress((s) => s.viewElement);
   const viewed = useProgress((s) => s.viewedElements);
 
@@ -109,6 +114,15 @@ export function ElementsExplorer({ initialZ, onClose }: { initialZ: number | nul
             ))}
           </div>
         )}
+        <button
+          onClick={() => { setSoilLens(!soilLens); setSoilRole(null); }}
+          aria-pressed={soilLens}
+          className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-1 text-sm font-bold transition ${
+            soilLens ? "border-soil bg-soil text-white" : "border-soil/40 bg-white text-soil hover:border-soil"
+          }`}
+        >
+          🪱 Soil Builders
+        </button>
         <span className="text-xs text-muted">{view === "3d" ? HEIGHT_MODES.find((m) => m.id === heightMode)!.hint + " Drag to tilt, scroll to zoom, right-drag to slide." : "Tap any element."}</span>
       </div>
 
@@ -116,11 +130,12 @@ export function ElementsExplorer({ initialZ, onClose }: { initialZ: number | nul
         <div className="min-w-0 space-y-3">
           {view === "3d" ? (
             <div className="h-[420px] overflow-hidden rounded-2xl sm:h-[540px]">
-              <PeriodicTable3D selected={selected} onSelect={setSelected} heightMode={heightMode} filter={filter} matches={matches} />
+              <PeriodicTable3D selected={selected} onSelect={setSelected} heightMode={heightMode} filter={filter} matches={matches} soilLens={soilLens} soilRole={soilRole} />
             </div>
           ) : (
-            <PeriodicGrid2D selected={selected} onSelect={setSelected} filter={filter} matches={matches} viewed={viewed} />
+            <PeriodicGrid2D selected={selected} onSelect={setSelected} filter={filter} matches={matches} viewed={viewed} soilLens={soilLens} soilRole={soilRole} />
           )}
+          {soilLens && <SoilLens role={soilRole} onRole={setSoilRole} onSelect={setSelected} viewed={viewed} />}
           <div className="flex flex-wrap gap-1.5">
             {(Object.keys(CATEGORY_INFO) as ElementCategory[]).map((c) => (
               <button
