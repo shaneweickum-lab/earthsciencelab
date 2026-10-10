@@ -6,7 +6,6 @@ export type PracticeId =
   | "coverCrop"
   | "compost"
   | "noTill"
-  | "rotate"
   | "mulch"
   | "grazing"
   | "hedgerow"
@@ -38,7 +37,7 @@ export const PRACTICES: Record<PracticeId, Practice> = {
     id: "weed", name: "Pull Weeds", icon: "🌿", cost: 0, kind: "care",
     short: "Clear the weeds by hand.",
     science: "Weeds compete with your crops for water, light, and nutrients. Pulling them by hand is how organic gardeners keep beds clean without herbicides.",
-    notes: ["Must be done before you can plant or improve this plot", "Weeds come back on bare soil each season unless it's covered"],
+    notes: ["Leaves an empty plot, ready for seeds from the seed bag", "Must be done before you can plant or improve this plot", "Weeds come back on bare soil each season unless it's covered"],
   },
   labTest: {
     id: "labTest", name: "Lab Soil Test", icon: "🧪", cost: 5, kind: "test",
@@ -74,12 +73,6 @@ export const PRACTICES: Record<PracticeId, Practice> = {
     short: "Stop plowing this plot for good.",
     science: "Without plowing, fungal threads and worm tunnels stay intact, so soil structure rebuilds each season. Yields dip a little at first.",
     notes: ["Permanent: keeps building structure and soil life every season", "Harvest dips a little for the first 2 seasons"],
-  },
-  rotate: {
-    id: "rotate", name: "Rotate Crop", icon: "🔄", cost: 4, kind: "regenerative",
-    short: "Grow a different crop than last time.",
-    science: "Changing crops breaks pest cycles and different roots feed different microbes.",
-    notes: ["Helps protect this plot from pests"],
   },
   mulch: {
     id: "mulch", name: "Mulch", icon: "🌾", cost: 8, kind: "regenerative",
@@ -134,6 +127,6 @@ export const PRACTICES: Record<PracticeId, Practice> = {
 
 export const PRACTICE_ORDER: PracticeId[] = [
   "weed", "labTest", "shovelTest", "waterTest",
-  "coverCrop", "compost", "noTill", "rotate", "mulch", "grazing", "hedgerow", "compostTea", "biochar",
+  "coverCrop", "compost", "noTill", "mulch", "grazing", "hedgerow", "compostTea", "biochar",
   "plow", "synthFert", "pesticide",
 ];

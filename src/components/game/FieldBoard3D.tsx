@@ -4,6 +4,7 @@ import { Html, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useMemo, useRef, useState } from "react";
 import { Color, type Group } from "three";
+import type { CropId } from "@/game/crops";
 import { fullyTested, GRID_SIZE, plotHealth, type GameState, type Plot, type SeasonName } from "@/game/engine";
 
 const POOR = new Color("#cdb184");
@@ -39,47 +40,122 @@ function Tufts({ count, color, height, seed, spread = 0.85 }: { count: number; c
   );
 }
 
-function Crop({ plot, winter }: { plot: Plot; winter: boolean }) {
-  if (winter) return null;
+const Mat = ({ color }: { color: string }) => <meshStandardMaterial color={color} flatShading />;
+
+/** One plant of the given crop, drawn from simple shapes. */
+function Plant({ crop, vigor, seed }: { crop: CropId; vigor: number; seed: number }) {
+  switch (crop) {
+    case "corn": {
+      const h = 0.45 * vigor;
+      return (
+        <group>
+          <mesh position={[0, h / 2, 0]}><cylinderGeometry args={[0.02, 0.025, h, 5]} /><Mat color="#5f9e3c" /></mesh>
+          <mesh position={[0.03, h * 0.65, 0]}><capsuleGeometry args={[0.03, 0.07, 3, 6]} /><Mat color="#e8c547" /></mesh>
+        </group>
+      );
+    }
+    case "tomato":
+      return (
+        <group>
+          <mesh position={[0, 0.12 * vigor, 0]}><icosahedronGeometry args={[0.1 * vigor, 0]} /><Mat color="#3f7a2e" /></mesh>
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} position={[Math.cos(i * 2.1 + seed) * 0.08, 0.1 + i * 0.03, Math.sin(i * 2.1 + seed) * 0.08]}>
+              <sphereGeometry args={[0.035, 8, 6]} /><Mat color="#d7322b" />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "potato":
+      return (
+        <group>
+          <mesh position={[0, 0.03, 0]} scale={[1, 0.5, 1]}><sphereGeometry args={[0.1, 8, 6]} /><Mat color="#5a3a22" /></mesh>
+          <mesh position={[0, 0.1 * vigor, 0]} scale={[1, 0.6, 1]}><icosahedronGeometry args={[0.09 * vigor, 0]} /><Mat color="#5b8f3a" /></mesh>
+        </group>
+      );
+    case "beans":
+      return (
+        <group>
+          <mesh position={[0, 0.08 * vigor, 0]}><icosahedronGeometry args={[0.1 * vigor, 0]} /><Mat color="#4c8a35" /></mesh>
+          <mesh position={[0.06, 0.06, 0.05]} rotation={[0, 0, 0.6]}><capsuleGeometry args={[0.012, 0.06, 3, 5]} /><Mat color="#8bc34a" /></mesh>
+        </group>
+      );
+    case "carrot":
+      return (
+        <group>
+          {[-0.03, 0, 0.03].map((dx, i) => (
+            <mesh key={i} position={[dx, 0.07 * vigor, 0]} rotation={[0, 0, dx * 6]}>
+              <coneGeometry args={[0.025, 0.14 * vigor, 4]} /><Mat color="#62a83f" />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.005, 0]}><cylinderGeometry args={[0.025, 0.025, 0.01, 8]} /><Mat color="#e8792b" /></mesh>
+        </group>
+      );
+    case "wheat": {
+      const h = 0.32 * vigor;
+      return <mesh position={[0, h / 2, 0]}><coneGeometry args={[0.05, h, 5]} /><Mat color="#d6b04a" /></mesh>;
+    }
+    case "squash":
+      return (
+        <group>
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} position={[Math.cos(i * 2.1) * 0.07, 0.04, Math.sin(i * 2.1) * 0.07]} rotation={[-Math.PI / 2, 0, i]}>
+              <circleGeometry args={[0.1 * vigor, 6]} /><meshStandardMaterial color="#3f7d2e" side={2} />
+            </mesh>
+          ))}
+          <mesh position={[0.04, 0.05, -0.03]} scale={[1, 0.8, 1]}><sphereGeometry args={[0.055, 10, 8]} /><Mat color="#e88a1f" /></mesh>
+        </group>
+      );
+    case "sunflower": {
+      const h = 0.5 * vigor;
+      return (
+        <group>
+          <mesh position={[0, h / 2, 0]}><cylinderGeometry args={[0.015, 0.02, h, 5]} /><Mat color="#4f8a2e" /></mesh>
+          <mesh position={[0, h, 0.02]} rotation={[Math.PI / 2.4, 0, 0]}><cylinderGeometry args={[0.06, 0.06, 0.015, 10]} /><Mat color="#f2c230" /></mesh>
+          <mesh position={[0, h + 0.008, 0.025]} rotation={[Math.PI / 2.4, 0, 0]}><cylinderGeometry args={[0.03, 0.03, 0.017, 8]} /><Mat color="#5a3a22" /></mesh>
+        </group>
+      );
+    }
+    case "buckwheat":
+      return (
+        <group>
+          <mesh position={[0, 0.07 * vigor, 0]}><icosahedronGeometry args={[0.08 * vigor, 0]} /><Mat color="#5d9c42" /></mesh>
+          {[0, 1, 2, 3].map((i) => (
+            <mesh key={i} position={[Math.cos(i * 1.6 + seed) * 0.05, 0.14 * vigor, Math.sin(i * 1.6 + seed) * 0.05]}>
+              <sphereGeometry args={[0.018, 6, 5]} /><Mat color="#fbf6ef" />
+            </mesh>
+          ))}
+        </group>
+      );
+  }
+}
+
+function Crop({ plot }: { plot: Plot }) {
+  if (!plot.crop) return null;
   const vigor = 0.5 + plotHealth(plot) / 140;
   const spots = [-0.27, 0, 0.27];
   return (
     <>
       {spots.flatMap((x, i) =>
-        spots.map((z, j) => {
-          const key = `${i}-${j}`;
-          if (plot.crop === 0) {
-            const h = 0.45 * vigor;
-            return (
-              <group key={key} position={[x, 0.25, z]}>
-                <mesh position={[0, h / 2, 0]}>
-                  <cylinderGeometry args={[0.02, 0.025, h, 5]} />
-                  <meshStandardMaterial color="#5f9e3c" />
-                </mesh>
-                <mesh position={[0.03, h * 0.65, 0]}>
-                  <capsuleGeometry args={[0.03, 0.07, 3, 6]} />
-                  <meshStandardMaterial color="#e8c547" />
-                </mesh>
-              </group>
-            );
-          }
-          if (plot.crop === 1) {
-            return (
-              <mesh key={key} position={[x, 0.25 + 0.08 * vigor, z]}>
-                <icosahedronGeometry args={[0.1 * vigor, 0]} />
-                <meshStandardMaterial color="#4c8a35" flatShading />
-              </mesh>
-            );
-          }
-          const h = 0.32 * vigor;
-          return (
-            <mesh key={key} position={[x, 0.25 + h / 2, z]}>
-              <coneGeometry args={[0.05, h, 5]} />
-              <meshStandardMaterial color="#d6b04a" />
-            </mesh>
-          );
-        }),
+        spots.map((z, j) => (
+          <group key={`${i}-${j}`} position={[x, 0.25, z]}>
+            <Plant crop={plot.crop!} vigor={vigor} seed={i * 3 + j} />
+          </group>
+        )),
       )}
+    </>
+  );
+}
+
+/** Raked rows of bare soil, ready for seeds. */
+function EmptyRows() {
+  return (
+    <>
+      {[-0.3, -0.1, 0.1, 0.3].map((x) => (
+        <mesh key={x} position={[x, 0.258, 0]}>
+          <boxGeometry args={[0.07, 0.018, 0.9]} />
+          <meshStandardMaterial color="#4a2f1c" roughness={1} />
+        </mesh>
+      ))}
     </>
   );
 }
@@ -118,8 +194,8 @@ function Weeds({ seed }: { seed: number }) {
 }
 
 function Tile({
-  plot, selected, onSelect, winter,
-}: { plot: Plot; selected: boolean; onSelect: () => void; winter: boolean }) {
+  plot, selected, onSelect,
+}: { plot: Plot; selected: boolean; onSelect: () => void }) {
   const ref = useRef<Group>(null);
   const [hover, setHover] = useState(false);
   const r = Math.floor(plot.id / GRID_SIZE);
@@ -187,7 +263,7 @@ function Tile({
           </mesh>
         </group>
       )}
-      {plot.weedy ? <Weeds seed={plot.id * 31 + 5} /> : <Crop plot={plot} winter={winter} />}
+      {plot.weedy ? <Weeds seed={plot.id * 31 + 5} /> : plot.crop ? <Crop plot={plot} /> : !has("coverCrop") && !has("mulch") && <EmptyRows />}
 
       {plot.hedgerow &&
         [-0.36, -0.12, 0.12, 0.36].map((x, i) => (
@@ -241,7 +317,7 @@ export default function FieldBoard3D({
         <meshStandardMaterial color={season === "Winter" ? "#dfe5e0" : "#9cbf6e"} />
       </mesh>
       {state.plots.map((p) => (
-        <Tile key={p.id} plot={p} selected={selected === p.id} onSelect={() => onSelect(p.id)} winter={season === "Winter"} />
+        <Tile key={p.id} plot={p} selected={selected === p.id} onSelect={() => onSelect(p.id)} />
       ))}
       <OrbitControls enablePan={false} minPolarAngle={0.4} maxPolarAngle={1.2} minDistance={4} maxDistance={10} />
     </Canvas>

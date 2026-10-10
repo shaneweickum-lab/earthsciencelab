@@ -7,7 +7,7 @@ A gamified science learning platform for middle schoolers (ages 11–14). The fi
 | Area | Route | What it does |
 | --- | --- | --- |
 | Learn: Soil Health & Quality | `/soil/learn` | Six lessons, each with an interactive (texture triangle, 3D soil profile, erosion sim, and more) and a quiz worth XP. |
-| Regenerate the Field | `/soil/game` | A 12-season game. You inherit an overgrown organic garden: weed it, run soil tests (lab, shovel, infiltration) to uncover each plot's hidden soil, then restore it with cover crops, compost, no-till, grazing, hedgerows, and biochar. Take as many actions as you can afford. Every action shows a preview of exactly what it will do to the plot before you confirm it. Synthetic shortcuts cost you your organic certification. |
+| Regenerate the Field | `/soil/game` | A 12-season game. You inherit an overgrown organic garden: weed it, run soil tests (lab, shovel, infiltration) to uncover each plot's hidden soil, plant crops from a seed bag (each packet explains what the crop takes from the soil and what it gives back; rotate plant families to dodge pests), then restore it with cover crops, compost, no-till, grazing, hedgerows, and biochar. Take as many actions as you can afford. Every action shows a preview of exactly what it will do to the plot before you confirm it. Synthetic shortcuts cost you your organic certification. |
 | Soil Globe | `/soil/globe` | A 3D globe with 50 regions colored by USDA soil order or by texture class, region cards with a texture-triangle plot, and a "Guess the Soil" quiz. |
 
 ## Periodic Table (every page)
