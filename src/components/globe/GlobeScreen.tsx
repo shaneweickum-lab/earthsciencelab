@@ -116,7 +116,7 @@ export function GlobeScreen() {
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
           {([

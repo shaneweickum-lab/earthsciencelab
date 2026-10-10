@@ -17,7 +17,7 @@ export function BadgeToast() {
   if (!toast) return null;
   const badge = BADGES[toast];
   return (
-    <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4" role="status" aria-live="polite">
+    <div className="fixed inset-x-0 bottom-6 z-[70] flex justify-center px-4" role="status" aria-live="polite">
       <button
         key={toast}
         onClick={dismiss}

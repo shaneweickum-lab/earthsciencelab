@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useProgress } from "@/store/progress";
 import { BadgeToast } from "./BadgeToast";
+import { ElementsOverlay } from "./elements/ElementsOverlay";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -11,6 +12,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
+      <ElementsOverlay />
       <BadgeToast />
     </>
   );

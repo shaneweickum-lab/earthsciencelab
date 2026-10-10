@@ -119,7 +119,7 @@ export default function SoilProfile3D() {
   const [selected, setSelected] = useState<string | null>("A");
   const info = HORIZONS.find((h) => h.id === selected);
   return (
-    <div className="grid gap-4 md:grid-cols-[1.3fr_1fr]">
+    <div className="grid gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <div className="h-[420px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#cfe6f3] to-[#f6efe2]">
         <Canvas camera={{ position: [3.2, 1.6, 3.6], fov: 45 }} dpr={[1, 2]}>
           <ambientLight intensity={0.7} />

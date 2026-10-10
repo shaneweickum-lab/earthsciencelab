@@ -125,7 +125,7 @@ export function GameScreen() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="space-y-3">
           <div className="card relative h-[380px] overflow-hidden sm:h-[460px]">
             <FieldBoard3D state={game} selected={selected} onSelect={setSelected} season={season} />

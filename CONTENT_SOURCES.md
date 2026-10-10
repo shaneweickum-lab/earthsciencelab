@@ -26,3 +26,12 @@ These are widely cited but rounded or popularized. Verify them before using them
 ## Game model
 
 *Regenerate the Field* is a teaching model, not an agronomic simulator. Its directions of effect are realistic: tillage reduces structure and organic matter, cover keeps soil from eroding, and synthetic nitrogen leaches and acidifies soil. Its magnitudes and timescales are compressed so that change shows up within 12 seasons. In reality, building organic matter by a full percentage point often takes many years.
+
+## Periodic table
+
+- **Atomic masses:** IUPAC standard atomic weights, rounded. For radioactive and synthetic elements, the mass shown in brackets is the mass number of the longest-lived isotope.
+- **Electron shells:** ground-state configurations, including real exceptions such as Cr, Cu, Nb, Pd (which has an empty 5th shell), Pt, and Au.
+- **Neutron counts:** use the most common natural isotope (for example copper-63 and lead-208), so they don't always equal the rounded mass minus the protons.
+- **Crust abundance:** approximate CRC Handbook values in ppm by mass. The "Found in Earth's crust" 3D view uses a log scale.
+- **The atom model:** a teaching picture. The shell (Bohr) view puts electrons on circles. The cloud view hints at the modern probability picture. Nuclei with more than 300 particles are drawn with 300 representative particles.
+- **"Where it's found" notes:** simplified. Discovery years follow the usual textbook dates, and several elements (like Mg, Ba, Pt, and Bi) have disputed or multi-step discovery stories.

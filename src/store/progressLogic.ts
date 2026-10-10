@@ -5,6 +5,8 @@ export const LESSON_XP = 50;
 export const QUIZ_XP_PER_CORRECT = 10;
 export const REGION_XP = 5;
 export const GLOBE_QUIZ_XP = 5;
+export const ELEMENT_XP = 2;
+export const TOTAL_ELEMENTS = 118;
 
 export interface ProgressData {
   xp: number;
@@ -16,6 +18,7 @@ export interface ProgressData {
   bestGameStars: number;
   bestGameHealth: number;
   gamesPlayed: number;
+  viewedElements: number[];
 }
 
 export const EMPTY_PROGRESS: ProgressData = {
@@ -28,6 +31,7 @@ export const EMPTY_PROGRESS: ProgressData = {
   bestGameStars: 0,
   bestGameHealth: 0,
   gamesPlayed: 0,
+  viewedElements: [],
 };
 
 export function levelFor(xp: number): number {
@@ -93,5 +97,15 @@ export function finishGame(data: ProgressData, stars: number, health: number): U
   const badges: BadgeId[] = ["first-harvest"];
   if (health >= 70) badges.push("field-restorer");
   if (stars >= 3) badges.push("soil-legend");
+  return award(next, badges);
+}
+
+export function viewElement(data: ProgressData, z: number): Update {
+  if (data.viewedElements.includes(z)) return { data, newBadges: [] };
+  const viewedElements = [...data.viewedElements, z];
+  const next = { ...data, viewedElements, xp: data.xp + ELEMENT_XP };
+  const badges: BadgeId[] = ["element-spotter"];
+  if (viewedElements.length >= 25) badges.push("lab-regular");
+  if (viewedElements.length >= TOTAL_ELEMENTS) badges.push("table-master");
   return award(next, badges);
 }

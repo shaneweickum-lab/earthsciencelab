@@ -77,6 +77,43 @@ await page.waitForTimeout(1500);
 await page.locator("div.card button.rounded-xl").first().click();
 await shot("09-globe-quiz");
 
+// Periodic table: open over the game, search, inspect the atom, close, and confirm the game survived.
+await page.goto(`${BASE}/soil/game`);
+await page.waitForTimeout(1000);
+await page.getByRole("button", { name: "Open the periodic table" }).click();
+await page.getByRole("dialog", { name: /Periodic table/ }).waitFor();
+await page.waitForTimeout(2000);
+await shot("12-elements-overlay");
+await page.getByLabel("Search elements").fill("iron");
+await page.getByLabel("Search elements").press("Enter");
+await page.getByRole("heading", { name: "Iron" }).waitFor();
+await page.waitForTimeout(2000);
+await shot("13-element-iron");
+await page.getByRole("button", { name: "Cloud" }).click();
+await page.waitForTimeout(800);
+await shot("14-iron-cloud");
+await page.getByRole("button", { name: "Atomic mass" }).click();
+await page.waitForTimeout(1500);
+await shot("15-mass-bars");
+await page.keyboard.press("Escape");
+await page.getByRole("dialog").waitFor({ state: "detached" });
+await page.getByText("Soil Health Index").waitFor();
+
+// Keyboard shortcut and lesson links.
+await page.goto(`${BASE}/soil/learn/healthy-soil`);
+await page.waitForLoadState("networkidle");
+await page.keyboard.press("e");
+await page.getByRole("dialog").waitFor();
+await page.keyboard.press("Escape");
+await page.getByRole("button", { name: /^nitrogen$/i }).first().click();
+await page.getByRole("heading", { name: "Nitrogen" }).waitFor();
+await page.keyboard.press("Escape");
+
+await page.goto(`${BASE}/elements?z=92`);
+await page.getByRole("heading", { name: "Uranium" }).waitFor();
+await page.waitForTimeout(2000);
+await shot("16-elements-page-uranium");
+
 await page.goto(`${BASE}/soil`);
 await page.waitForTimeout(500);
 await shot("10-soil-home-after");
@@ -85,6 +122,10 @@ await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${BASE}/soil/game`);
 await page.waitForTimeout(1500);
 await shot("11-mobile-game");
+await page.goto(`${BASE}/elements?z=8`);
+await page.getByRole("heading", { name: "Oxygen" }).waitFor();
+await page.waitForTimeout(1500);
+await shot("17-mobile-elements");
 
 await browser.close();
 if (errors.length) {
