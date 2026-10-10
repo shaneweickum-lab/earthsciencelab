@@ -54,9 +54,28 @@ await page.waitForTimeout(1500);
 await shot("05-soil-profile");
 
 await page.goto(`${BASE}/soil/game`);
-await page.getByRole("button", { name: /Let's farm/ }).click();
+await page.getByText("Congratulations! You inherited an organic garden!").waitFor();
+await shot("06a-garden-intro");
+await page.getByRole("button", { name: /Let's get gardening/ }).click();
 await page.waitForTimeout(1500);
-for (const name of ["Go No-Till", "Cover Crop"]) await page.getByRole("button", { name: new RegExp(name) }).first().click();
+await shot("06b-weedy-garden");
+// Every action opens a preview first, then you confirm it.
+async function act(name, confirm) {
+  await page.getByRole("button", { name: new RegExp(name) }).first().click();
+  await page.getByText(/Preview · Plot/).waitFor();
+  await page.getByRole("button", { name: confirm }).click();
+  await page.getByText(/Preview · Plot/).waitFor({ state: "detached" });
+}
+await act("Pull Weeds", /Apply to Plot 1/);
+await act("Shovel Test", /Run test on Plot 1/);
+await act("Infiltration Test", /Run test on Plot 1/);
+await act("Lab Soil Test", /Run test on Plot 1/);
+await page.getByRole("button", { name: /Compost 🪙/ }).click();
+await page.getByText(/What it will do to this plot/).waitFor();
+await shot("06c-preview-compost");
+await page.getByRole("button", { name: /Apply to Plot 1/ }).click();
+await act("Cover Crop", /Apply to Plot 1/);
+await page.waitForTimeout(800);
 await shot("06-game");
 await page.getByRole("button", { name: /^End / }).click();
 await page.getByText("Why did that happen?").waitFor();
@@ -108,6 +127,14 @@ await page.keyboard.press("Escape");
 await page.getByRole("button", { name: /^nitrogen$/i }).first().click();
 await page.getByRole("heading", { name: "Nitrogen" }).waitFor();
 await page.keyboard.press("Escape");
+
+// Only soil elements show "Where it's found" for now.
+await page.goto(`${BASE}/elements?z=79`);
+await page.getByRole("heading", { name: "Gold" }).waitFor();
+if (await page.getByText("Where it's found").count()) throw new Error("Gold should not show Where it's found");
+await page.goto(`${BASE}/elements?z=14`);
+await page.getByRole("heading", { name: "Silicon" }).waitFor();
+await page.getByText("Where it's found").waitFor();
 
 await page.goto(`${BASE}/elements?z=92`);
 await page.getByRole("heading", { name: "Uranium" }).waitFor();

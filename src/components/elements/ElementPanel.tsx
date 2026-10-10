@@ -34,6 +34,7 @@ export function ElementPanel({ el, onSelect }: { el: ChemElement; onSelect: (z: 
     ["Discovered", el.discovered === "ancient" ? "Known since ancient times" : el.discovered],
   ];
 
+  const inSoil = SOIL_BY_Z.has(el.z);
   const found = [
     { icon: "🌌", label: "In the universe", text: el.foundIn.universe },
     { icon: "🌍", label: "On Earth", text: el.foundIn.earth },
@@ -92,22 +93,27 @@ export function ElementPanel({ el, onSelect }: { el: ChemElement; onSelect: (z: 
       </div>
 
       <div className="px-4 pb-4">
-        {SOIL_BY_Z.has(el.z) && <InSoilCard info={SOIL_BY_Z.get(el.z)!} />}
-        <h3 className="mb-2 font-black">Where it&apos;s found</h3>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {found.map((f) => (
-            <div key={f.label} className="rounded-xl border border-line bg-white p-3">
-              <div className="text-xs font-bold uppercase tracking-wide text-muted">
-                {f.icon} {f.label}
-              </div>
-              <p className="mt-1 text-sm">{f.text}</p>
+        {/* For now, "where it's found" is shown only for elements that are part of soil. */}
+        {inSoil && (
+          <>
+            <InSoilCard info={SOIL_BY_Z.get(el.z)!} />
+            <h3 className="mb-2 font-black">Where it&apos;s found</h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {found.map((f) => (
+                <div key={f.label} className="rounded-xl border border-line bg-white p-3">
+                  <div className="text-xs font-bold uppercase tracking-wide text-muted">
+                    {f.icon} {f.label}
+                  </div>
+                  <p className="mt-1 text-sm">{f.text}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {el.crustPpm > 0 && (
-          <p className="mt-2 text-xs text-muted">
-            Earth&apos;s crust: about {formatPpm(el.crustPpm)} per million by weight.
-          </p>
+            {el.crustPpm > 0 && (
+              <p className="mt-2 text-xs text-muted">
+                Earth&apos;s crust: about {formatPpm(el.crustPpm)} per million by weight.
+              </p>
+            )}
+          </>
         )}
         <div className="mt-4 flex justify-between gap-2">
           <button className="btn btn-ghost px-3 py-1.5 text-sm" disabled={!prev} onClick={() => prev && onSelect(prev.z)}>
