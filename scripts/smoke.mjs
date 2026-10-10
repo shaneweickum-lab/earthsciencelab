@@ -114,6 +114,21 @@ await page.getByRole("heading", { name: "Uranium" }).waitFor();
 await page.waitForTimeout(2000);
 await shot("16-elements-page-uranium");
 
+// Soil Builders lens on the periodic table.
+await page.goto(`${BASE}/elements`);
+await page.getByRole("button", { name: /Soil Builders/ }).click();
+await page.getByRole("region", { name: "Soil builders" }).waitFor();
+await page.waitForTimeout(2000);
+await shot("18-soil-lens");
+await page.getByRole("button", { name: /Silicon, about 33 percent/ }).click();
+await page.getByRole("region", { name: "In soil" }).waitFor();
+await page.waitForTimeout(1500);
+await shot("19-silicon-in-soil");
+await page.getByRole("button", { name: "In soil", exact: true }).click();
+await page.getByRole("button", { name: /Micronutrients/ }).first().click();
+await page.waitForTimeout(2000);
+await shot("20-soil-height-micro");
+
 await page.goto(`${BASE}/soil`);
 await page.waitForTimeout(500);
 await shot("10-soil-home-after");
@@ -126,6 +141,9 @@ await page.goto(`${BASE}/elements?z=8`);
 await page.getByRole("heading", { name: "Oxygen" }).waitFor();
 await page.waitForTimeout(1500);
 await shot("17-mobile-elements");
+await page.getByRole("button", { name: /Soil Builders/ }).click();
+await page.waitForTimeout(500);
+await shot("21-mobile-soil-lens");
 
 await browser.close();
 if (errors.length) {

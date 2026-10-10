@@ -16,9 +16,10 @@ A 3D periodic table that opens on top of any page, so students keep their place.
 
 - All 118 elements, colored by category, with search and category filters. The 3D view can raise the tiles into bars by atomic mass or by abundance in Earth's crust. A flat grid view is the default on phones.
 - Picking an element shows its facts, where it's found (universe, Earth, living things, everyday uses), and a 3D atom: a proton and neutron nucleus with electrons in orbiting shells, or a fuzzy electron cloud view.
-- Exploring elements earns XP and 3 badges.
+- **Soil Builders:** the 26 elements found naturally in soil carry a small soil mark on their tiles. The 🪱 Soil Builders lens stands them on a 3D soil slab and fades the rest. It groups them by job (mineral framework, organic matter & life, macronutrients, micronutrients, and harmful pollutants) and shows a "what soil is made of" bar. An "In soil" height mode raises each tile by its share of soil. Each soil element's panel gets an "In soil" card explaining its job.
+- Exploring elements earns XP and 4 badges.
 
-Progress (XP, levels, 16 badges, lesson scores, visited regions, best game) is saved in the browser's localStorage. There are no accounts. An in-progress game also resumes after a refresh.
+Progress (XP, levels, 17 badges, lesson scores, visited regions, best game) is saved in the browser's localStorage. There are no accounts. An in-progress game also resumes after a refresh.
 
 ## Stack
 

@@ -3,11 +3,12 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CanvasTexture, MeshStandardMaterial, SRGBColorSpace, Vector3, type Group } from "three";
+import { CanvasTexture, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace, Vector3, type Group } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { CATEGORY_INFO, ELEMENTS, tilePosition, type ChemElement, type ElementCategory } from "@/data/elements";
+import { SOIL_BY_Z, SOIL_ROLES, type SoilRole } from "@/data/soilElements";
 
-export type HeightMode = "flat" | "mass" | "crust";
+export type HeightMode = "flat" | "mass" | "crust" | "soil";
 
 const STEP = 1.12;
 const FLAT = 0.25;
@@ -26,10 +27,37 @@ export function tileDepth(el: ChemElement, mode: HeightMode): number {
     const t = (Math.log10(el.crustPpm) + 13) / 18.7;
     return FLAT * 0.5 + Math.max(0, t) * MAX_BAR;
   }
+  if (mode === "soil") {
+    const p = SOIL_BY_Z.get(el.z)?.soilPercent;
+    if (!SOIL_BY_Z.has(el.z)) return 0.12;
+    if (!p) return FLAT * 2;
+    // log scale from ~6e-6 % (mercury) to 49 % (oxygen)
+    const t = (Math.log10(p) + 5.5) / 7.2;
+    return FLAT * 0.5 + Math.max(0.05, t) * MAX_BAR;
+  }
   return FLAT;
 }
 
-function faceTexture(symbol: string, top: string, bottom: string, color: string) {
+/** Small soil mound with a sprout, drawn on the corner of every tile that builds soil. */
+function drawSoilMark(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = "#5a3a22";
+  ctx.beginPath();
+  ctx.arc(222, 50, 22, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = "#3d7a33";
+  ctx.beginPath();
+  ctx.ellipse(214, 22, 9, 5, -0.6, 0, Math.PI * 2);
+  ctx.ellipse(230, 22, 9, 5, 0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#3d7a33";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(222, 30);
+  ctx.lineTo(222, 40);
+  ctx.stroke();
+}
+
+function faceTexture(symbol: string, top: string, bottom: string, color: string, soil = false) {
   const c = document.createElement("canvas");
   c.width = 256;
   c.height = 256;
@@ -47,6 +75,14 @@ function faceTexture(symbol: string, top: string, bottom: string, color: string)
   ctx.fillText(symbol, 128, 168);
   ctx.font = "600 30px ui-rounded, system-ui, sans-serif";
   ctx.fillText(bottom.length > 13 ? bottom.slice(0, 12) + "…" : bottom, 128, 228);
+  if (soil) {
+    // Earthy strip along the bottom edge plus the mound icon.
+    ctx.fillStyle = "#6b4423";
+    ctx.fillRect(0, 242, 256, 14);
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    for (let i = 0; i < 14; i++) ctx.fillRect((i * 37) % 250, 245 + (i % 3) * 3, 3, 3);
+    drawSoilMark(ctx);
+  }
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
   tex.anisotropy = 4;
@@ -63,17 +99,20 @@ interface TileProps {
   bottom: string;
   selected?: boolean;
   dimmed?: boolean;
+  soil?: boolean;
+  /** Ring color when the soil lens highlights this tile. */
+  soilRing?: string | null;
   onClick?: () => void;
 }
 
-function Tile({ x, y, depth, color, symbol, top, bottom, selected, dimmed, onClick }: TileProps) {
+function Tile({ x, y, depth, color, symbol, top, bottom, selected, dimmed, soil, soilRing, onClick }: TileProps) {
   const ref = useRef<Group>(null);
   const [hover, setHover] = useState(false);
   const materials = useMemo(() => {
     const side = new MeshStandardMaterial({ color, roughness: 0.6, transparent: true });
-    const front = new MeshStandardMaterial({ map: faceTexture(symbol, top, bottom, color), roughness: 0.5, transparent: true });
+    const front = new MeshStandardMaterial({ map: faceTexture(symbol, top, bottom, color, soil), roughness: 0.5, transparent: true });
     return { side, front, all: [side, side, side, side, front, side] };
-  }, [color, symbol, top, bottom]);
+  }, [color, symbol, top, bottom, soil]);
 
   useEffect(() => () => {
     materials.front.map?.dispose();
@@ -95,7 +134,7 @@ function Tile({ x, y, depth, color, symbol, top, bottom, selected, dimmed, onCli
   useFrame(() => {
     const g = ref.current;
     if (!g) return;
-    const lift = selected ? 0.5 : hover && onClick ? 0.25 : 0;
+    const lift = (selected ? 0.5 : hover && onClick ? 0.25 : 0) + (soilRing ? 0.3 : 0);
     // Animate depth changes between height modes and the hover lift.
     g.scale.z += (depth - g.scale.z) * 0.12;
     g.position.z += (g.scale.z / 2 + lift - g.position.z) * 0.18;
@@ -111,6 +150,12 @@ function Tile({ x, y, depth, color, symbol, top, bottom, selected, dimmed, onCli
       >
         <boxGeometry args={[1, 1, 1]} />
       </mesh>
+      {soilRing && !selected && (
+        <mesh position={[0, 0, 0.5]} scale={[1, 1, 1 / Math.max(depth, 0.01)]}>
+          <ringGeometry args={[0.6, 0.68, 4, 1, Math.PI / 4]} />
+          <meshBasicMaterial color={soilRing} />
+        </mesh>
+      )}
       {selected && (
         // Gold frame around the chosen tile, drawn just in front of its face.
         <mesh position={[0, 0, 0.5]} scale={[1, 1, 1 / Math.max(depth, 0.01)]}>
@@ -118,6 +163,55 @@ function Tile({ x, y, depth, color, symbol, top, bottom, selected, dimmed, onCli
           <meshBasicMaterial color="#ffd166" />
         </mesh>
       )}
+    </group>
+  );
+}
+
+function soilTexture() {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#4a3020";
+  ctx.fillRect(0, 0, 256, 256);
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const specks = ["#6b4423", "#3a2414", "#8a5a3a", "#c9a865", "#2b1d12"];
+  for (let i = 0; i < 900; i++) {
+    ctx.fillStyle = specks[i % specks.length];
+    ctx.globalAlpha = 0.5 + rand() * 0.5;
+    const r = 1 + rand() * 3;
+    ctx.beginPath();
+    ctx.arc(rand() * 256, rand() * 256, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  tex.wrapS = tex.wrapT = RepeatWrapping;
+  tex.repeat.set(6, 3);
+  return tex;
+}
+
+/** A slab of soil the elements stand on when the soil lens is on. */
+function SoilSlab() {
+  const tex = useMemo(() => soilTexture(), []);
+  useEffect(() => () => tex.dispose(), [tex]);
+  const [, top] = tileXY(1, 1);
+  const [, bottom] = tileXY(1, 10);
+  const height = top - bottom + 1.6;
+  const cy = (top + bottom) / 2;
+  return (
+    <group>
+      <mesh position={[0, cy, -0.35]}>
+        <boxGeometry args={[18 * STEP + 1.2, height, 0.5]} />
+        <meshStandardMaterial map={tex} roughness={1} />
+      </mesh>
+      {/* grass edge along the top */}
+      <mesh position={[0, cy + height / 2 + 0.06, -0.3]}>
+        <boxGeometry args={[18 * STEP + 1.2, 0.14, 0.6]} />
+        <meshStandardMaterial color="#5a8f3a" roughness={1} />
+      </mesh>
     </group>
   );
 }
@@ -150,9 +244,11 @@ interface Props {
   heightMode: HeightMode;
   filter: ElementCategory | null;
   matches: Set<number> | null;
+  soilLens: boolean;
+  soilRole: SoilRole | null;
 }
 
-export default function PeriodicTable3D({ selected, onSelect, heightMode, filter, matches }: Props) {
+export default function PeriodicTable3D({ selected, onSelect, heightMode, filter, matches, soilLens, soilRole }: Props) {
   const selectedEl = selected ? ELEMENTS[selected - 1] : null;
   const focus = useMemo<[number, number, number] | null>(() => {
     if (!selectedEl) return null;
@@ -170,7 +266,13 @@ export default function PeriodicTable3D({ selected, onSelect, heightMode, filter
       {ELEMENTS.map((el) => {
         const { col, row } = tilePosition(el);
         const [x, y] = tileXY(col, row);
-        const dimmed = (filter !== null && el.category !== filter) || (matches !== null && !matches.has(el.z));
+        const soil = SOIL_BY_Z.get(el.z);
+        const soilMatch = soil && (soilRole === null || soil.roles.includes(soilRole));
+        const dimmed =
+          (filter !== null && el.category !== filter) ||
+          (matches !== null && !matches.has(el.z)) ||
+          (soilLens && !soilMatch);
+        const ring = soilLens && soilMatch ? SOIL_ROLES[soilRole ?? soil.roles[0]].color : null;
         return (
           <Tile
             key={el.z}
@@ -183,6 +285,8 @@ export default function PeriodicTable3D({ selected, onSelect, heightMode, filter
             bottom={el.name}
             selected={selected === el.z}
             dimmed={dimmed}
+            soil={!!soil}
+            soilRing={ring}
             onClick={() => onSelect(el.z)}
           />
         );
@@ -191,10 +295,11 @@ export default function PeriodicTable3D({ selected, onSelect, heightMode, filter
       {([[6, "57–71", "lanthanide"], [7, "89–103", "actinide"]] as const).map(([row, label, cat]) => {
         const [x, y] = tileXY(3, row);
         return (
-          <Tile key={label} x={x} y={y} depth={0.12} color={CATEGORY_INFO[cat].color} symbol="↓" top={label} bottom="" dimmed={filter !== null && filter !== cat} />
+          <Tile key={label} x={x} y={y} depth={0.12} color={CATEGORY_INFO[cat].color} symbol="↓" top={label} bottom="" dimmed={(filter !== null && filter !== cat) || soilLens} />
         );
       })}
-      <CameraRig focus={focus} bars={heightMode !== "flat"} />
+      {soilLens && <SoilSlab />}
+      <CameraRig focus={focus} bars={heightMode !== "flat" || soilLens} />
       <OrbitControls
         makeDefault
         target={[0, -0.5, 0]}

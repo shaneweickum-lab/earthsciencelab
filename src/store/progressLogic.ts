@@ -1,3 +1,4 @@
+import { SOIL_BUILDER_ZS } from "@/data/soilElements";
 import { LESSON_BADGES, type BadgeId } from "./badges";
 
 export const XP_PER_LEVEL = 200;
@@ -107,5 +108,6 @@ export function viewElement(data: ProgressData, z: number): Update {
   const badges: BadgeId[] = ["element-spotter"];
   if (viewedElements.length >= 25) badges.push("lab-regular");
   if (viewedElements.length >= TOTAL_ELEMENTS) badges.push("table-master");
+  if (SOIL_BUILDER_ZS.every((s) => viewedElements.includes(s))) badges.push("soil-chemist");
   return award(next, badges);
 }

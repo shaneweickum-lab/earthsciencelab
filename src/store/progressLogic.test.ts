@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SOIL_BUILDER_ZS } from "@/data/soilElements";
 import {
   answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, finishGame, levelFor, viewElement, visitRegion,
 } from "./progressLogic";
@@ -58,6 +59,14 @@ describe("progress logic", () => {
     expect(d.viewedElements).toHaveLength(118);
     expect(d.badges).toEqual(expect.arrayContaining(["lab-regular", "table-master"]));
     expect(d.xp).toBe(118 * 2);
+  });
+
+  it("awards Soil Chemist after every soil builder is explored", () => {
+    let d = EMPTY_PROGRESS;
+    const last = SOIL_BUILDER_ZS[SOIL_BUILDER_ZS.length - 1];
+    for (const z of SOIL_BUILDER_ZS.slice(0, -1)) d = viewElement(d, z).data;
+    expect(d.badges).not.toContain("soil-chemist");
+    expect(viewElement(d, last).newBadges).toContain("soil-chemist");
   });
 
   it("computes levels", () => {
