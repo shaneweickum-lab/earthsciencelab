@@ -5,6 +5,9 @@ export const GRID_SIZE = 3;
 export const TOTAL_SEASONS = 12;
 export const WIN_HEALTH = 70;
 export const START_COINS = 100;
+export const ORGANIC_BONUS = 1.25;
+/** Bumped when the saved game shape changes, so old saves are discarded. */
+export const GAME_VERSION = 2;
 
 export const SEASON_NAMES = ["Spring", "Summer", "Fall", "Winter"] as const;
 export type SeasonName = (typeof SEASON_NAMES)[number];
@@ -44,6 +47,24 @@ export interface Plot {
   crop: number;
   seasonsSameCrop: number;
   applied: PracticeId[];
+  weedy: boolean;
+  /** Which soil tests have been run. Untested metrics stay hidden from the player. */
+  known: { lab: boolean; shovel: boolean; water: boolean };
+}
+
+export type Metric = "om" | "life" | "structure" | "water" | "nutrients" | "ph";
+
+/** Which test reveals each metric. */
+export const METRIC_TEST: Record<Metric, keyof Plot["known"]> = {
+  om: "lab", nutrients: "lab", ph: "lab", life: "shovel", structure: "shovel", water: "water",
+};
+
+export function isKnown(p: Plot, m: Metric): boolean {
+  return p.known[METRIC_TEST[m]];
+}
+
+export function fullyTested(p: Plot): boolean {
+  return p.known.lab && p.known.shovel && p.known.water;
 }
 
 export interface SeasonReport {
@@ -52,6 +73,8 @@ export interface SeasonReport {
   event: EventId;
   harvest: number;
   grazingIncome: number;
+  lostOrganic: boolean;
+  weedsReturned: number;
   healthBefore: number;
   healthAfter: number;
   plotHealthChange: number[];
@@ -61,11 +84,13 @@ export interface SeasonReport {
 export type GameStatus = "playing" | "won" | "lost";
 
 export interface GameState {
+  version: number;
   seed: number;
   season: number;
   coins: number;
-  ap: number;
-  maxAp: number;
+  organic: boolean;
+  /** Organic status at the start of this season, so the report can say when it changed. */
+  organicAtSeasonStart: boolean;
   plots: Plot[];
   forecast: EventId;
   status: GameStatus;
@@ -83,10 +108,6 @@ const round1 = (v: number) => Math.round(v * 10) / 10;
 
 export function seasonName(season: number): SeasonName {
   return SEASON_NAMES[(season - 1) % 4];
-}
-
-export function apForSeason(season: number): number {
-  return 8 + Math.floor((season - 1) / 4);
 }
 
 export function phScore(ph: number): number {
@@ -143,15 +164,18 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
       crop: Math.floor(rand() * CROPS.length),
       seasonsSameCrop: 3,
       applied: [],
+      weedy: true,
+      known: { lab: false, shovel: false, water: false },
     });
   }
   const [forecast, next] = rollEvent(s, 1);
   return {
+    version: GAME_VERSION,
     seed: next,
     season: 1,
     coins: START_COINS,
-    ap: apForSeason(1),
-    maxAp: apForSeason(1),
+    organic: true,
+    organicAtSeasonStart: true,
     plots,
     forecast,
     status: "playing",
@@ -168,8 +192,13 @@ export function canApply(state: GameState, plotId: number, practiceId: PracticeI
   if (!plot) return "Pick a plot first.";
   if (practice.unlockSeason && state.season < practice.unlockSeason)
     return `Unlocks in season ${practice.unlockSeason}.`;
+  if (practiceId === "weed" && !plot.weedy) return "No weeds here right now.";
+  if (practiceId === "labTest" && plot.known.lab) return "You already have lab results for this plot.";
+  if (practiceId === "shovelTest" && plot.known.shovel) return "You already did a shovel test here.";
+  if (practiceId === "waterTest" && plot.known.water) return "You already tested water here.";
   if (plot.applied.includes(practiceId)) return "Already done on this plot this season.";
-  if (state.ap <= 0) return "No actions left this season.";
+  if (plot.weedy && (practice.kind === "regenerative" || practice.kind === "conventional"))
+    return "Pull the weeds first.";
   if (state.coins < practice.cost) return "Not enough coins.";
   if (practiceId === "noTill" && plot.noTill) return "This plot is already no-till.";
   if (practiceId === "hedgerow" && plot.hedgerow) return "This plot already has a hedgerow.";
@@ -185,7 +214,13 @@ export function applyPractice(state: GameState, plotId: number, practiceId: Prac
   const practice = PRACTICES[practiceId];
   const plots = state.plots.map((p) => {
     if (p.id !== plotId) return p;
-    const next = { ...p, applied: [...p.applied, practiceId] };
+    const isTest = PRACTICES[practiceId].kind === "test";
+    // Tests are one-off and don't count as something done to the soil this season.
+    const next = { ...p, applied: isTest ? p.applied : [...p.applied, practiceId], known: { ...p.known } };
+    if (practiceId === "weed") next.weedy = false;
+    if (practiceId === "labTest") next.known.lab = true;
+    if (practiceId === "shovelTest") next.known.shovel = true;
+    if (practiceId === "waterTest") next.known.water = true;
     if (practiceId === "noTill") next.noTill = true;
     if (practiceId === "hedgerow") next.hedgerow = true;
     if (practiceId === "biochar") next.biochar = true;
@@ -195,7 +230,8 @@ export function applyPractice(state: GameState, plotId: number, practiceId: Prac
     }
     return next;
   });
-  return { ok: true, state: { ...state, plots, ap: state.ap - 1, coins: state.coins - practice.cost } };
+  const organic = state.organic && practice.organic !== false;
+  return { ok: true, state: { ...state, plots, organic, coins: state.coins - practice.cost } };
 }
 
 function neighbors(id: number): number[] {
@@ -218,6 +254,7 @@ interface PlotOutcome {
   leached: boolean;
   pestHit: boolean;
   plowed: boolean;
+  weedsReturned: boolean;
 }
 
 function resolvePlot(p: Plot, state: GameState, event: EventId, market: number): PlotOutcome {
@@ -255,6 +292,8 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
 
   // Natural processes
   nutrients -= winter ? 2 : 6;
+  // Weeds steal water and nutrients from the crop.
+  if (p.weedy) nutrients -= 3;
   if (bare) {
     om -= winter ? 2 : 1;
     structure -= winter ? 2 : 1;
@@ -300,6 +339,7 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
     if (plowed) factor *= 1.15;
     if (has("synthFert")) factor *= 1.15;
     if (p.noTill && noTillSeasons <= 2) factor *= 0.92;
+    if (p.weedy) factor *= 0.55;
     factor *= Math.max(0.6, 1 - 0.15 * Math.abs(ph - 6.5));
     if (event === "drought") factor *= 0.4 + (0.6 * water) / 100;
     if (event === "pests") {
@@ -310,15 +350,19 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
         pestHit = true;
       }
     }
-    harvest = Math.round(20 * factor * market);
+    harvest = Math.round(18 * factor * market * (state.organic ? ORGANIC_BONUS : 1));
   }
+
+  // Weeds sprout again on soil left bare during the growing season.
+  const weedsReturned = !winter && bare && !p.weedy;
+  const weedy = p.weedy || (!winter && bare);
 
   return {
     plot: {
       ...p,
       om: round1(om), life: round1(life), structure: round1(structure),
       water: round1(water), nutrients: round1(nutrients), ph: round1(ph),
-      noTillSeasons, crop, seasonsSameCrop, applied: [],
+      noTillSeasons, crop, seasonsSameCrop, applied: [], weedy,
     },
     harvest,
     grazing,
@@ -327,11 +371,14 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
     leached,
     pestHit,
     plowed,
+    weedsReturned,
   };
 }
 
-function buildInsights(event: EventId, outcomes: PlotOutcome[], winter: boolean, delta: number): string[] {
+function buildInsights(event: EventId, outcomes: PlotOutcome[], winter: boolean, delta: number, lostOrganic: boolean): string[] {
   const out: string[] = [];
+  if (lostOrganic)
+    out.push("You used a non-organic product, so the garden lost its organic certification. Harvests no longer earn the organic bonus.");
   const eroded = outcomes.filter((o) => o.eroded).length;
   const pestHits = outcomes.filter((o) => o.pestHit).length;
   if (event === "heavyRain") {
@@ -357,19 +404,92 @@ function buildInsights(event: EventId, outcomes: PlotOutcome[], winter: boolean,
     out.push("Some fertilizer washed out of the soil before plants could use it, and the soil got more acidic.");
   if (outcomes.some((o) => o.plowed))
     out.push("Plowing gave a quick harvest boost, but it broke apart soil crumbs and burned off organic matter.");
+  const weedsBack = outcomes.filter((o) => o.weedsReturned).length;
+  if (weedsBack > 0)
+    out.push(`Weeds sprouted again on ${weedsBack} bare plot${weedsBack > 1 ? "s" : ""}. Cover crops and mulch keep weeds from taking over.`);
   if (winter && outcomes.some((o) => o.bare))
     out.push("Bare soil in winter has no roots to hold it together. Cover crops protect it until spring.");
   if (delta >= 2)
     out.push("Your soil is coming alive! More microbes and worms mean better crumbs, more water, and more food for plants.");
   if (out.length === 0)
     out.push(delta < 0 ? "Your soil got a little worse. Bare, unfed soil slowly loses its organic matter." : "A quiet season. Steady care builds soil over time.");
-  return out.slice(0, 3);
+  return out.slice(0, 4);
+}
+
+function marketFor(event: EventId): number {
+  return event === "boomMarket" ? 1.4 : event === "bustMarket" ? 0.7 : 1;
+}
+
+export interface Preview {
+  /** Predicted change in each metric by the end of this season, compared with not doing it. */
+  deltas: Record<Metric, number>;
+  /** Change in this plot's harvest coins (plus grazing income), compared with not doing it. */
+  harvestDelta: number;
+  cost: number;
+  /** Metrics a test would reveal (tests only). */
+  reveals: Metric[];
+  notes: string[];
+}
+
+const METRICS: Metric[] = ["om", "life", "structure", "water", "nutrients", "ph"];
+
+/**
+ * What a practice would do to one plot this season, assuming the forecast comes true.
+ * Runs the real season resolver with and without the practice, so the preview matches the outcome.
+ */
+export function previewPractice(state: GameState, plotId: number, practiceId: PracticeId): Preview {
+  const practice = PRACTICES[practiceId];
+  const notes = [...(practice.notes ?? [])];
+  if (practice.kind === "test") {
+    const test = practiceId === "labTest" ? "lab" : practiceId === "shovelTest" ? "shovel" : "water";
+    return {
+      deltas: { om: 0, life: 0, structure: 0, water: 0, nutrients: 0, ph: 0 },
+      harvestDelta: 0,
+      cost: practice.cost,
+      reveals: METRICS.filter((m) => METRIC_TEST[m] === test),
+      notes,
+    };
+  }
+  const event = state.forecast;
+  const market = marketFor(event);
+  // Compare against the same starting plot. For anything but weeding, assume the weeds are already
+  // pulled so the preview shows only this practice's own effect.
+  const base = withPlot(state, plotId, (p) => ({
+    ...p,
+    applied: p.applied.filter((a) => a !== practiceId),
+    weedy: practiceId === "weed" ? true : false,
+  }));
+  const without = resolvePlot(base.plots[plotId], base, event, market);
+  const withState = forceApply(base, plotId, practiceId);
+  const withOutcome = resolvePlot(withState.plots[plotId], withState, event, market);
+  const deltas = Object.fromEntries(
+    METRICS.map((m) => [m, round1(withOutcome.plot[m] - without.plot[m])]),
+  ) as Record<Metric, number>;
+  if (practiceId === "weed") notes.unshift("Without weeding, this plot's harvest is cut almost in half");
+  return {
+    deltas,
+    harvestDelta: withOutcome.harvest + withOutcome.grazing - (without.harvest + without.grazing),
+    cost: practice.cost,
+    reveals: [],
+    notes,
+  };
+}
+
+function withPlot(state: GameState, plotId: number, fn: (p: Plot) => Plot): GameState {
+  return { ...state, plots: state.plots.map((p) => (p.id === plotId ? fn(p) : p)) };
+}
+
+/** Apply a practice ignoring coins, so a preview is always available. */
+function forceApply(state: GameState, plotId: number, practiceId: PracticeId): GameState {
+  const rich = { ...state, coins: Number.MAX_SAFE_INTEGER, status: "playing" as const };
+  const r = applyPractice(rich, plotId, practiceId);
+  return r.ok ? r.state : rich;
 }
 
 export function advanceSeason(state: GameState): { state: GameState; report: SeasonReport } {
   if (state.status !== "playing") throw new Error("Game is over");
   const event = state.forecast;
-  const market = event === "boomMarket" ? 1.4 : event === "bustMarket" ? 0.7 : 1;
+  const market = marketFor(event);
   const healthBefore = fieldHealth(state.plots);
   const outcomes = state.plots.map((p) => resolvePlot(p, state, event, market));
   const plots = outcomes.map((o) => o.plot);
@@ -377,6 +497,8 @@ export function advanceSeason(state: GameState): { state: GameState; report: Sea
   const grazingIncome = outcomes.reduce((s, o) => s + o.grazing, 0);
   const healthAfter = fieldHealth(plots);
   const winter = seasonName(state.season) === "Winter";
+  const lostOrganic = state.organicAtSeasonStart && !state.organic;
+  const weedsReturned = outcomes.filter((o) => o.weedsReturned).length;
 
   const report: SeasonReport = {
     season: state.season,
@@ -384,10 +506,12 @@ export function advanceSeason(state: GameState): { state: GameState; report: Sea
     event,
     harvest,
     grazingIncome,
+    lostOrganic,
+    weedsReturned,
     healthBefore,
     healthAfter,
     plotHealthChange: plots.map((p, i) => round1(plotHealth(p) - plotHealth(state.plots[i]))),
-    insights: buildInsights(event, outcomes, winter, healthAfter - healthBefore),
+    insights: buildInsights(event, outcomes, winter, healthAfter - healthBefore, lostOrganic),
   };
 
   const nextSeason = state.season + 1;
@@ -398,8 +522,7 @@ export function advanceSeason(state: GameState): { state: GameState; report: Sea
     seed,
     season: finished ? state.season : nextSeason,
     coins: state.coins + harvest + grazingIncome,
-    ap: apForSeason(nextSeason),
-    maxAp: apForSeason(nextSeason),
+    organicAtSeasonStart: state.organic,
     plots,
     forecast,
     status: finished ? (healthAfter >= WIN_HEALTH ? "won" : "lost") : "playing",

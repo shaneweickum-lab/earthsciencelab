@@ -4,7 +4,7 @@ import { Html, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useMemo, useRef, useState } from "react";
 import { Color, type Group } from "three";
-import { GRID_SIZE, plotHealth, type GameState, type Plot, type SeasonName } from "@/game/engine";
+import { fullyTested, GRID_SIZE, plotHealth, type GameState, type Plot, type SeasonName } from "@/game/engine";
 
 const POOR = new Color("#cdb184");
 const RICH = new Color("#2e1c10");
@@ -84,6 +84,39 @@ function Crop({ plot, winter }: { plot: Plot; winter: boolean }) {
   );
 }
 
+/** A messy tangle of weeds: tall grassy spikes, broad leaves, and a few dandelions. */
+function Weeds({ seed }: { seed: number }) {
+  return (
+    <>
+      {Array.from({ length: 28 }, (_, i) => {
+        const h = 0.18 + seeded(seed + i * 3) * 0.32;
+        return (
+          <mesh
+            key={`s${i}`}
+            position={[(seeded(seed + i) - 0.5) * 0.92, 0.25 + h / 2, (seeded(seed + i + 50) - 0.5) * 0.92]}
+            rotation={[(seeded(seed + i + 9) - 0.5) * 0.6, 0, (seeded(seed + i + 19) - 0.5) * 0.6]}
+          >
+            <coneGeometry args={[0.03, h, 3]} />
+            <meshStandardMaterial color={i % 3 === 0 ? "#6f7d2a" : "#3e6b24"} />
+          </mesh>
+        );
+      })}
+      {Array.from({ length: 7 }, (_, i) => (
+        <mesh key={`l${i}`} position={[(seeded(seed + i * 7) - 0.5) * 0.85, 0.29, (seeded(seed + i * 11) - 0.5) * 0.85]} scale={[1, 0.35, 1]}>
+          <icosahedronGeometry args={[0.09, 0]} />
+          <meshStandardMaterial color="#4f7a2c" flatShading />
+        </mesh>
+      ))}
+      {Array.from({ length: 4 }, (_, i) => (
+        <mesh key={`d${i}`} position={[(seeded(seed + i * 13) - 0.5) * 0.8, 0.42 + seeded(seed + i) * 0.1, (seeded(seed + i * 17) - 0.5) * 0.8]}>
+          <sphereGeometry args={[0.035, 8, 6]} />
+          <meshStandardMaterial color="#f2c230" />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
 function Tile({
   plot, selected, onSelect, winter,
 }: { plot: Plot; selected: boolean; onSelect: () => void; winter: boolean }) {
@@ -94,7 +127,10 @@ function Tile({
   const health = plotHealth(plot);
   const soilColor = useMemo(() => POOR.clone().lerp(RICH, Math.min(1, health / 90)), [health]);
   const has = (id: string) => plot.applied.includes(id as never);
-  const worms = Math.floor(plot.life / 18);
+  // Worms only show up once you've dug a shovel test and seen them.
+  const worms = plot.known.shovel ? Math.floor(plot.life / 18) : 0;
+  const tested = fullyTested(plot);
+  const anyTest = plot.known.lab || plot.known.shovel || plot.known.water;
 
   useFrame(() => {
     if (!ref.current) return;
@@ -151,7 +187,7 @@ function Tile({
           </mesh>
         </group>
       )}
-      <Crop plot={plot} winter={winter} />
+      {plot.weedy ? <Weeds seed={plot.id * 31 + 5} /> : <Crop plot={plot} winter={winter} />}
 
       {plot.hedgerow &&
         [-0.36, -0.12, 0.12, 0.36].map((x, i) => (
@@ -179,9 +215,12 @@ function Tile({
       <Html position={[0, 0.95, 0]} center zIndexRange={[30, 0]} style={{ pointerEvents: "none" }}>
         <div
           className="whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-black text-white shadow"
-          style={{ background: healthColor(health) }}
+          style={{ background: tested ? healthColor(health) : "#6e5f50" }}
+          title={tested ? "Plot health" : "Soil not fully tested yet"}
         >
-          {Math.round(health)}
+          {tested ? Math.round(health) : "?"}
+          {anyTest && !tested ? " 🧪" : ""}
+          {plot.weedy ? " 🌿" : ""}
           {plot.noTill ? " 🚫" : ""}
         </div>
       </Html>

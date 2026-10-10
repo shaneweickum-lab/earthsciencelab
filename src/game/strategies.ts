@@ -10,17 +10,37 @@ function tryApply(state: GameState, plotId: number, id: PracticeId): GameState {
   return r.ok ? r.state : state;
 }
 
-export const regenerativeStrategy: Strategy = (start) => {
+function weedAndTest(start: GameState): GameState {
   let s = start;
+  for (const p of s.plots) {
+    for (const id of ["weed", "shovelTest", "waterTest", "labTest"] as PracticeId[]) s = tryApply(s, p.id, id);
+  }
+  return s;
+}
+
+/** A sensible organic gardener: weeds, tests, goes no-till, keeps soil covered, and spends with a reserve. */
+export const organicStrategy: Strategy = (start) => {
+  let s = weedAndTest(start);
   const order = [...s.plots].sort((a, b) => plotHealth(a) - plotHealth(b)).map((p) => p.id);
-  const passes: PracticeId[][] = [["noTill"], ["coverCrop"], ["grazing"], ["compost"], ["rotate"], ["hedgerow"], ["mulch"]];
-  for (const pass of passes) {
+  const passes: [PracticeId, number][] = [
+    ["noTill", 0], ["coverCrop", 0], ["grazing", 0], ["rotate", 10], ["compost", 40], ["mulch", 50], ["hedgerow", 120],
+  ];
+  for (const [practice, reserve] of passes) {
     for (const id of order) {
-      for (const practice of pass) {
-        if (practice === "compost" && s.coins < 40) continue;
-        if (practice === "hedgerow" && (s.coins < 60 || (id !== 4 && id !== 0 && id !== 8))) continue;
-        s = tryApply(s, id, practice);
-      }
+      if (s.coins - reserve < 0) break;
+      if (practice === "hedgerow" && id !== 4) continue;
+      s = tryApply(s, id, practice);
+    }
+  }
+  return s;
+};
+
+/** Buys every regenerative practice on every plot it can afford, with no plan. */
+export const spamStrategy: Strategy = (start) => {
+  let s = weedAndTest(start);
+  for (const p of s.plots) {
+    for (const id of ["compost", "coverCrop", "mulch", "compostTea", "biochar", "hedgerow", "noTill", "rotate", "grazing"] as PracticeId[]) {
+      s = tryApply(s, p.id, id);
     }
   }
   return s;
@@ -29,6 +49,7 @@ export const regenerativeStrategy: Strategy = (start) => {
 export const conventionalStrategy: Strategy = (start) => {
   let s = start;
   for (const p of s.plots) {
+    s = tryApply(s, p.id, "weed");
     s = tryApply(s, p.id, "plow");
     s = tryApply(s, p.id, "synthFert");
     if (s.forecast === "pests") s = tryApply(s, p.id, "pesticide");
