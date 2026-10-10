@@ -10,7 +10,15 @@ A gamified science learning platform for middle schoolers (ages 11–14). The fi
 | Regenerate the Field | `/soil/game` | A 12-season turn-based game. Restore a degraded 3×3 farm with cover crops, compost, no-till, grazing, hedgerows, and biochar, or try the conventional shortcuts and see what happens. |
 | Soil Globe | `/soil/globe` | A 3D globe with 50 regions colored by USDA soil order or by texture class, region cards with a texture-triangle plot, and a "Guess the Soil" quiz. |
 
-Progress (XP, levels, 13 badges, lesson scores, visited regions, best game) is saved in the browser's localStorage. There are no accounts. An in-progress game also resumes after a refresh.
+## Periodic Table (every page)
+
+A 3D periodic table that opens on top of any page, so students keep their place. Open it with the ⚛️ **Elements** button in the header or the **E** key, and close it with **Esc**. It also has its own page at `/elements`, and `/elements?z=26` links straight to an element. Element names in lesson text (nitrogen, phosphorus, iron, and more) link into it.
+
+- All 118 elements, colored by category, with search and category filters. The 3D view can raise the tiles into bars by atomic mass or by abundance in Earth's crust. A flat grid view is the default on phones.
+- Picking an element shows its facts, where it's found (universe, Earth, living things, everyday uses), and a 3D atom: a proton and neutron nucleus with electrons in orbiting shells, or a fuzzy electron cloud view.
+- Exploring elements earns XP and 3 badges.
+
+Progress (XP, levels, 16 badges, lesson scores, visited regions, best game) is saved in the browser's localStorage. There are no accounts. An in-progress game also resumes after a refresh.
 
 ## Stack
 
@@ -42,11 +50,11 @@ npm run smoke      # loads every page in Chromium, plays a few turns, fails on c
 ```
 app/                       routes (hub, /soil, /soil/learn/[slug], /soil/game, /soil/globe)
 src/content/soil/          lesson text and quizzes
-src/data/                  soil orders and globe regions
+src/data/                  soil orders, globe regions, and the 118 elements
 src/lib/soil/              USDA texture-triangle classifier
 src/game/                  pure, seeded game engine, practices, and test strategies
 src/store/                 progress rules (pure) and the zustand store
-src/components/            UI, split into learn/, game/, globe/
+src/components/            UI, split into learn/, game/, globe/, elements/
 ```
 
 The game engine (`src/game/engine.ts`) is pure: `state + action → state`, with a seeded RNG. Balance tests in `engine.test.ts` check that a regenerative strategy wins across several seeds, while plow-and-fertilize and do-nothing strategies degrade the soil. Rerun them after changing any numbers.

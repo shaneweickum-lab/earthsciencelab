@@ -13,6 +13,7 @@ interface ProgressStore extends logic.ProgressData {
   visitRegion: (id: string) => void;
   answerGlobeQuiz: (correct: boolean) => void;
   finishGame: (stars: number, health: number) => void;
+  viewElement: (z: number) => void;
   dismissToast: () => void;
   reset: () => void;
 }
@@ -35,13 +36,16 @@ export const useProgress = create<ProgressStore>()(
         visitRegion: (id) => run((d) => logic.visitRegion(d, id)),
         answerGlobeQuiz: (correct) => run((d) => logic.answerGlobeQuiz(d, correct)),
         finishGame: (stars, health) => run((d) => logic.finishGame(d, stars, health)),
+        viewElement: (z) => run((d) => logic.viewElement(d, z)),
         dismissToast: () => set((s) => ({ toasts: s.toasts.slice(1) })),
         reset: () => set({ ...logic.EMPTY_PROGRESS, toasts: [] }),
       };
     },
     {
       name: "earthsciencelab-progress",
-      version: 1,
+      version: 2,
+      // v2 added viewedElements. Fill in any new fields with defaults.
+      migrate: (saved) => ({ ...logic.EMPTY_PROGRESS, ...(saved as Partial<logic.ProgressData>) }),
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => pickData(s),
       // Rehydrated manually after mount so the server and first client render match.
@@ -61,5 +65,6 @@ function pickData(s: logic.ProgressData): logic.ProgressData {
     bestGameStars: s.bestGameStars,
     bestGameHealth: s.bestGameHealth,
     gamesPlayed: s.gamesPlayed,
+    viewedElements: s.viewedElements,
   };
 }

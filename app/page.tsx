@@ -29,6 +29,18 @@ export default function Home() {
         </div>
       </section>
 
+      <Link href="/elements" className="card flex items-center gap-5 p-5 transition hover:-translate-y-0.5">
+        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-[#141b2d] text-4xl">⚛️</div>
+        <div className="flex-1">
+          <h2 className="text-xl font-black">The Periodic Table, in 3D</h2>
+          <p className="text-muted">
+            Spin all 118 elements, watch their atoms in 3D, and find out where each one hides, from stars to soil to your own body.
+            Open it from any page with the ⚛️ button or the <kbd className="rounded border border-line px-1 text-xs">E</kbd> key.
+          </p>
+        </div>
+        <span className="hidden font-bold text-sky sm:inline">Explore →</span>
+      </Link>
+
       <section>
         <h2 className="mb-4 font-display text-2xl font-black">Choose a lab</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

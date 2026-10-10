@@ -17,7 +17,7 @@ export function TextureTriangle() {
   const info = TEXTURE_INFO[cls];
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
+    <div className="grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
       <TextureTrianglePlot value={comp} onPick={setComp} highlight={cls} className="w-full" />
       <div className="space-y-4">
         <div className="rounded-2xl p-4 text-white" style={{ background: info.color }}>

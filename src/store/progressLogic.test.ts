@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, finishGame, levelFor, visitRegion,
+  answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, finishGame, levelFor, viewElement, visitRegion,
 } from "./progressLogic";
 
 const ALL = ["what-is-soil", "soil-texture"];
@@ -47,6 +47,17 @@ describe("progress logic", () => {
     const b = finishGame(a.data, 1, 55);
     expect(b.data.bestGameStars).toBe(2);
     expect(b.data.bestGameHealth).toBe(74);
+  });
+
+  it("counts element views once and awards element badges", () => {
+    const a = viewElement(EMPTY_PROGRESS, 26);
+    expect(a.newBadges).toEqual(["element-spotter"]);
+    expect(viewElement(a.data, 26).data).toBe(a.data);
+    let d = a.data;
+    for (let z = 1; z <= 118; z++) d = viewElement(d, z).data;
+    expect(d.viewedElements).toHaveLength(118);
+    expect(d.badges).toEqual(expect.arrayContaining(["lab-regular", "table-master"]));
+    expect(d.xp).toBe(118 * 2);
   });
 
   it("computes levels", () => {

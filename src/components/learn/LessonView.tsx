@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { getLesson, LESSONS } from "@/content/soil/lessons";
 import { Interactive } from "./Interactive";
+import { linkElements } from "../elements/linkElements";
 import { Quiz } from "./Quiz";
 
 export function LessonView({ slug }: { slug: string }) {
@@ -33,7 +34,7 @@ export function LessonView({ slug }: { slug: string }) {
           <h2 className="text-2xl font-black">{s.heading}</h2>
           {s.body.map((p, i) => (
             <p key={i} className="text-[17px] leading-relaxed">
-              {p}
+              {linkElements(p)}
             </p>
           ))}
           {s.callout && (
