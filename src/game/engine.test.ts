@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  advanceSeason, applyPractice, canApply, fieldHealth, fullyTested, isKnown, newGame, previewPractice,
+  advanceSeason, applyPractice, canApply, canPlant, fieldHealth, fullyTested, isKnown, newGame, plantCrop, previewAction, previewPractice,
   TOTAL_SEASONS, WIN_HEALTH, type GameState,
 } from "./engine";
+import type { CropId } from "./crops";
 import type { PracticeId } from "./practices";
 import { conventionalStrategy, idleStrategy, organicStrategy, playOut, spamStrategy } from "./strategies";
 
@@ -50,6 +51,70 @@ describe("starting the organic garden", () => {
   });
 });
 
+function plant(s: GameState, plot: number, crop: CropId): GameState {
+  const r = plantCrop(s, plot, crop);
+  if (!r.ok) throw new Error(r.reason);
+  return r.state;
+}
+
+describe("seed bag", () => {
+  it("weeding leaves an empty plot ready for seeds", () => {
+    const g = apply(newGame(1), 0, "weed");
+    expect(g.plots[0].crop).toBeNull();
+    expect(canPlant(g, 0, "beans")).toBeNull();
+  });
+
+  it("can't plant on weedy, occupied, or winter plots", () => {
+    let g = newGame(1);
+    expect(canPlant(g, 0, "corn")).toMatch(/weeds/);
+    g = plant(apply(g, 0, "weed"), 0, "corn");
+    expect(canPlant(g, 0, "beans")).toMatch(/already growing/);
+    const winter = { ...apply(newGame(1), 1, "weed"), season: 4 };
+    expect(canPlant(winter, 1, "beans")).toMatch(/winter/);
+  });
+
+  it("charges for seeds, harvests at season end, and leaves the plot empty", () => {
+    let g = apply(newGame(1), 0, "weed");
+    const coins = g.coins;
+    g = plant(g, 0, "tomato");
+    expect(g.coins).toBe(coins - 6);
+    const { state } = advanceSeason(g);
+    expect(state.plots[0].crop).toBeNull();
+    expect(state.plots[0].lastFamily).toBe("nightshade");
+    expect(state.history[0].harvest).toBeGreaterThan(0);
+  });
+
+  it("beans give nitrogen back while corn takes it", () => {
+    const g = apply(newGame(4), 0, "weed");
+    expect(previewAction(g, 0, { plant: "beans" }).deltas.nutrients).toBeGreaterThan(0);
+    expect(previewAction(g, 0, { plant: "corn" }).deltas.nutrients).toBeLessThan(0);
+  });
+
+  it("squash covers the soil and keeps weeds from returning", () => {
+    let g = apply(apply(newGame(1), 0, "weed"), 1, "weed");
+    g = plant(plant(g, 0, "squash"), 1, "corn");
+    const next = advanceSeason(g).state;
+    expect(next.plots[0].weedy).toBe(false);
+    expect(next.plots[1].weedy).toBe(true);
+  });
+
+  it("planting the same family again warns about pests", () => {
+    const g = apply(newGame(1), 0, "weed");
+    const same = g.plots[0].lastFamily === "grass" ? "corn" : "tomato";
+    expect(previewAction(g, 0, { plant: same }).notes.join(" ")).toMatch(/Same plant family/);
+    expect(previewAction(g, 0, { plant: "beans" }).notes.join(" ")).toMatch(/Good rotation/);
+  });
+
+  it.each(["beans", "corn", "carrot", "potato"] as CropId[])("%s planting preview matches the outcome", (crop) => {
+    const g = apply(newGame(9), 4, "weed");
+    const preview = previewAction(g, 4, { plant: crop });
+    const without = advanceSeason(g).state.plots[4];
+    const withIt = advanceSeason(plant(g, 4, crop)).state.plots[4];
+    expect(withIt.nutrients - without.nutrients).toBeCloseTo(preview.deltas.nutrients, 0);
+    expect(withIt.structure - without.structure).toBeCloseTo(preview.deltas.structure, 0);
+  });
+});
+
 describe("actions", () => {
   it("has no limit on how many actions you take, only coins", () => {
     let g = newGame(1);
@@ -57,8 +122,8 @@ describe("actions", () => {
     const before = g.coins;
     g = apply(g, 0, "coverCrop");
     g = apply(g, 1, "coverCrop");
-    g = apply(g, 2, "rotate");
-    expect(g.coins).toBe(before - 14 - 14 - 4);
+    g = apply(g, 2, "mulch");
+    expect(g.coins).toBe(before - 14 - 14 - 8);
     g = { ...g, coins: 3 };
     expect(canApply(g, 3, "coverCrop")).toMatch(/coins/);
   });
@@ -90,7 +155,7 @@ describe("actions", () => {
 });
 
 describe("preview", () => {
-  it.each(["coverCrop", "compost", "mulch", "plow", "synthFert", "rotate"] as PracticeId[])(
+  it.each(["coverCrop", "compost", "mulch", "plow", "synthFert"] as PracticeId[])(
     "%s preview matches what actually happens",
     (id) => {
       const g = apply(newGame(9), 4, "weed");
@@ -114,9 +179,8 @@ describe("preview", () => {
     expect(previewPractice(newGame(1), 0, "labTest").reveals).toEqual(["om", "nutrients", "ph"]);
   });
 
-  it("previews weeding as a harvest boost", () => {
-    const g = { ...newGame(1), season: 2 };
-    expect(previewPractice(g, 0, "weed").harvestDelta).toBeGreaterThan(0);
+  it("previews weeding as clearing the plot for seeds", () => {
+    expect(previewPractice(newGame(1), 0, "weed").notes.join(" ")).toMatch(/empty plot/);
   });
 });
 

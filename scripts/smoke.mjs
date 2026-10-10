@@ -70,6 +70,14 @@ await act("Pull Weeds", /Apply to Plot 1/);
 await act("Shovel Test", /Run test on Plot 1/);
 await act("Infiltration Test", /Run test on Plot 1/);
 await act("Lab Soil Test", /Run test on Plot 1/);
+await page.getByRole("button", { name: /Open the seed bag/ }).click();
+await page.getByText("What will you plant?").waitFor();
+await shot("06d-seed-bag");
+await page.getByRole("button", { name: "Beans seed packet" }).click();
+await page.getByRole("region", { name: "Planting preview" }).waitFor();
+await shot("06e-seed-bag-beans");
+await page.getByRole("button", { name: /Plant in Plot 1/ }).click();
+await page.getByText("Beans growing").waitFor();
 await page.getByRole("button", { name: /Compost 🪙/ }).click();
 await page.getByText(/What it will do to this plot/).waitFor();
 await shot("06c-preview-compost");
@@ -81,6 +89,9 @@ await page.getByRole("button", { name: /^End / }).click();
 await page.getByText("Why did that happen?").waitFor();
 await shot("07-game-report");
 await page.getByRole("button", { name: /next season/ }).click();
+// After harvest the plot is empty again and remembers what grew there.
+await page.getByText("Empty plot").first().waitFor();
+await page.getByText(/Last grown: Legume/).waitFor();
 
 await page.goto(`${BASE}/soil/globe`);
 await page.waitForTimeout(2000);

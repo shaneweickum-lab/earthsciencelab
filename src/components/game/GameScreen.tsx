@@ -3,12 +3,15 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import {
-  advanceSeason, applyPractice, canApply, CROPS, EVENTS, fieldHealth, fullyTested, GAME_VERSION, isKnown, newGame,
-  ORGANIC_BONUS, organicMatterPercent, plotHealth, previewPractice, seasonName, starsFor, TOTAL_SEASONS, WIN_HEALTH,
+  advanceSeason, applyPractice, canApply, EVENTS, fieldHealth, fullyTested, GAME_VERSION, isKnown, newGame,
+  ORGANIC_BONUS, organicMatterPercent, plantCrop, plotHealth, previewPractice, seasonName, starsFor, TOTAL_SEASONS, WIN_HEALTH,
   type GameState, type Metric, type Plot, type SeasonReport,
 } from "@/game/engine";
+import { CROPS, FAMILY_LABEL, type CropId } from "@/game/crops";
 import { PRACTICE_ORDER, PRACTICES, type Practice, type PracticeId } from "@/game/practices";
 import { useProgress } from "@/store/progress";
+import { METRIC_INFO, METRICS, Modal, PreviewEffects } from "./previewParts";
+import { SeedBag } from "./SeedBag";
 
 const FieldBoard3D = dynamic(() => import("./FieldBoard3D"), {
   ssr: false,
@@ -17,15 +20,6 @@ const FieldBoard3D = dynamic(() => import("./FieldBoard3D"), {
 
 const SAVE_KEY = "earthsciencelab-field-game";
 
-const METRIC_INFO: Record<Metric, { label: string; color: string; test: string }> = {
-  om: { label: "Organic matter", color: "#3d2716", test: "🧪 lab soil test" },
-  life: { label: "Soil life", color: "#d98c8c", test: "🪱 shovel test" },
-  structure: { label: "Structure", color: "#9a5733", test: "🪱 shovel test" },
-  water: { label: "Water holding", color: "#3f86b0", test: "💧 infiltration test" },
-  nutrients: { label: "Nutrients (N-P-K)", color: "#e0a83a", test: "🧪 lab soil test" },
-  ph: { label: "pH", color: "#3f7d4e", test: "🧪 lab soil test" },
-};
-const METRICS = Object.keys(METRIC_INFO) as Metric[];
 
 function loadSaved(): GameState | null {
   try {
@@ -54,6 +48,7 @@ export function GameScreen() {
   const [toast, setToast] = useState<string | null>(null);
   const [pending, setPending] = useState<PracticeId | null>(null);
   const [showIntro, setShowIntro] = useState(false);
+  const [seedBag, setSeedBag] = useState(false);
   const finishGame = useProgress((s) => s.finishGame);
   const recorded = useRef(false);
 
@@ -83,6 +78,7 @@ export function GameScreen() {
   const tested = game.plots.filter(fullyTested).length;
   const weeded = game.plots.filter((p) => !p.weedy).length;
   const allTested = tested === game.plots.length;
+  const planted = game.plots.filter((p) => p.crop).length;
   const health = fieldHealth(game.plots);
   const plot = game.plots[selected];
   const over = game.status !== "playing";
@@ -96,6 +92,17 @@ export function GameScreen() {
       if (PRACTICES[id].kind === "test") setToast(`${PRACTICES[id].icon} Results are in for Plot ${selected + 1}!`);
     }
     setPending(null);
+  }
+
+  function plant(crop: CropId) {
+    if (!game) return;
+    const r = plantCrop(game, selected, crop);
+    if (!r.ok) setToast(r.reason);
+    else {
+      setGame(r.state);
+      setToast(`${CROPS[crop].icon} ${CROPS[crop].name} planted in Plot ${selected + 1}!`);
+    }
+    setSeedBag(false);
   }
 
   function endSeason() {
@@ -152,11 +159,12 @@ export function GameScreen() {
         </div>
       </div>
 
-      {(weeded < game.plots.length || !allTested) && game.season === 1 && (
+      {(weeded < game.plots.length || !allTested || planted < game.plots.length) && game.season === 1 && (
         <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 border-sun bg-sun/10 px-5 py-3 text-sm">
           <strong>🧑‍🌾 First steps</strong>
           <Check done={weeded === game.plots.length}>Pull the weeds in every plot ({weeded} / {game.plots.length})</Check>
           <Check done={allTested}>Test the soil in every plot ({tested} / {game.plots.length})</Check>
+          <Check done={planted === game.plots.length}>Plant seeds from the seed bag ({planted} / {game.plots.length})</Check>
           <span className="text-muted">Tip: tap a plot, then pick an action below.</span>
         </div>
       )}
@@ -183,7 +191,7 @@ export function GameScreen() {
         </div>
 
         <div className="space-y-3">
-          <PlotPanel plot={plot} />
+          <PlotPanel plot={plot} winter={season === "Winter"} onOpenSeedBag={() => setSeedBag(true)} />
           <div className="card space-y-4 p-4">
             <p className="text-sm text-muted">
               Take as many actions as you can afford. Tap one to see what it will do to <strong>Plot {selected + 1}</strong> before you commit.
@@ -204,6 +212,7 @@ export function GameScreen() {
         </div>
       )}
 
+      {seedBag && <SeedBag game={game} plotId={selected} onPlant={plant} onClose={() => setSeedBag(false)} />}
       {pending && <PreviewModal game={game} plotId={selected} practiceId={pending} onConfirm={confirm} onCancel={() => setPending(null)} />}
       {report && !over && <ReportModal report={report} onClose={() => setReport(null)} />}
       {over && <EndModal game={game} onRestart={restart} />}
@@ -236,19 +245,34 @@ function metricValue(plot: Plot, m: Metric): { pct: number; display: string } {
   return { pct: plot[m], display: String(Math.round(plot[m])) };
 }
 
-function PlotPanel({ plot }: { plot: Plot }) {
-  const crop = CROPS[plot.crop];
+function PlotPanel({ plot, winter, onOpenSeedBag }: { plot: Plot; winter: boolean; onOpenSeedBag: () => void }) {
+  const crop = plot.crop ? CROPS[plot.crop] : null;
   const testedAll = fullyTested(plot);
+  const status = crop ? `${crop.icon} ${crop.name} growing` : plot.weedy ? "🌿 Overgrown" : "🟫 Empty plot";
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-black">
-          Plot {plot.id + 1} · {crop.icon} {crop.name}
+          Plot {plot.id + 1} · {status}
         </h3>
         <span className="rounded-full bg-paper px-2 py-0.5 text-sm font-black" title={testedAll ? "Plot health" : "Run all three soil tests to see this plot's health"}>
           ❤️ {testedAll ? Math.round(plotHealth(plot)) : "?"}
         </span>
       </div>
+      {!crop && !plot.weedy && (
+        winter ? (
+          <p className="mb-3 rounded-xl bg-paper px-3 py-2 text-sm">❄️ Too cold to plant crops in winter. A cover crop can still protect this soil.</p>
+        ) : (
+          <button onClick={onOpenSeedBag} className="btn btn-primary mb-3 w-full">
+            🌱 Open the seed bag
+          </button>
+        )
+      )}
+      {crop && (
+        <p className="mb-3 rounded-xl bg-leaf-light px-3 py-2 text-xs">
+          <strong>Takes:</strong> {crop.takes} <strong>Gives back:</strong> {crop.givesText}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
         {METRICS.map((m) => {
           const info = METRIC_INFO[m];
@@ -284,7 +308,12 @@ function PlotPanel({ plot }: { plot: Plot }) {
         {plot.noTill && plot.noTillSeasons > 0 && <Tag>🚫 No-till · {plot.noTillSeasons} season{plot.noTillSeasons === 1 ? "" : "s"}</Tag>}
         {plot.hedgerow && <Tag>🌳 Hedgerow</Tag>}
         {plot.biochar && <Tag>⚫ Biochar</Tag>}
-        {plot.seasonsSameCrop >= 2 && <Tag warn>⚠️ Same crop {plot.seasonsSameCrop + 1} seasons</Tag>}
+        {plot.lastFamily && (
+          <Tag warn={plot.familyStreak >= 1}>
+            Last grown: {FAMILY_LABEL[plot.lastFamily]}
+            {plot.familyStreak >= 1 ? ` (${plot.familyStreak + 1} seasons in a row)` : ""}
+          </Tag>
+        )}
         {plot.applied.filter((a) => a !== "weed").map((a) => (
           <Tag key={a}>
             {PRACTICES[a].icon} {PRACTICES[a].name}
@@ -341,13 +370,6 @@ function Section({
   );
 }
 
-function formatDelta(m: Metric, d: number): string {
-  const sign = d > 0 ? "+" : "";
-  if (m === "om") return `${sign}${(d * 0.08).toFixed(1)}%`;
-  if (m === "ph") return `${sign}${d.toFixed(1)}`;
-  return `${sign}${Math.round(d)}`;
-}
-
 function PreviewModal({
   game, plotId, practiceId, onConfirm, onCancel,
 }: {
@@ -357,8 +379,6 @@ function PreviewModal({
   const plot = game.plots[plotId];
   const reason = canApply(game, plotId, practiceId);
   const preview = previewPractice(game, plotId, practiceId);
-  const winter = seasonName(game.season) === "Winter";
-  const changes = METRICS.filter((m) => Math.abs(preview.deltas[m]) >= (m === "ph" ? 0.05 : 0.5));
 
   return (
     <Modal onClose={onCancel}>
@@ -379,45 +399,12 @@ function PreviewModal({
         </div>
       ) : (
         <div className="mt-4">
-          <div className="text-sm font-black">What it will do to this plot by the end of the {seasonName(game.season).toLowerCase()}</div>
-          {changes.length === 0 ? (
-            <p className="mt-1 text-sm text-muted">No big change to the soil numbers this season.</p>
-          ) : (
-            <ul className="mt-2 grid grid-cols-2 gap-2">
-              {changes.map((m) => {
-                const d = preview.deltas[m];
-                // pH moving toward 6.5 is good, everything else is good when it goes up.
-                const good = m === "ph" ? Math.abs(plot.ph + d - 6.5) < Math.abs(plot.ph - 6.5) : d > 0;
-                const known = isKnown(plot, m);
-                return (
-                  <li key={m} className={`rounded-xl px-3 py-2 text-sm font-bold ${good ? "bg-leaf-light text-leaf" : "bg-danger/10 text-danger"}`}>
-                    {d > 0 ? "▲" : "▼"} {METRIC_INFO[m].label}
-                    <span className="ml-1 font-black">{known ? formatDelta(m, d) : ""}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {changes.some((m) => !isKnown(plot, m)) && (
-            <p className="mt-1 text-xs text-muted">Run soil tests on this plot to see exact numbers.</p>
-          )}
-          {!winter && preview.harvestDelta !== 0 && (
-            <p className={`mt-2 text-sm font-bold ${preview.harvestDelta > 0 ? "text-leaf" : "text-danger"}`}>
-              {preview.harvestDelta > 0 ? "▲" : "▼"} Harvest from this plot: {preview.harvestDelta > 0 ? "+" : ""}
-              {preview.harvestDelta} 🪙 this season
-            </p>
-          )}
+          <PreviewEffects game={game} plot={plot} preview={preview} />
         </div>
       )}
-
-      {preview.notes.length > 0 && (
+      {preview.reveals.length > 0 && preview.notes.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm">
-          {preview.notes.map((n) => (
-            <li key={n} className={`rounded-lg px-3 py-1.5 ${/not organic/i.test(n) ? "bg-danger/10 font-bold text-danger" : "bg-paper"}`}>
-              {/not organic/i.test(n) ? "⚠️ " : "• "}
-              {n}
-            </li>
-          ))}
+          {preview.notes.map((n) => <li key={n} className="rounded-lg bg-paper px-3 py-1.5">• {n}</li>)}
         </ul>
       )}
       <p className="mt-3 text-xs text-muted">Predictions assume the forecast ({EVENTS[game.forecast].name.toLowerCase()}) comes true.</p>
@@ -429,16 +416,6 @@ function PreviewModal({
         </button>
       </div>
     </Modal>
-  );
-}
-
-function Modal({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="card animate-pop-in max-h-[90vh] w-full max-w-lg overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -529,6 +506,7 @@ function IntroModal({ onClose }: { onClose: () => void }) {
       <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm">
         <li><strong>Pull the weeds.</strong> You can&apos;t plant or improve a plot until it&apos;s weeded.</li>
         <li><strong>Test the soil.</strong> A 🪱 shovel test, a 💧 infiltration test, and a 🧪 lab test each reveal different things about a plot.</li>
+        <li><strong>Plant seeds.</strong> Weeded plots are empty. Open the 🌱 seed bag to choose a crop. Each packet tells you what the crop takes from the soil and what it gives back. Crops are harvested at the end of each season, so plan your rotation!</li>
         <li><strong>Pick practices.</strong> Take as many actions as you can afford. Tap one first to see exactly what it will do to that plot, then confirm.</li>
         <li><strong>Watch the forecast</strong> and <strong>end the season</strong> to harvest and see how your soil changed.</li>
       </ol>

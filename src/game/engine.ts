@@ -1,3 +1,4 @@
+import { CROPS, FAMILY_LABEL, type CropFamily, type CropId } from "./crops";
 import { PRACTICES, type PracticeId } from "./practices";
 import { nextRandom } from "./rng";
 
@@ -7,7 +8,7 @@ export const WIN_HEALTH = 70;
 export const START_COINS = 100;
 export const ORGANIC_BONUS = 1.25;
 /** Bumped when the saved game shape changes, so old saves are discarded. */
-export const GAME_VERSION = 2;
+export const GAME_VERSION = 3;
 
 export const SEASON_NAMES = ["Spring", "Summer", "Fall", "Winter"] as const;
 export type SeasonName = (typeof SEASON_NAMES)[number];
@@ -44,8 +45,12 @@ export interface Plot {
   noTillSeasons: number;
   hedgerow: boolean;
   biochar: boolean;
-  crop: number;
-  seasonsSameCrop: number;
+  /** What's growing right now. Null means an empty plot ready for seeds. */
+  crop: CropId | null;
+  /** Plant family grown here last season, for crop rotation. */
+  lastFamily: CropFamily | null;
+  /** How many seasons in a row the same family has been grown here (0 = rotated). */
+  familyStreak: number;
   applied: PracticeId[];
   weedy: boolean;
   /** Which soil tests have been run. Untested metrics stay hidden from the player. */
@@ -96,12 +101,6 @@ export interface GameState {
   status: GameStatus;
   history: SeasonReport[];
 }
-
-export const CROPS = [
-  { name: "Corn", icon: "🌽" },
-  { name: "Beans", icon: "🫘" },
-  { name: "Wheat", icon: "🌾" },
-];
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -161,8 +160,10 @@ export function newGame(seed = Date.now() % 2147483647): GameState {
       noTillSeasons: 0,
       hedgerow: false,
       biochar: false,
-      crop: Math.floor(rand() * CROPS.length),
-      seasonsSameCrop: 3,
+      crop: null,
+      // The old garden grew the same heavy feeders year after year.
+      lastFamily: (["grass", "nightshade"] as const)[Math.floor(rand() * 2)],
+      familyStreak: 2,
       applied: [],
       weedy: true,
       known: { lab: false, shovel: false, water: false },
@@ -234,6 +235,24 @@ export function applyPractice(state: GameState, plotId: number, practiceId: Prac
   return { ok: true, state: { ...state, plots, organic, coins: state.coins - practice.cost } };
 }
 
+export function canPlant(state: GameState, plotId: number, cropId: CropId): string | null {
+  const plot = state.plots[plotId];
+  if (state.status !== "playing") return "The game is over.";
+  if (!plot) return "Pick a plot first.";
+  if (plot.weedy) return "Pull the weeds first.";
+  if (plot.crop) return `${CROPS[plot.crop].name} are already growing here.`;
+  if (seasonName(state.season) === "Winter") return "Too cold to plant crops in winter. Try a cover crop instead.";
+  if (state.coins < CROPS[cropId].seedCost) return "Not enough coins.";
+  return null;
+}
+
+export function plantCrop(state: GameState, plotId: number, cropId: CropId): ApplyResult {
+  const reason = canPlant(state, plotId, cropId);
+  if (reason) return { ok: false, reason };
+  const plots = state.plots.map((p) => (p.id === plotId ? { ...p, crop: cropId } : p));
+  return { ok: true, state: { ...state, plots, coins: state.coins - CROPS[cropId].seedCost } };
+}
+
 function neighbors(id: number): number[] {
   const r = Math.floor(id / GRID_SIZE);
   const c = id % GRID_SIZE;
@@ -255,13 +274,17 @@ interface PlotOutcome {
   pestHit: boolean;
   plowed: boolean;
   weedsReturned: boolean;
+  /** Growing-season plot with nothing planted. */
+  empty: boolean;
+  fixedNitrogen: boolean;
 }
 
 function resolvePlot(p: Plot, state: GameState, event: EventId, market: number): PlotOutcome {
   const has = (id: PracticeId) => p.applied.includes(id);
   const winter = seasonName(state.season) === "Winter";
   const hedgeNear = p.hedgerow || neighbors(p.id).some((n) => state.plots[n].hedgerow);
-  const covered = has("coverCrop") || has("mulch");
+  const crop = p.crop ? CROPS[p.crop] : null;
+  const covered = has("coverCrop") || has("mulch") || !!crop?.coversSoil;
   const plowed = has("plow");
   const bare = !covered;
   let { om, life, structure, water, nutrients, ph } = p;
@@ -283,15 +306,25 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
   if (p.noTill) { structure += 4; life += 3; om += 1.5; }
   if (p.hedgerow) life += 1;
 
-  // Crop rotation
-  const rotated = has("rotate");
-  const crop = rotated ? (p.crop + 1) % CROPS.length : p.crop;
-  const seasonsSameCrop = rotated ? 0 : p.seasonsSameCrop + 1;
-  if (rotated) { nutrients += 2; life += 2; }
-  else if (seasonsSameCrop >= 3) nutrients -= 2;
+  // The crop feeds on the soil, gives some things back, and rotation matters.
+  let familyStreak = p.familyStreak;
+  if (crop) {
+    nutrients -= crop.nutrientUse;
+    om += crop.gives.om ?? 0;
+    nutrients += crop.gives.nutrients ?? 0;
+    structure += crop.gives.structure ?? 0;
+    life += crop.gives.life ?? 0;
+    if (crop.family === p.lastFamily) {
+      familyStreak = p.familyStreak + 1;
+      nutrients -= 2;
+    } else {
+      familyStreak = 0;
+      life += 2;
+    }
+  }
 
   // Natural processes
-  nutrients -= winter ? 2 : 6;
+  nutrients -= winter ? 2 : 1;
   // Weeds steal water and nutrients from the crop.
   if (p.weedy) nutrients -= 3;
   if (bare) {
@@ -333,7 +366,7 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
   // Harvest
   let harvest = 0;
   let pestHit = false;
-  if (!winter) {
+  if (!winter && crop) {
     const quality = 0.35 * nutrients + 0.25 * water + 0.2 * structure + 0.2 * life;
     let factor = 0.35 + (0.65 * quality) / 100;
     if (plowed) factor *= 1.15;
@@ -343,14 +376,14 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
     factor *= Math.max(0.6, 1 - 0.15 * Math.abs(ph - 6.5));
     if (event === "drought") factor *= 0.4 + (0.6 * water) / 100;
     if (event === "pests") {
-      const protectedPlot = has("pesticide") || hedgeNear || (seasonsSameCrop <= 1 && life > 45);
+      const protectedPlot = has("pesticide") || hedgeNear || (familyStreak === 0 && life > 45);
       if (protectedPlot) factor *= 0.9;
       else {
-        factor *= seasonsSameCrop >= 2 ? 0.4 : 0.6;
+        factor *= familyStreak >= 1 ? 0.4 : 0.6;
         pestHit = true;
       }
     }
-    harvest = Math.round(18 * factor * market * (state.organic ? ORGANIC_BONUS : 1));
+    harvest = Math.round(18 * factor * crop.value * market * (state.organic ? ORGANIC_BONUS : 1));
   }
 
   // Weeds sprout again on soil left bare during the growing season.
@@ -362,7 +395,11 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
       ...p,
       om: round1(om), life: round1(life), structure: round1(structure),
       water: round1(water), nutrients: round1(nutrients), ph: round1(ph),
-      noTillSeasons, crop, seasonsSameCrop, applied: [], weedy,
+      noTillSeasons, applied: [], weedy,
+      // Harvest time: the plot is empty again and remembers what grew here.
+      crop: null,
+      lastFamily: crop ? crop.family : p.lastFamily,
+      familyStreak: crop ? familyStreak : p.familyStreak,
     },
     harvest,
     grazing,
@@ -372,6 +409,8 @@ function resolvePlot(p: Plot, state: GameState, event: EventId, market: number):
     pestHit,
     plowed,
     weedsReturned,
+    empty: !winter && !crop,
+    fixedNitrogen: crop?.family === "legume",
   };
 }
 
@@ -393,7 +432,7 @@ function buildInsights(event: EventId, outcomes: PlotOutcome[], winter: boolean,
   if (event === "pests")
     out.push(
       pestHits > 0
-        ? `Pests ate crops on ${pestHits} plot${pestHits > 1 ? "s" : ""}. Rotating crops and planting hedgerows keeps pests in check.`
+        ? `Pests ate crops on ${pestHits} plot${pestHits > 1 ? "s" : ""}. Pests build up when the same plant family grows in the same spot. Rotating families and planting hedgerows keeps them in check.`
         : "Pests showed up, but your rotations, hedgerows, and healthy soil kept the damage small.",
     );
   if (event === "bustMarket")
@@ -404,6 +443,11 @@ function buildInsights(event: EventId, outcomes: PlotOutcome[], winter: boolean,
     out.push("Some fertilizer washed out of the soil before plants could use it, and the soil got more acidic.");
   if (outcomes.some((o) => o.plowed))
     out.push("Plowing gave a quick harvest boost, but it broke apart soil crumbs and burned off organic matter.");
+  const empty = outcomes.filter((o) => o.empty).length;
+  if (empty > 0)
+    out.push(`${empty} plot${empty > 1 ? "s" : ""} sat empty, so ${empty > 1 ? "they" : "it"} grew nothing to sell. Open the seed bag to plant.`);
+  if (outcomes.some((o) => o.fixedNitrogen))
+    out.push("Your beans pulled nitrogen out of the air and left it in the soil for the next crop.");
   const weedsBack = outcomes.filter((o) => o.weedsReturned).length;
   if (weedsBack > 0)
     out.push(`Weeds sprouted again on ${weedsBack} bare plot${weedsBack > 1 ? "s" : ""}. Cover crops and mulch keep weeds from taking over.`);
@@ -413,7 +457,7 @@ function buildInsights(event: EventId, outcomes: PlotOutcome[], winter: boolean,
     out.push("Your soil is coming alive! More microbes and worms mean better crumbs, more water, and more food for plants.");
   if (out.length === 0)
     out.push(delta < 0 ? "Your soil got a little worse. Bare, unfed soil slowly loses its organic matter." : "A quiet season. Steady care builds soil over time.");
-  return out.slice(0, 4);
+  return out.slice(0, 5);
 }
 
 function marketFor(event: EventId): number {
@@ -433,10 +477,40 @@ export interface Preview {
 
 const METRICS: Metric[] = ["om", "life", "structure", "water", "nutrients", "ph"];
 
+export type GameAction = { practice: PracticeId } | { plant: CropId };
+
 /**
- * What a practice would do to one plot this season, assuming the forecast comes true.
- * Runs the real season resolver with and without the practice, so the preview matches the outcome.
+ * What an action would do to one plot this season, assuming the forecast comes true.
+ * Runs the real season resolver with and without it, so the preview matches the outcome.
  */
+export function previewAction(state: GameState, plotId: number, action: GameAction): Preview {
+  if ("plant" in action) return previewPlant(state, plotId, action.plant);
+  return previewPractice(state, plotId, action.practice);
+}
+
+function previewPlant(state: GameState, plotId: number, cropId: CropId): Preview {
+  const crop = CROPS[cropId];
+  const event = state.forecast;
+  const market = marketFor(event);
+  const base = withPlot(state, plotId, (p) => ({ ...p, weedy: false, crop: null }));
+  const without = resolvePlot(base.plots[plotId], base, event, market);
+  const withState = withPlot(base, plotId, (p) => ({ ...p, crop: cropId }));
+  const withOutcome = resolvePlot(withState.plots[plotId], withState, event, market);
+  const last = base.plots[plotId].lastFamily;
+  const notes: string[] = [];
+  if (last === crop.family) notes.push(`⚠️ Same plant family as last season (${FAMILY_LABEL[crop.family]}): pests love that, and the soil runs low on the same nutrients`);
+  else if (last) notes.push(`Good rotation! Last season this plot grew the ${FAMILY_LABEL[last].toLowerCase()}`);
+  if (crop.coversSoil) notes.push("Covers the soil: keeps weeds down and protects from erosion");
+  notes.push("Harvested at the end of the season, then the plot is empty again");
+  return {
+    deltas: Object.fromEntries(METRICS.map((m) => [m, round1(withOutcome.plot[m] - without.plot[m])])) as Record<Metric, number>,
+    harvestDelta: withOutcome.harvest - without.harvest,
+    cost: crop.seedCost,
+    reveals: [],
+    notes,
+  };
+}
+
 export function previewPractice(state: GameState, plotId: number, practiceId: PracticeId): Preview {
   const practice = PRACTICES[practiceId];
   const notes = [...(practice.notes ?? [])];
@@ -465,7 +539,6 @@ export function previewPractice(state: GameState, plotId: number, practiceId: Pr
   const deltas = Object.fromEntries(
     METRICS.map((m) => [m, round1(withOutcome.plot[m] - without.plot[m])]),
   ) as Record<Metric, number>;
-  if (practiceId === "weed") notes.unshift("Without weeding, this plot's harvest is cut almost in half");
   return {
     deltas,
     harvestDelta: withOutcome.harvest + withOutcome.grazing - (without.harvest + without.grazing),
