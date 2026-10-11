@@ -4,8 +4,8 @@ import { SoilStats } from "@/components/SoilStats";
 
 const AREAS = [
   {
-    href: "/soil/learn", icon: "📖", title: "Learn: Soil Health", color: "bg-leaf",
-    text: "Six quick lessons on what soil is, how it works, and how to keep it healthy. Earn XP for every quiz.",
+    href: "/soil/learn", icon: "📖", title: "Learn: Soil Science", color: "bg-leaf",
+    text: "A full K-12 curriculum: 5 units and 16 lessons with hands-on activities, at elementary, middle, or high school level. Built from USDA, Soil Science Society, and FAO sources.",
   },
   {
     href: "/soil/game", icon: "🚜", title: "Regenerate the Field", color: "bg-soil",

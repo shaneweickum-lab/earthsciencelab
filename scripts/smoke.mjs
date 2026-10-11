@@ -36,16 +36,35 @@ await shot("01-hub");
 await page.goto(`${BASE}/soil`);
 await shot("02-soil-home");
 
+// Curriculum: the grade level changes the lesson's depth.
+await page.goto(`${BASE}/soil/learn`);
+await page.getByRole("radio", { name: /Elementary/ }).click();
+await shot("02b-learn-units");
+await page.goto(`${BASE}/soil/learn/what-is-soil`);
+await page.getByRole("heading", { name: "Soil is a recipe" }).waitFor();
+await shot("02c-lesson-elementary");
+await page.getByLabel("Grade level").first().selectOption("high");
+await page.getByRole("heading", { name: "A scientist's definition" }).waitFor();
+await page.getByText("Pedosphere").waitFor();
+await shot("02d-lesson-high");
+await page.getByLabel("Grade level").first().selectOption("middle");
+await page.goto(`${BASE}/soil/teach`);
+await page.getByRole("heading", { name: "Soil Science Teacher Guide" }).waitFor();
+await shot("02e-teacher-guide");
+await page.goto(`${BASE}/soil/sources`);
+await page.getByRole("heading", { name: "Sources", exact: true }).waitFor();
+await shot("02f-sources");
+
 await page.goto(`${BASE}/soil/learn/soil-texture`);
 await page.getByText("The Soil Texture Triangle").scrollIntoViewIfNeeded();
 await page.getByRole("button", { name: /Pottery clay/ }).click();
 await shot("03-texture-triangle");
 // Answer the quiz with the first option each time.
-for (let i = 0; i < 6; i++) {
-  await page.locator("section.card button.rounded-xl").first().click();
-  await page.getByRole("button", { name: /Next|Finish/ }).click();
+const quiz = page.getByRole("region", { name: "Quiz" });
+while (!(await page.getByText(/You got \d+ of \d+/).count())) {
+  await quiz.locator("button.rounded-xl").first().click();
+  await page.getByRole("button", { name: /^(Next|Finish)/ }).click();
 }
-await page.getByText(/You got \d of 6/).waitFor();
 await shot("04-quiz-done");
 
 await page.goto(`${BASE}/soil/learn/soil-horizons`);

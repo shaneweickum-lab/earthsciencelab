@@ -5,7 +5,7 @@ The educational content is written for ages 11–14 and simplified on purpose. I
 - **Texture classes:** USDA NRCS *Soil Survey Manual* (Handbook 18), texture triangle rules. `src/lib/soil/textureTriangle.ts` implements the standard class boundaries, and tests check known points.
 - **Soil orders:** USDA *Keys to Soil Taxonomy*, which defines 12 orders. The name origins follow the NRCS "Twelve Orders of Soil Taxonomy" guide.
 - **Horizons (O, A, E, B, C, R):** USDA NRCS master horizon definitions.
-- **Regenerative principles:** the five NRCS / Soil Health Institute soil health principles (minimize disturbance, keep soil covered, diversity, living roots, integrate livestock).
+- **Regenerative principles:** the four NRCS soil health principles (maximize soil cover, minimize disturbance, maximize biodiversity, maximize living roots), per the NRCS "Principles for High Functioning Soils" fact sheet. Many farmers and groups add a fifth, "integrate livestock", and the lessons label it as such.
 
 ## Globe regions
 
@@ -41,3 +41,16 @@ These are widely cited but rounded or popularized. Verify them before using them
 - **Soil composition** (`src/data/soilElements.ts`): rounded world-average dry-weight values after Bowen (1979, *Environmental Chemistry of the Elements*) and Vinogradov (1959). Real soils vary a lot. A peat soil is mostly carbon, and a beach sand is mostly silicon and oxygen.
 - **Hydrogen:** given no single percentage, because most of it is in soil water, which changes from day to day.
 - **Roles are simplified.** Many elements do several jobs. Iron, for example, is both a framework element and a micronutrient. Co is listed as a micronutrient because legume root-nodule bacteria need it, even though most plants don't. Pb, Cd, As, and Hg occur naturally in trace amounts. They're grouped as "harmful" because pollution can raise them to toxic levels.
+
+## K-12 curriculum
+
+- **Where the content lives:** `src/content/soil/curriculum/`. Each lesson cites sources by id from `src/content/soil/sources.ts`. Sections show their source under the text, and every lesson ends with a full source list and its NGSS codes.
+- **Standards:** NGSS codes were checked against state mirrors of the standards (for example the California Department of Education listings and the NYS science standards site), because nextgenscience.org could not be reached from the build environment.
+- **Links that couldn't be machine-checked:** USDA NRCS website links (nrcs.usda.gov) could not be opened from the build environment either. They follow NRCS's current URL structure, but a teacher should spot-check them.
+- **Numbers deliberately kept cautious:**
+  - Topsoil formation is described as "hundreds of years per inch." Published estimates range from about 100 to over 1,000 years, depending on climate.
+  - The microbes-in-a-teaspoon line uses USDA's own wording.
+  - Permafrost carbon is described as "more than the atmosphere" without a number (see NOAA's Arctic Report Card for current estimates).
+  - The claim that "95% of food comes from soil" is not used, because it could not be traced to a primary FAO source.
+- **Labeled example data:** some high-school data questions use made-up numbers, clearly marked as examples (for instance rainfall versus carbonate depth, modeled on Jenny's classic pattern).
+- **State soils:** Myakka is Florida's official state soil (designated in 1989). Houston Black (Texas) and Tama (Iowa) are widely called state soils but are representative soils rather than legislatively adopted symbols, so lessons use "official" only for Myakka.

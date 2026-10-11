@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useElementsPanel } from "@/store/elementsPanel";
+import { GradeSelector } from "./GradeSelector";
 import { XPBar } from "./XPBar";
 
 const SOIL_LINKS = [
@@ -45,6 +46,9 @@ export function SiteHeader() {
           </nav>
         )}
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <div className="hidden md:block">
+            <GradeSelector compact />
+          </div>
           {path === "/elements" ? null : (
             <button
               onClick={() => openElements()}
