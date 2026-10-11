@@ -6,7 +6,9 @@ A gamified science learning platform for middle schoolers (ages 11–14). The fi
 
 | Area | Route | What it does |
 | --- | --- | --- |
-| Learn: Soil Health & Quality | `/soil/learn` | Six lessons, each with an interactive (texture triangle, 3D soil profile, erosion sim, and more) and a quiz worth XP. |
+| Learn: Soil Science Curriculum | `/soil/learn` | A K-12 curriculum: 5 units and 16 lessons, each written at Elementary (K-5), Middle (6-8), and High School (9-12) depth. Every lesson has objectives, vocabulary, cited sections, an interactive (texture triangle, 3D profile, food web, nitrogen and carbon cycles, pH scale, and more), a hands-on activity, a quiz, sources, and NGSS standards. A grade-level dropdown in the header switches the depth everywhere. |
+| Teacher Guide | `/soil/teach` | Printable unit plans by level: driving questions, objectives, vocabulary, activities, standards, and pacing. |
+| Sources | `/soil/sources` | The bibliography every lesson draws on (USDA NRCS, Soil Science Society of America, FAO, Smithsonian, NOAA, Weil & Brady, Jenny). |
 | Regenerate the Field | `/soil/game` | A 12-season game. You inherit an overgrown organic garden: weed it, run soil tests (lab, shovel, infiltration) to uncover each plot's hidden soil, plant crops from a seed bag (each packet explains what the crop takes from the soil and what it gives back; rotate plant families to dodge pests), then restore it with cover crops, compost, no-till, grazing, hedgerows, and biochar. Take as many actions as you can afford. Every action shows a preview of exactly what it will do to the plot before you confirm it. Synthetic shortcuts cost you your organic certification. |
 | Soil Globe | `/soil/globe` | A 3D globe with 50 regions colored by USDA soil order or by texture class, region cards with a texture-triangle plot, and a "Guess the Soil" quiz. |
 
@@ -50,7 +52,7 @@ npm run smoke      # loads every page in Chromium, plays a few turns, fails on c
 
 ```
 app/                       routes (hub, /soil, /soil/learn/[slug], /soil/game, /soil/globe)
-src/content/soil/          lesson text and quizzes
+src/content/soil/          curriculum (units, leveled lessons, quizzes) and the source registry
 src/data/                  soil orders, globe regions, and the 118 elements
 src/lib/soil/              USDA texture-triangle classifier
 src/game/                  pure, seeded game engine, practices, and test strategies

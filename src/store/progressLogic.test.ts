@@ -1,28 +1,51 @@
 import { describe, expect, it } from "vitest";
 import { SOIL_BUILDER_ZS } from "@/data/soilElements";
 import {
-  answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, finishGame, levelFor, viewElement, visitRegion,
+  answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, finishGame, levelFor, setGradeLevel, viewElement, visitRegion,
 } from "./progressLogic";
 
-const ALL = ["what-is-soil", "soil-texture"];
+const ALL = [{ slug: "what-is-soil", unit: 1 }, { slug: "soil-texture", unit: 2 }];
 
 describe("progress logic", () => {
   it("pays lesson XP once and quiz XP only for improvement", () => {
-    let d = completeLesson(EMPTY_PROGRESS, "what-is-soil", 3, 5, ALL).data;
+    let d = completeLesson(EMPTY_PROGRESS, "what-is-soil", "middle", 3, 5, ALL).data;
     expect(d.xp).toBe(50 + 30);
-    d = completeLesson(d, "what-is-soil", 3, 5, ALL).data;
+    d = completeLesson(d, "what-is-soil", "middle", 3, 5, ALL).data;
     expect(d.xp).toBe(80);
-    d = completeLesson(d, "what-is-soil", 5, 5, ALL).data;
+    d = completeLesson(d, "what-is-soil", "middle", 5, 5, ALL).data;
     expect(d.xp).toBe(100);
   });
 
   it("awards lesson, perfect-quiz and all-lessons badges once", () => {
-    const a = completeLesson(EMPTY_PROGRESS, "what-is-soil", 1, 5, ALL);
-    expect(a.newBadges).toEqual(["dirt-detective"]);
-    const b = completeLesson(a.data, "soil-texture", 5, 5, ALL);
-    expect(b.newBadges).toEqual(["texture-master", "soil-scholar"]);
-    const c = completeLesson(b.data, "soil-texture", 5, 5, ALL);
+    const a = completeLesson(EMPTY_PROGRESS, "what-is-soil", "middle", 1, 5, ALL);
+    expect(a.newBadges).toEqual(["dirt-detective", "unit-1"]);
+    const b = completeLesson(a.data, "soil-texture", "middle", 5, 5, ALL);
+    expect(b.newBadges).toEqual(["texture-master", "unit-2", "soil-scholar"]);
+    const c = completeLesson(b.data, "soil-texture", "middle", 5, 5, ALL);
     expect(c.newBadges).toEqual([]);
+  });
+
+  it("can't farm quiz XP by switching grade levels", () => {
+    let d = completeLesson(EMPTY_PROGRESS, "what-is-soil", "elementary", 5, 5, ALL).data;
+    expect(d.xp).toBe(50 + 50);
+    d = completeLesson(d, "what-is-soil", "high", 5, 6, ALL).data;
+    expect(d.xp).toBe(100);
+    d = completeLesson(d, "what-is-soil", "high", 6, 6, ALL).data;
+    expect(d.xp).toBe(110);
+    expect(d.quizScores["what-is-soil:elementary"].correct).toBe(5);
+    expect(d.quizScores["what-is-soil:high"].correct).toBe(6);
+  });
+
+  it("awards a unit badge only when every lesson in the unit is done", () => {
+    const lessons = [{ slug: "a", unit: 1 }, { slug: "b", unit: 1 }, { slug: "c", unit: 2 }];
+    const one = completeLesson(EMPTY_PROGRESS, "a", "middle", 1, 5, lessons);
+    expect(one.newBadges).not.toContain("unit-1");
+    expect(completeLesson(one.data, "b", "middle", 1, 5, lessons).newBadges).toContain("unit-1");
+  });
+
+  it("remembers the grade level", () => {
+    expect(EMPTY_PROGRESS.gradeLevel).toBe("middle");
+    expect(setGradeLevel(EMPTY_PROGRESS, "high").data.gradeLevel).toBe("high");
   });
 
   it("counts region visits once and unlocks Soil Explorer at 10", () => {

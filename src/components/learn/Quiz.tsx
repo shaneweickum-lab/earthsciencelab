@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { QuizQuestion } from "@/content/soil/lessons";
+import type { Level, QuizQuestion } from "@/content/soil/curriculum/types";
 import { useProgress } from "@/store/progress";
 import { QUIZ_XP_PER_CORRECT } from "@/store/progressLogic";
 
-export function Quiz({ slug, questions }: { slug: string; questions: QuizQuestion[] }) {
+export function Quiz({ slug, level, questions }: { slug: string; level: Level; questions: QuizQuestion[] }) {
   const completeLesson = useProgress((s) => s.completeLesson);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
@@ -26,7 +26,7 @@ export function Quiz({ slug, questions }: { slug: string; questions: QuizQuestio
       setPicked(null);
     } else {
       setFinished(true);
-      completeLesson(slug, correct, questions.length);
+      completeLesson(slug, level, correct, questions.length);
     }
   }
 
@@ -49,7 +49,7 @@ export function Quiz({ slug, questions }: { slug: string; questions: QuizQuestio
           {perfect ? "Perfect score. You really dig soil!" : "Nice work. Try again any time to beat your best score."}
         </p>
         <p className="mt-2 text-sm font-semibold text-leaf">
-          Lesson XP is earned once, plus {QUIZ_XP_PER_CORRECT} XP for each new correct answer.
+          Lesson XP is earned once, plus {QUIZ_XP_PER_CORRECT} XP for each correct answer beyond your best score.
         </p>
         {!perfect && (
           <button onClick={restart} className="btn btn-ghost mt-4">
@@ -61,7 +61,7 @@ export function Quiz({ slug, questions }: { slug: string; questions: QuizQuestio
   }
 
   return (
-    <section className="card p-5 sm:p-6">
+    <section className="card p-5 sm:p-6" aria-label="Quiz">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-black">📝 Quiz</h2>
         <span className="text-sm font-bold text-muted">

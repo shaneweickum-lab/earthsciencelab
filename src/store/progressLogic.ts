@@ -1,5 +1,6 @@
+import type { Level } from "@/content/soil/curriculum/types";
 import { SOIL_BUILDER_ZS } from "@/data/soilElements";
-import { LESSON_BADGES, type BadgeId } from "./badges";
+import { LESSON_BADGES, UNIT_BADGES, type BadgeId } from "./badges";
 
 export const XP_PER_LEVEL = 200;
 export const LESSON_XP = 50;
@@ -12,7 +13,9 @@ export const TOTAL_ELEMENTS = 118;
 export interface ProgressData {
   xp: number;
   completedLessons: string[];
+  /** Best quiz score per lesson and level, keyed "slug:level". */
   quizScores: Record<string, { correct: number; total: number }>;
+  gradeLevel: Level;
   badges: BadgeId[];
   visitedRegions: string[];
   globeQuizCorrect: number;
@@ -26,6 +29,7 @@ export const EMPTY_PROGRESS: ProgressData = {
   xp: 0,
   completedLessons: [],
   quizScores: {},
+  gradeLevel: "middle",
   badges: [],
   visitedRegions: [],
   globeQuizCorrect: 0,
@@ -46,28 +50,53 @@ function award(data: ProgressData, ids: BadgeId[]): Update {
   return { data: { ...data, badges: [...data.badges, ...newBadges] }, newBadges };
 }
 
+export function quizKey(slug: string, level: Level): string {
+  return `${slug}:${level}`;
+}
+
+/** Best number of correct answers on a lesson's quiz at any level. */
+function bestCorrectAnyLevel(data: ProgressData, slug: string): number {
+  return Math.max(
+    0,
+    ...Object.entries(data.quizScores)
+      .filter(([k]) => k === slug || k.startsWith(`${slug}:`))
+      .map(([, v]) => v.correct),
+  );
+}
+
 /**
- * Lesson XP is paid once. Quiz XP is paid only for improvement on your best score,
- * so retaking a quiz can't farm XP.
+ * Lesson XP is paid once per lesson, whatever the level. Quiz XP is paid only for beating your
+ * best score on that lesson at any level, so retaking a quiz or switching levels can't farm XP.
  */
 export function completeLesson(
-  data: ProgressData, slug: string, correct: number, total: number, allLessonSlugs: string[],
+  data: ProgressData, slug: string, level: Level, correct: number, total: number,
+  lessons: { slug: string; unit: number }[],
 ): Update {
   const first = !data.completedLessons.includes(slug);
-  const prevBest = data.quizScores[slug]?.correct ?? 0;
-  const gained = (first ? LESSON_XP : 0) + Math.max(0, correct - prevBest) * QUIZ_XP_PER_CORRECT;
+  const prevBestAny = bestCorrectAnyLevel(data, slug);
+  const key = quizKey(slug, level);
+  const prevBestHere = data.quizScores[key]?.correct ?? 0;
+  const gained = (first ? LESSON_XP : 0) + Math.max(0, correct - prevBestAny) * QUIZ_XP_PER_CORRECT;
   const completedLessons = first ? [...data.completedLessons, slug] : data.completedLessons;
   const next: ProgressData = {
     ...data,
     xp: data.xp + gained,
     completedLessons,
-    quizScores: { ...data.quizScores, [slug]: { correct: Math.max(correct, prevBest), total } },
+    quizScores: { ...data.quizScores, [key]: { correct: Math.max(correct, prevBestHere), total } },
   };
   const badges: BadgeId[] = [];
   if (LESSON_BADGES[slug]) badges.push(LESSON_BADGES[slug]);
   if (slug === "soil-texture" && correct === total) badges.push("texture-master");
-  if (allLessonSlugs.every((s) => completedLessons.includes(s))) badges.push("soil-scholar");
+  for (const [unit, badge] of Object.entries(UNIT_BADGES)) {
+    const inUnit = lessons.filter((l) => l.unit === Number(unit));
+    if (inUnit.length > 0 && inUnit.every((l) => completedLessons.includes(l.slug))) badges.push(badge);
+  }
+  if (lessons.length > 0 && lessons.every((l) => completedLessons.includes(l.slug))) badges.push("soil-scholar");
   return award(next, badges);
+}
+
+export function setGradeLevel(data: ProgressData, gradeLevel: Level): Update {
+  return { data: { ...data, gradeLevel }, newBadges: [] };
 }
 
 export function visitRegion(data: ProgressData, regionId: string): Update {

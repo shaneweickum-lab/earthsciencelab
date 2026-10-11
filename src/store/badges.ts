@@ -2,7 +2,8 @@ export type BadgeId =
   | "dirt-detective" | "texture-master" | "layer-explorer" | "health-inspector" | "erosion-fighter"
   | "regen-rookie" | "soil-scholar" | "first-harvest" | "field-restorer" | "soil-legend"
   | "globe-trotter" | "soil-explorer" | "world-soil-expert"
-  | "element-spotter" | "lab-regular" | "table-master" | "soil-chemist";
+  | "element-spotter" | "lab-regular" | "table-master" | "soil-chemist"
+  | "unit-1" | "unit-2" | "unit-3" | "unit-4" | "unit-5";
 
 export interface Badge {
   id: BadgeId;
@@ -19,6 +20,11 @@ export const BADGES: Record<BadgeId, Badge> = {
   "erosion-fighter": { id: "erosion-fighter", name: "Erosion Fighter", icon: "🛡️", description: "Finish the How Soil Gets Hurt lesson." },
   "regen-rookie": { id: "regen-rookie", name: "Regen Rookie", icon: "🌿", description: "Finish the Regenerative Principles lesson." },
   "soil-scholar": { id: "soil-scholar", name: "Soil Scholar", icon: "🎓", description: "Finish every soil lesson." },
+  "unit-1": { id: "unit-1", name: "Soil Starter", icon: "🪱", description: "Finish Unit 1: What Is Soil?" },
+  "unit-2": { id: "unit-2", name: "Property Pro", icon: "🔬", description: "Finish Unit 2: Soil Properties." },
+  "unit-3": { id: "unit-3", name: "Food Web Friend", icon: "🍄", description: "Finish Unit 3: Life in the Soil." },
+  "unit-4": { id: "unit-4", name: "Soil Mapper", icon: "🗺️", description: "Finish Unit 4: Soils of the World." },
+  "unit-5": { id: "unit-5", name: "Soil Steward", icon: "🌿", description: "Finish Unit 5: Soil Health & Stewardship." },
   "first-harvest": { id: "first-harvest", name: "First Harvest", icon: "🧺", description: "Finish a full game of Regenerate the Field." },
   "field-restorer": { id: "field-restorer", name: "Field Restorer", icon: "🏆", description: "Bring a field to a Soil Health Index of 70 or more." },
   "soil-legend": { id: "soil-legend", name: "Soil Legend", icon: "⭐", description: "Earn 3 stars in Regenerate the Field." },
@@ -29,6 +35,10 @@ export const BADGES: Record<BadgeId, Badge> = {
   "lab-regular": { id: "lab-regular", name: "Lab Regular", icon: "🧪", description: "Explore 25 different elements." },
   "table-master": { id: "table-master", name: "Table Master", icon: "👑", description: "Explore all 118 elements." },
   "soil-chemist": { id: "soil-chemist", name: "Soil Chemist", icon: "🧑‍🔬", description: "Explore every element that builds soil." },
+};
+
+export const UNIT_BADGES: Record<number, BadgeId> = {
+  1: "unit-1", 2: "unit-2", 3: "unit-3", 4: "unit-4", 5: "unit-5",
 };
 
 export const LESSON_BADGES: Record<string, BadgeId> = {

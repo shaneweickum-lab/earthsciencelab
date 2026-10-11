@@ -2,14 +2,15 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { LESSONS } from "@/content/soil/lessons";
+import { CURRICULUM, type Level } from "@/content/soil/curriculum";
 import type { BadgeId } from "./badges";
 import * as logic from "./progressLogic";
 
 interface ProgressStore extends logic.ProgressData {
   /** Badges waiting to be shown as toasts. Not saved. */
   toasts: BadgeId[];
-  completeLesson: (slug: string, correct: number, total: number) => void;
+  completeLesson: (slug: string, level: Level, correct: number, total: number) => void;
+  setGradeLevel: (level: Level) => void;
   visitRegion: (id: string) => void;
   answerGlobeQuiz: (correct: boolean) => void;
   finishGame: (stars: number, health: number) => void;
@@ -18,7 +19,7 @@ interface ProgressStore extends logic.ProgressData {
   reset: () => void;
 }
 
-const lessonSlugs = LESSONS.map((l) => l.slug);
+const lessonList = CURRICULUM.map((l) => ({ slug: l.slug, unit: l.unit }));
 
 export const useProgress = create<ProgressStore>()(
   persist(
@@ -31,8 +32,9 @@ export const useProgress = create<ProgressStore>()(
       return {
         ...logic.EMPTY_PROGRESS,
         toasts: [],
-        completeLesson: (slug, correct, total) =>
-          run((d) => logic.completeLesson(d, slug, correct, total, lessonSlugs)),
+        completeLesson: (slug, level, correct, total) =>
+          run((d) => logic.completeLesson(d, slug, level, correct, total, lessonList)),
+        setGradeLevel: (level) => run((d) => logic.setGradeLevel(d, level)),
         visitRegion: (id) => run((d) => logic.visitRegion(d, id)),
         answerGlobeQuiz: (correct) => run((d) => logic.answerGlobeQuiz(d, correct)),
         finishGame: (stars, health) => run((d) => logic.finishGame(d, stars, health)),
@@ -43,7 +45,7 @@ export const useProgress = create<ProgressStore>()(
     },
     {
       name: "earthsciencelab-progress",
-      version: 2,
+      version: 3,
       // v2 added viewedElements. Fill in any new fields with defaults.
       migrate: (saved) => ({ ...logic.EMPTY_PROGRESS, ...(saved as Partial<logic.ProgressData>) }),
       storage: createJSONStorage(() => localStorage),
@@ -66,5 +68,6 @@ function pickData(s: logic.ProgressData): logic.ProgressData {
     bestGameHealth: s.bestGameHealth,
     gamesPlayed: s.gamesPlayed,
     viewedElements: s.viewedElements,
+    gradeLevel: s.gradeLevel,
   };
 }

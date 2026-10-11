@@ -7,8 +7,8 @@ const CARDS = [
   { icon: "🌾", practice: "Straw mulch", principle: "Keep the soil covered", detail: "A blanket of straw blocks raindrop splash and keeps the soil cool and moist." },
   { icon: "🌸🌽🫘", practice: "Planting many crops together", principle: "Grow diversity", detail: "Different plants feed different microbes and make it hard for pests to spread." },
   { icon: "🍀", practice: "Winter cover crops", principle: "Keep living roots in the ground", detail: "Roots keep feeding soil life even after the main crop is harvested." },
-  { icon: "🐄", practice: "Rotational grazing", principle: "Bring in animals", detail: "Animals graze a small area briefly, leave manure, then move on so plants can regrow." },
-  { icon: "🍂", practice: "Adding compost", principle: "Feed the soil life", detail: "Compost adds organic matter and billions of microbes. It's a key tool in organic farming." },
+  { icon: "🐄", practice: "Rotational grazing", principle: "Integrate animals (a popular 5th principle)", detail: "Animals graze a small area briefly, leave manure, then move on so plants can regrow. NRCS lists four principles; many farmers add this one." },
+  { icon: "🍂", practice: "Adding compost", principle: "Feed the soil life (a common practice)", detail: "Compost adds organic matter and huge numbers of microbes. It's a key tool in organic farming, though not one of the four NRCS principles." },
   { icon: "🌳", practice: "Hedgerows", principle: "Grow diversity", detail: "Shrubs on field edges house ladybugs and birds that eat pests, and block wind." },
   { icon: "🔄", practice: "Crop rotation", principle: "Grow diversity", detail: "Changing crops each season breaks pest life cycles and balances nutrients." },
 ];
