@@ -19,6 +19,8 @@ export function ElementsOverlay() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && useElementsPanel.getState().isOpen) close();
+      // Games claim their own keys by calling preventDefault in a capture listener.
+      if (e.defaultPrevented) return;
       if ((e.key === "e" || e.key === "E") && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target) && !onElementsPage) {
         e.preventDefault();
         open();

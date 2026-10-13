@@ -8,8 +8,8 @@ const AREAS = [
     text: "A full K-12 curriculum: 5 units and 16 lessons with hands-on activities, at elementary, middle, or high school level. Built from USDA, Soil Science Society, and FAO sources.",
   },
   {
-    href: "/soil/game", icon: "🚜", title: "Regenerate the Field", color: "bg-soil",
-    text: "You've inherited a worn-out farm. Use cover crops, compost, and no-till to bring it back to life in 3 years.",
+    href: "/soil/game", icon: "🌱", title: "Soil & Sprout", color: "bg-soil",
+    text: "You inherited an overgrown organic garden! Explore, plant, build a greenhouse, sell your harvest, and discover the bugs, fungi, and weather that shape your soil.",
   },
   {
     href: "/soil/globe", icon: "🌍", title: "Soil Globe", color: "bg-sky",

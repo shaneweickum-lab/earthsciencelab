@@ -1,4 +1,4 @@
-// Smoke test: loads each page in Chromium, plays a few game turns, clicks the globe,
+// Smoke test: loads each page in Chromium, plays the farm game, clicks the globe,
 // and fails on console errors. Usage: npm run build && npm start, then node scripts/smoke.mjs
 import { chromium } from "playwright-core";
 import { existsSync, mkdirSync, readdirSync } from "fs";
@@ -77,40 +77,87 @@ await page.getByText("Congratulations! You inherited an organic garden!").waitFo
 await shot("06a-garden-intro");
 await page.getByRole("button", { name: /Let's get gardening/ }).click();
 await page.waitForTimeout(1500);
-await shot("06b-weedy-garden");
-// Every action opens a preview first, then you confirm it.
-async function act(name, confirm) {
-  await page.getByRole("button", { name: new RegExp(name) }).first().click();
-  await page.getByText(/Preview · Plot/).waitFor();
-  await page.getByRole("button", { name: confirm }).click();
-  await page.getByText(/Preview · Plot/).waitFor({ state: "detached" });
+await shot("06b-farm");
+
+// Walking is slow in a software-rendered browser, so tests move the player by editing the save.
+const SAVE = "earthsciencelab-world";
+async function teleport(x, y, facing, tiles = {}) {
+  await page.goto(`${BASE}/soil/sources`); // leaving the game saves the farm
+  await page.evaluate(({ SAVE, x, y, facing, tiles }) => {
+    const w = JSON.parse(localStorage.getItem(SAVE));
+    w.player = { x, y, facing };
+    for (const [i, patch] of Object.entries(tiles)) Object.assign(w.tiles[Number(i)], patch);
+    localStorage.setItem(SAVE, JSON.stringify(w));
+  }, { SAVE, x, y, facing, tiles });
+  await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
+  await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
 }
-await act("Pull Weeds", /Apply to Plot 1/);
-await act("Shovel Test", /Run test on Plot 1/);
-await act("Infiltration Test", /Run test on Plot 1/);
-await act("Lab Soil Test", /Run test on Plot 1/);
-await page.getByRole("button", { name: /Open the seed bag/ }).click();
-await page.getByText("What will you plant?").waitFor();
-await shot("06d-seed-bag");
-await page.getByRole("button", { name: "Beans seed packet" }).click();
-await page.getByRole("region", { name: "Planting preview" }).waitFor();
-await shot("06e-seed-bag-beans");
-await page.getByRole("button", { name: /Plant in Plot 1/ }).click();
-await page.getByText("Beans growing").waitFor();
-await page.getByRole("button", { name: /Compost 🪙/ }).click();
-await page.getByText(/What it will do to this plot/).waitFor();
-await shot("06c-preview-compost");
-await page.getByRole("button", { name: /Apply to Plot 1/ }).click();
-await act("Cover Crop", /Apply to Plot 1/);
+const inspector = page.getByLabel("Tile inspector");
+const clean = { obstacle: null, weeds: false, crop: null, tilled: false, mulch: false };
+await teleport(10, 13, "down", { [13 * 40 + 10]: clean, [14 * 40 + 10]: { ...clean, weeds: true } });
+await inspector.getByText("Weeds are growing here.").waitFor();
+await page.keyboard.press("3"); // scythe
+await page.keyboard.press(" ");
+await page.getByText("Cut weeds (+1 fiber).").waitFor();
+await page.keyboard.press("1"); // hoe
+await inspector.getByText(/Till:/).waitFor();
+await page.keyboard.press(" ");
+await inspector.getByText("Tilled", { exact: true }).waitFor();
+await page.keyboard.press("8"); // bean seeds
+await page.keyboard.press(" ");
+await page.getByText(/^Planted Beans\./).waitFor();
+await page.keyboard.press("2"); // watering can
+await page.keyboard.press(" ");
+await page.keyboard.press("0"); // lab test kit
+await page.keyboard.press(" ");
+await page.getByText(/Lab results: organic matter/).waitFor();
 await page.waitForTimeout(800);
-await shot("06-game");
-await page.getByRole("button", { name: /^End / }).click();
-await page.getByText("Why did that happen?").waitFor();
-await shot("07-game-report");
-await page.getByRole("button", { name: /next season/ }).click();
-// After harvest the plot is empty again and remembers what grew there.
-await page.getByText("Empty plot").first().waitFor();
-await page.getByText(/Last grown: Legume/).waitFor();
+await shot("06c-planted");
+
+// Sleep in the farmhouse: the night passes and the crop grows.
+await teleport(10, 9, "up");
+await page.keyboard.press(" ");
+await page.getByRole("dialog", { name: "Your farmhouse" }).waitFor();
+await page.getByRole("button", { name: /Watch the weather/ }).click();
+await page.getByText(/Weather science/).waitFor();
+await shot("06d-tv");
+await page.getByRole("button", { name: "Close" }).click();
+await page.getByRole("button", { name: /Go to bed/ }).click();
+await page.getByRole("dialog", { name: "Good morning! Day 2" }).waitFor();
+await shot("07-day-summary");
+await page.getByRole("button", { name: "Start the day" }).click();
+await teleport(10, 13, "down");
+await inspector.getByText(/\d+%/).waitFor();
+
+await page.keyboard.press("i");
+await page.getByRole("dialog", { name: "Your bag" }).waitFor();
+await page.keyboard.press("Escape");
+await page.keyboard.press("j");
+await page.getByRole("dialog", { name: /Nature Journal/ }).waitFor();
+await shot("07b-journal");
+await page.keyboard.press("Escape");
+
+// The store: buy seeds and a compost bin, then build it.
+await teleport(32, 9, "up");
+await page.keyboard.press("e");
+await page.getByRole("dialog", { name: "Seed & Soil Co." }).waitFor();
+await page.getByRole("button", { name: "Buy Carrot Seeds" }).click();
+await page.getByText("🪙 285").first().waitFor();
+await page.getByRole("button", { name: /Build/ }).click();
+await page.getByRole("button", { name: "Buy Compost Bin" }).click();
+await shot("07c-store");
+await page.getByRole("button", { name: "Close" }).click();
+await page.keyboard.press("i");
+const bag = page.getByRole("dialog", { name: "Your bag" });
+await bag.getByRole("button", { name: /Compost Bin ×1/ }).click();
+await bag.getByRole("button", { name: /Lab Test Kit/ }).click();
+await page.keyboard.press("Escape");
+await teleport(12, 11, "down", { [12 * 40 + 12]: clean });
+await page.keyboard.press("0");
+await page.keyboard.press(" ");
+await page.getByText("Built a Compost Bin!").waitFor();
+await page.waitForTimeout(800);
+await shot("07d-built");
 
 await page.goto(`${BASE}/soil/globe`);
 await page.waitForTimeout(2000);
@@ -146,7 +193,7 @@ await page.waitForTimeout(1500);
 await shot("15-mass-bars");
 await page.keyboard.press("Escape");
 await page.getByRole("dialog").waitFor({ state: "detached" });
-await page.getByText("Soil Health Index").waitFor();
+await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
 
 // Keyboard shortcut and lesson links.
 await page.goto(`${BASE}/soil/learn/healthy-soil`);

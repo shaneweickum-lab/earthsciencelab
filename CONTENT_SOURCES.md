@@ -23,9 +23,13 @@ These are widely cited but rounded or popularized. Verify them before using them
 - "Raindrop splash can travel up to 2 feet." Distances vary with drop size and slope.
 - "Central Valley grows about a quarter of U.S. food." This is a commonly cited USGS figure.
 
-## Game model
+## Game model (Soil & Sprout)
 
-*Regenerate the Field* is a teaching model, not an agronomic simulator. Its directions of effect are realistic: tillage reduces structure and organic matter, cover keeps soil from eroding, and synthetic nitrogen leaches and acidifies soil. Its magnitudes and timescales are compressed so that change shows up within 12 seasons. In reality, building organic matter by a full percentage point often takes many years.
+*Soil & Sprout* is a teaching model, not an agronomic simulator. Its directions of effect are realistic: tillage breaks soil structure, mulch and plant cover keep soil moist and stop erosion and weeds, legumes add nitrogen, compost feeds soil life, frost kills tender crops, and synthetic fertilizer gives quick nutrients while harming soil life. Its timescales are compressed: a season is 7 days and crops ripen in 3–7 days, so changes show up within one play session. In reality, raising organic matter by a full percentage point often takes many years.
+
+- **Greenhouse:** in the game it ignores seasons and frost. Real unheated greenhouses extend the season but can still freeze in hard winters.
+- **Nature Journal** (`src/world/journal.ts`): each page cites its source (UC Statewide IPM, Xerces Society, Cornell Lab of Ornithology, NOAA National Weather Service, USGS, EPA, USDA, the Soil Biology Primer, and the North American Mycological Association). Numbers to double-check: lightning heating air to about 50,000°F (NWS), monarch migration of up to about 3,000 miles, dragonfly catch rates above 90% in lab studies, and "about 10 earthworms per shovelful (one cubic foot)" as a healthy-soil sign (NRCS soil quality guidance).
+- **Mushrooms:** the game never suggests eating a wild mushroom, and every mushroom page says to never eat one unless an expert identifies it.
 
 ## Periodic table
 

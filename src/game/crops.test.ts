@@ -14,7 +14,7 @@ describe("crops", () => {
 
   it("only legumes and buckwheat give nutrients back", () => {
     const givers = Object.values(CROPS).filter((c) => (c.gives.nutrients ?? 0) > 0).map((c) => c.id);
-    expect(givers.sort()).toEqual(["beans", "buckwheat"]);
+    expect(givers.sort()).toEqual(["beans", "buckwheat", "clover"]);
     expect(CROPS.beans.family).toBe("legume");
   });
 

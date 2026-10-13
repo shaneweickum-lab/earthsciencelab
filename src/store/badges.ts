@@ -1,6 +1,6 @@
 export type BadgeId =
   | "dirt-detective" | "texture-master" | "layer-explorer" | "health-inspector" | "erosion-fighter"
-  | "regen-rookie" | "soil-scholar" | "first-harvest" | "field-restorer" | "soil-legend"
+  | "regen-rookie" | "soil-scholar" | "first-harvest" | "field-restorer" | "naturalist" | "master-naturalist"
   | "globe-trotter" | "soil-explorer" | "world-soil-expert"
   | "element-spotter" | "lab-regular" | "table-master" | "soil-chemist"
   | "unit-1" | "unit-2" | "unit-3" | "unit-4" | "unit-5";
@@ -25,9 +25,10 @@ export const BADGES: Record<BadgeId, Badge> = {
   "unit-3": { id: "unit-3", name: "Food Web Friend", icon: "🍄", description: "Finish Unit 3: Life in the Soil." },
   "unit-4": { id: "unit-4", name: "Soil Mapper", icon: "🗺️", description: "Finish Unit 4: Soils of the World." },
   "unit-5": { id: "unit-5", name: "Soil Steward", icon: "🌿", description: "Finish Unit 5: Soil Health & Stewardship." },
-  "first-harvest": { id: "first-harvest", name: "First Harvest", icon: "🧺", description: "Finish a full game of Regenerate the Field." },
-  "field-restorer": { id: "field-restorer", name: "Field Restorer", icon: "🏆", description: "Bring a field to a Soil Health Index of 70 or more." },
-  "soil-legend": { id: "soil-legend", name: "Soil Legend", icon: "⭐", description: "Earn 3 stars in Regenerate the Field." },
+  "first-harvest": { id: "first-harvest", name: "First Harvest", icon: "🧺", description: "Harvest your first crop in Soil & Sprout." },
+  "field-restorer": { id: "field-restorer", name: "Field Restorer", icon: "🏆", description: "Raise a garden spot's soil health to 70 or more in Soil & Sprout." },
+  naturalist: { id: "naturalist", name: "Naturalist", icon: "🔎", description: "Add your first page to the Nature Journal." },
+  "master-naturalist": { id: "master-naturalist", name: "Master Naturalist", icon: "📓", description: "Fill 15 pages of the Nature Journal." },
   "globe-trotter": { id: "globe-trotter", name: "Globe Trotter", icon: "🧭", description: "Visit your first soil region on the globe." },
   "soil-explorer": { id: "soil-explorer", name: "Soil Explorer", icon: "🌍", description: "Visit 10 soil regions on the globe." },
   "world-soil-expert": { id: "world-soil-expert", name: "World Soil Expert", icon: "🗺️", description: "Answer 10 globe quiz questions correctly." },

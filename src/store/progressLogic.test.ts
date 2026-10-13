@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SOIL_BUILDER_ZS } from "@/data/soilElements";
 import {
-  answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, finishGame, levelFor, setGradeLevel, viewElement, visitRegion,
+  answerGlobeQuiz, completeLesson, EMPTY_PROGRESS, recordFarm, levelFor, setGradeLevel, viewElement, visitRegion,
 } from "./progressLogic";
 
 const ALL = [{ slug: "what-is-soil", unit: 1 }, { slug: "soil-texture", unit: 2 }];
@@ -65,12 +65,15 @@ describe("progress logic", () => {
     expect(d.badges).toContain("world-soil-expert");
   });
 
-  it("records the best game", () => {
-    const a = finishGame(EMPTY_PROGRESS, 2, 74);
-    expect(a.newBadges).toEqual(["first-harvest", "field-restorer"]);
-    const b = finishGame(a.data, 1, 55);
-    expect(b.data.bestGameStars).toBe(2);
-    expect(b.data.bestGameHealth).toBe(74);
+  it("pays XP once per journal page and for the first harvest", () => {
+    const a = recordFarm(EMPTY_PROGRESS, { journal: ["ladybug"], harvests: 1, bestSoilHealth: 74 });
+    expect(a.newBadges).toEqual(["first-harvest", "field-restorer", "naturalist"]);
+    expect(a.data.xp).toBe(15 + 40);
+    const b = recordFarm(a.data, { journal: ["ladybug", "earthworm"], harvests: 3, bestSoilHealth: 55 });
+    expect(b.data.xp).toBe(15 + 40 + 15);
+    expect(b.data.bestSoilHealth).toBe(74);
+    expect(b.newBadges).toEqual([]);
+    expect(recordFarm(b.data, { journal: ["earthworm"], harvests: 3, bestSoilHealth: 10 }).data).toBe(b.data);
   });
 
   it("counts element views once and awards element badges", () => {

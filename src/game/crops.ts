@@ -1,6 +1,6 @@
 /** The seed bag: crops you can plant, what each takes from the soil, and what it gives back. */
 
-export type CropId = "corn" | "tomato" | "potato" | "beans" | "carrot" | "wheat" | "squash" | "sunflower" | "buckwheat";
+export type CropId = "corn" | "tomato" | "potato" | "beans" | "carrot" | "wheat" | "squash" | "sunflower" | "buckwheat" | "clover";
 
 export type CropFamily = "grass" | "nightshade" | "legume" | "root" | "squash" | "aster" | "knotweed";
 
@@ -88,6 +88,12 @@ export const CROPS: Record<CropId, Crop> = {
     takes: "Very little. Grows well in poor soil.",
     givesText: "Grows so fast it smothers weeds, unlocks phosphorus for the next crop, and adds organic matter.",
   },
+  clover: {
+    id: "clover", name: "Clover (cover crop)", icon: "🍀", family: "legume", seedCost: 1, value: 0, nutrientUse: 1,
+    gives: { nutrients: 7, om: 3, life: 3, structure: 2 }, coversSoil: true,
+    takes: "Almost nothing. It's grown to feed the soil, not to sell.",
+    givesText: "A cover crop: roots hold the soil, root nodules add nitrogen, and digging it in (green manure) adds organic matter.",
+  },
 };
 
-export const CROP_ORDER: CropId[] = ["beans", "buckwheat", "carrot", "wheat", "sunflower", "squash", "corn", "potato", "tomato"];
+export const CROP_ORDER: CropId[] = ["clover", "beans", "buckwheat", "carrot", "wheat", "sunflower", "squash", "corn", "potato", "tomato"];

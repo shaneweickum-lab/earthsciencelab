@@ -7,10 +7,10 @@ import { useProgress } from "@/store/progress";
 export function SoilStats() {
   const lessons = useProgress((s) => s.completedLessons.length);
   const regions = useProgress((s) => s.visitedRegions.length);
-  const stars = useProgress((s) => s.bestGameStars);
+  const pages = useProgress((s) => s.natureFound.length);
   const stats = [
     { label: "Lessons", value: `${lessons}/${LESSONS.length}` },
-    { label: "Best game", value: stars ? "⭐".repeat(stars) : "–" },
+    { label: "Journal", value: pages ? `📓 ${pages}` : "–" },
     { label: "Regions", value: `${regions}/${SOIL_REGIONS.length}` },
   ];
   return (

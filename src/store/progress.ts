@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { CURRICULUM, type Level } from "@/content/soil/curriculum";
-import type { BadgeId } from "./badges";
+import { BADGES, type BadgeId } from "./badges";
 import * as logic from "./progressLogic";
 
 interface ProgressStore extends logic.ProgressData {
@@ -13,7 +13,7 @@ interface ProgressStore extends logic.ProgressData {
   setGradeLevel: (level: Level) => void;
   visitRegion: (id: string) => void;
   answerGlobeQuiz: (correct: boolean) => void;
-  finishGame: (stars: number, health: number) => void;
+  recordFarm: (farm: { journal: string[]; harvests: number; bestSoilHealth: number }) => void;
   viewElement: (z: number) => void;
   dismissToast: () => void;
   reset: () => void;
@@ -37,7 +37,7 @@ export const useProgress = create<ProgressStore>()(
         setGradeLevel: (level) => run((d) => logic.setGradeLevel(d, level)),
         visitRegion: (id) => run((d) => logic.visitRegion(d, id)),
         answerGlobeQuiz: (correct) => run((d) => logic.answerGlobeQuiz(d, correct)),
-        finishGame: (stars, health) => run((d) => logic.finishGame(d, stars, health)),
+        recordFarm: (farm) => run((d) => logic.recordFarm(d, farm)),
         viewElement: (z) => run((d) => logic.viewElement(d, z)),
         dismissToast: () => set((s) => ({ toasts: s.toasts.slice(1) })),
         reset: () => set({ ...logic.EMPTY_PROGRESS, toasts: [] }),
@@ -45,9 +45,13 @@ export const useProgress = create<ProgressStore>()(
     },
     {
       name: "earthsciencelab-progress",
-      version: 3,
-      // v2 added viewedElements. Fill in any new fields with defaults.
-      migrate: (saved) => ({ ...logic.EMPTY_PROGRESS, ...(saved as Partial<logic.ProgressData>) }),
+      version: 4,
+      // v2 added viewedElements; v4 replaced the old turn-based game's stats with Soil & Sprout's.
+      // Fill in any new fields with defaults and drop badges that no longer exist.
+      migrate: (saved) => {
+        const data = { ...logic.EMPTY_PROGRESS, ...(saved as Partial<logic.ProgressData>) };
+        return { ...data, badges: data.badges.filter((b) => b in BADGES) };
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => pickData(s),
       // Rehydrated manually after mount so the server and first client render match.
@@ -64,9 +68,9 @@ function pickData(s: logic.ProgressData): logic.ProgressData {
     badges: s.badges,
     visitedRegions: s.visitedRegions,
     globeQuizCorrect: s.globeQuizCorrect,
-    bestGameStars: s.bestGameStars,
-    bestGameHealth: s.bestGameHealth,
-    gamesPlayed: s.gamesPlayed,
+    natureFound: s.natureFound,
+    farmHarvests: s.farmHarvests,
+    bestSoilHealth: s.bestSoilHealth,
     viewedElements: s.viewedElements,
     gradeLevel: s.gradeLevel,
   };
