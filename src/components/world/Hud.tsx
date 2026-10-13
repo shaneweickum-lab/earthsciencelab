@@ -58,7 +58,7 @@ export function Hotbar() {
       <div className="rounded-full bg-soil-dark/80 px-3 py-0.5 text-xs font-bold text-white">
         {sel ? ITEMS[sel.item].name : "Empty hands"}
       </div>
-      <div className="flex gap-1 rounded-2xl bg-soil-dark/70 p-1.5 shadow-xl" role="toolbar" aria-label="Hotbar">
+      <div className="flex gap-0.5 rounded-2xl bg-soil-dark/70 p-1 shadow-xl sm:gap-1 sm:p-1.5" role="toolbar" aria-label="Hotbar">
         {inv.slice(0, HOTBAR_SIZE).map((s, i) => (
           <button
             key={i}
@@ -68,7 +68,7 @@ export function Hotbar() {
             aria-label={`Slot ${(i + 1) % 10}: ${s ? ITEMS[s.item].name : "empty"}`}
             aria-pressed={i === selected}
             title={s ? `${ITEMS[s.item].name}: ${ITEMS[s.item].desc}` : "Empty"}
-            className={`relative grid h-11 w-11 place-items-center rounded-xl text-2xl transition sm:h-12 sm:w-12 ${
+            className={`relative grid h-[30px] w-[30px] place-items-center rounded-lg text-lg transition sm:h-12 sm:w-12 sm:rounded-xl sm:text-2xl ${
               i === selected ? "bg-sun ring-2 ring-white" : "bg-card/90 hover:bg-white"
             }`}
           >
@@ -87,9 +87,9 @@ export function Messages() {
   const minute = useWorld((s) => s.world!.minute);
   const recent = messages.filter((m) => m.at >= minute - 45).slice(-4);
   return (
-    <div className="flex max-w-xs flex-col gap-1" aria-live="polite">
+    <div className="flex max-w-[45vw] flex-col gap-1 sm:max-w-xs" aria-live="polite">
       {recent.map((m, i) => (
-        <div key={`${m.at}-${i}-${m.text}`} className="rounded-xl bg-soil-dark/80 px-3 py-1.5 text-sm font-semibold text-white shadow">
+        <div key={`${m.at}-${i}-${m.text}`} className="rounded-xl bg-soil-dark/80 px-2 py-1 text-xs font-semibold text-white shadow sm:px-3 sm:py-1.5 sm:text-sm">
           {m.text}
         </div>
       ))}
