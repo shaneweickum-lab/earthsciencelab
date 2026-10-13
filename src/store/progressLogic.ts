@@ -19,9 +19,10 @@ export interface ProgressData {
   badges: BadgeId[];
   visitedRegions: string[];
   globeQuizCorrect: number;
-  bestGameStars: number;
-  bestGameHealth: number;
-  gamesPlayed: number;
+  /** Nature Journal pages found in Soil & Sprout. */
+  natureFound: string[];
+  farmHarvests: number;
+  bestSoilHealth: number;
   viewedElements: number[];
 }
 
@@ -33,9 +34,9 @@ export const EMPTY_PROGRESS: ProgressData = {
   badges: [],
   visitedRegions: [],
   globeQuizCorrect: 0,
-  bestGameStars: 0,
-  bestGameHealth: 0,
-  gamesPlayed: 0,
+  natureFound: [],
+  farmHarvests: 0,
+  bestSoilHealth: 0,
   viewedElements: [],
 };
 
@@ -115,18 +116,31 @@ export function answerGlobeQuiz(data: ProgressData, correct: boolean): Update {
   return award(next, globeQuizCorrect >= 10 ? ["world-soil-expert"] : []);
 }
 
-export function finishGame(data: ProgressData, stars: number, health: number): Update {
-  const starGain = Math.max(0, stars - data.bestGameStars);
+export const JOURNAL_XP = 15;
+export const FIRST_HARVEST_XP = 40;
+export const RESTORER_HEALTH = 70;
+
+/** Sync what happened on the farm. XP is paid once per new journal page and for the first harvest. */
+export function recordFarm(data: ProgressData, farm: { journal: string[]; harvests: number; bestSoilHealth: number }): Update {
+  const fresh = farm.journal.filter((id) => !data.natureFound.includes(id));
+  const firstHarvest = data.farmHarvests === 0 && farm.harvests > 0;
+  const bestSoilHealth = Math.max(data.bestSoilHealth, farm.bestSoilHealth);
+  if (!fresh.length && !firstHarvest && bestSoilHealth === data.bestSoilHealth && farm.harvests <= data.farmHarvests) {
+    return { data, newBadges: [] };
+  }
+  const natureFound = [...data.natureFound, ...fresh];
   const next: ProgressData = {
     ...data,
-    xp: data.xp + 40 + starGain * 50,
-    gamesPlayed: data.gamesPlayed + 1,
-    bestGameStars: Math.max(stars, data.bestGameStars),
-    bestGameHealth: Math.max(health, data.bestGameHealth),
+    natureFound,
+    farmHarvests: Math.max(data.farmHarvests, farm.harvests),
+    bestSoilHealth,
+    xp: data.xp + fresh.length * JOURNAL_XP + (firstHarvest ? FIRST_HARVEST_XP : 0),
   };
-  const badges: BadgeId[] = ["first-harvest"];
-  if (health >= 70) badges.push("field-restorer");
-  if (stars >= 3) badges.push("soil-legend");
+  const badges: BadgeId[] = [];
+  if (next.farmHarvests > 0) badges.push("first-harvest");
+  if (bestSoilHealth >= RESTORER_HEALTH) badges.push("field-restorer");
+  if (natureFound.length >= 1) badges.push("naturalist");
+  if (natureFound.length >= 15) badges.push("master-naturalist");
   return award(next, badges);
 }
 
