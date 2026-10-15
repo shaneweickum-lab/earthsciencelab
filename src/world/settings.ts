@@ -55,6 +55,11 @@ export const SCIENCE_FEATURES = [
     on: "Storms wash away bare, tilled soil. Mulch and plant cover protect it.", off: "Storms never wash soil away.",
   },
   {
+    id: "cropGrades", category: "Soil", icon: "🏅", label: "Crop grades from soil",
+    science: "Healthy, living soil grows bigger, better-tasting, more nutritious crops.",
+    on: "Soil health and how well you care for a crop set its grade (E to S), plus amendment bonuses.", off: "Only compost and other amendments raise crop grades.",
+  },
+  {
     id: "watering", category: "Water", icon: "💧", label: "Thirsty plants",
     science: "Sun and wind dry the soil, and roots need water to carry nutrients up into the plant.",
     on: "Soil dries out and dry crops nearly stop growing. Water them or wait for rain.", off: "Crops never get thirsty.",

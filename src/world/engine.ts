@@ -1,15 +1,16 @@
 import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
-import { cropDays, ITEMS, item, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, item, sellPrice, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
 import { BUILDING_SIZE, createMap, doorOf, FARM, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
-import type { Building, BuildingKind, Dir, Slot, Tile, WorldState } from "./types";
+import type { Building, BuildingKind, Dir, Grade, Slot, Tile, WorldState } from "./types";
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 2;
+export const WORLD_VERSION = 3;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -138,18 +139,22 @@ function say(state: WorldState, text: string): WorldState {
   return { ...state, messages: [...state.messages, { text, at: state.minute }].slice(-6) };
 }
 
-export function countItem(state: WorldState, id: string) {
-  return state.inventory.reduce((n, s) => n + (s?.item === id ? s.qty : 0), 0);
+const matches = (s: Slot | null, id: string, grade?: Grade) => !!s && s.item === id && (grade === undefined || s.grade === grade);
+
+/** How many of an item you have (all grades, unless a grade is given). */
+export function countItem(state: WorldState, id: string, grade?: Grade) {
+  return state.inventory.reduce((n, s) => n + (matches(s, id, grade) ? s!.qty : 0), 0);
 }
 
-export function addItem(state: WorldState, id: string, qty: number): WorldState | null {
+/** Add items to the bag. Produce of different grades goes in separate stacks. */
+export function addItem(state: WorldState, id: string, qty: number, grade?: Grade): WorldState | null {
   const inv = [...state.inventory];
   const stackable = ITEMS[id]?.kind !== "tool";
   let left = qty;
   if (stackable) {
     for (let i = 0; i < inv.length && left > 0; i++) {
       const s = inv[i];
-      if (s && s.item === id) {
+      if (s && s.item === id && s.grade === grade) {
         inv[i] = { ...s, qty: s.qty + left };
         left = 0;
       }
@@ -157,7 +162,7 @@ export function addItem(state: WorldState, id: string, qty: number): WorldState 
   }
   for (let i = 0; i < inv.length && left > 0; i++) {
     if (!inv[i]) {
-      inv[i] = { item: id, qty: stackable ? left : 1 };
+      inv[i] = grade ? { item: id, qty: stackable ? left : 1, grade } : { item: id, qty: stackable ? left : 1 };
       left -= stackable ? left : 1;
     }
   }
@@ -165,13 +170,13 @@ export function addItem(state: WorldState, id: string, qty: number): WorldState 
   return { ...state, inventory: inv };
 }
 
-export function removeItem(state: WorldState, id: string, qty: number): WorldState | null {
-  if (countItem(state, id) < qty) return null;
+export function removeItem(state: WorldState, id: string, qty: number, grade?: Grade): WorldState | null {
+  if (countItem(state, id, grade) < qty) return null;
   const inv = [...state.inventory];
   let left = qty;
   for (let i = 0; i < inv.length && left > 0; i++) {
     const s = inv[i];
-    if (s && s.item === id) {
+    if (s && matches(s, id, grade)) {
       const take = Math.min(s.qty, left);
       inv[i] = s.qty - take > 0 ? { ...s, qty: s.qty - take } : null;
       left -= take;
@@ -202,11 +207,7 @@ export function soilQuality(t: Tile): number {
   return 0.35 * s.nutrients + 0.25 * s.water + 0.2 * s.structure + 0.2 * s.life;
 }
 
-export function soilHealth(t: Tile): number {
-  const s = t.soil;
-  const ph = clamp(100 - 30 * Math.abs(s.ph - 6.5));
-  return r1(0.25 * s.om + 0.2 * s.life + 0.2 * s.structure + 0.15 * s.water + 0.1 * s.nutrients + 0.1 * ph);
-}
+export { soilHealth } from "./grades";
 
 function near(state: WorldState, x: number, y: number, kinds: BuildingKind[], r: number) {
   return state.buildings.some((b) => kinds.includes(b.kind) && Math.abs(b.x - x) <= r && Math.abs(b.y - y) <= r);
@@ -295,7 +296,12 @@ function hourly(state: WorldState): WorldState {
       const x = i % W, y = Math.floor(i / W);
       const { factor } = growthFactor({ ...state }, x, y);
       const days = cropDays(crop.id, state.settings.daysPerMonth, crop.harvests > 0);
-      crop = { ...crop, growth: Math.min(1, crop.growth + factor / (days * 24)) };
+      // Hard times while growing lower the crop's grade.
+      const stressed = (on(state, "watering") && moisture < 15)
+        || (on(state, "waterlogging") && moisture >= 90 && t.soil.structure < 40)
+        || (on(state, "weeds") && t.weeds)
+        || (on(state, "pests") && crop.pests);
+      crop = { ...crop, growth: Math.min(1, crop.growth + factor / (days * 24)), stress: (crop.stress ?? 0) + (stressed ? 1 : 0) };
     }
     if (moisture === t.moisture && soil === t.soil && crop === t.crop) return t;
     return { ...t, moisture: r1(moisture), soil, crop };
@@ -334,8 +340,7 @@ function startDay(prev: WorldState, newDay: number): WorldState {
   let earned = 0;
   for (const s of state.shipping) {
     const def = item(s.item);
-    const bonus = state.organic && def.kind === "produce" ? ORGANIC_BONUS : 1;
-    earned += Math.round((def.sell ?? 0) * s.qty * bonus);
+    earned += sellPrice(def, s.grade, state.organic) * s.qty;
   }
   if (earned > 0) notes.push(`The shipping bin paid ${earned} coins${state.organic ? " (organic bonus included)" : ""}.`);
 
@@ -676,6 +681,14 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
     return tt;
   });
   if (item(id).notOrganic) s = { ...s, organic: false };
+  // Amendments also raise the grade of the next harvest from this spot.
+  const points = amendmentPoints(id, t);
+  const before = t.boost ?? 0;
+  const after = Math.min(MAX_BOOST, before + points);
+  if (after > before) {
+    s = setTile(s, x, y, (tt) => ({ ...tt, boost: after }));
+    msg += ` Crop grade bonus +${after - before}.`;
+  }
   return say(s, msg);
 }
 
@@ -733,18 +746,20 @@ export function harvest(state: WorldState, x: number, y: number): WorldState {
     const s = setTile(state, x, y, (tt) => ({ ...tt, crop: null, lastFamily: crop.family, soil: applyGives(tt.soil) }));
     return discover(say(s, "Dug the clover into the soil as green manure: more nitrogen and organic matter!"), "nitrogen-fixation");
   }
-  const q = soilQuality(t);
-  const qty = 1 + (q > 50 ? 1 : 0) + (q > 70 ? 1 : 0) - (c.pests ? 1 : 0);
-  const got = addItem(state, `crop_${c.id}`, Math.max(1, qty));
+  const { grade } = expectedGrade(state, t);
+  const qty = harvestAmount(state, idx(x, y), c.id, grade);
+  const got = addItem(state, `crop_${c.id}`, qty, grade);
   if (!got) return say(state, "Your bag is full.");
   const regrows = !!wc.regrowDays && c.harvests < 3;
   const s = setTile(got, x, y, (tt) => ({
     ...tt,
-    crop: regrows ? { ...c, growth: 0, harvests: c.harvests + 1 } : null,
+    crop: regrows ? { ...c, growth: 0, harvests: c.harvests + 1, stress: 0 } : null,
     lastFamily: crop.family,
     soil: applyGives(tt.soil),
+    // Amendments are used up by the harvest; a crop that keeps producing keeps half.
+    boost: regrows ? Math.floor((tt.boost ?? 0) / 2) : 0,
   }));
-  const done = say({ ...s, harvests: s.harvests + 1 }, `Harvested ${Math.max(1, qty)} ${crop.name}!${regrows ? " It will grow more." : ""}`);
+  const done = say({ ...s, harvests: s.harvests + 1 }, `Harvested ${qty} ${crop.name} · Grade ${grade}!${regrows ? " It will grow more." : ""}`);
   return crop.family === "legume" ? discover(done, "nitrogen-fixation") : done;
 }
 
@@ -799,10 +814,10 @@ export function sellNow(state: WorldState, slotIndex: number, qty: number): Worl
   const def = item(s.item);
   if (!def.sell) return say(state, "The store won't buy that.");
   const n = Math.min(qty, s.qty);
-  const removed = removeItem(state, s.item, n)!;
-  const bonus = state.organic && def.kind === "produce" ? ORGANIC_BONUS : 1;
-  const coins = Math.round(def.sell * n * bonus);
-  return say({ ...removed, coins: state.coins + coins }, `Sold ${n} ${def.name} for ${coins} coins.`);
+  const inv = [...state.inventory];
+  inv[slotIndex] = s.qty - n > 0 ? { ...s, qty: s.qty - n } : null;
+  const coins = sellPrice(def, s.grade, state.organic) * n;
+  return say({ ...state, inventory: inv, coins: state.coins + coins }, `Sold ${n} ${def.name}${s.grade ? ` (grade ${s.grade})` : ""} for ${coins} coins.`);
 }
 
 export function ship(state: WorldState, slotIndex: number): WorldState {
@@ -810,11 +825,13 @@ export function ship(state: WorldState, slotIndex: number): WorldState {
   if (!s) return state;
   const def = item(s.item);
   if (!def.sell) return say(state, "That can't be shipped.");
-  const removed = removeItem(state, s.item, s.qty)!;
-  const existing = removed.shipping.find((x) => x.item === s.item);
-  const shipping = existing
-    ? removed.shipping.map((x) => (x.item === s.item ? { ...x, qty: x.qty + s.qty } : x))
-    : [...removed.shipping, { item: s.item, qty: s.qty }];
+  const inv = [...state.inventory];
+  inv[slotIndex] = null;
+  const removed = { ...state, inventory: inv };
+  const same = (x: Slot) => x.item === s.item && x.grade === s.grade;
+  const shipping = removed.shipping.some(same)
+    ? removed.shipping.map((x) => (same(x) ? { ...x, qty: x.qty + s.qty } : x))
+    : [...removed.shipping, { ...s }];
   return say({ ...removed, shipping }, `Put ${s.qty} ${def.name} in the shipping bin. You'll be paid overnight.`);
 }
 
@@ -930,8 +947,9 @@ export function loadWorld(raw: string | null): WorldState | null {
   try {
     const s = JSON.parse(raw) as WorldState;
     if (!Array.isArray(s.tiles) || s.tiles.length !== W * H) return null;
-    if (s.version === 1) return migrateV1(s);
-    return s.version === WORLD_VERSION ? { ...s, settings: normalizeSettings(s.settings) } : null;
+    const up = s.version === 1 ? migrateV1(s) : s.version === 2 ? { ...s, version: WORLD_VERSION } : s;
+    // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
+    return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {
     return null;
   }

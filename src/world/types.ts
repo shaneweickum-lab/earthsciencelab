@@ -28,6 +28,8 @@ export interface CropInstance {
   /** True once a crop has died (frost, drought, out of season). */
   dead: boolean;
   pests: boolean;
+  /** Hours spent stressed (thirsty, waterlogged, weedy, or with pests), which lowers its grade. */
+  stress?: number;
 }
 
 export interface Tile {
@@ -45,6 +47,8 @@ export interface Tile {
   familyStreak: number;
   /** Inside a greenhouse: no season limits, no frost, no rain. */
   greenhouse: boolean;
+  /** Amendment points (compost, mulch, lime…) that raise the next harvest's grade. Used up at harvest. */
+  boost?: number;
 }
 
 export type BuildingKind =
@@ -61,9 +65,13 @@ export interface Building {
   data: { fiber?: number; startedDay?: number; ready?: number; water?: number; honeyDay?: number };
 }
 
+export type Grade = "E" | "D" | "C" | "B" | "A" | "S";
+
 export interface Slot {
   item: string;
   qty: number;
+  /** Quality grade of harvested produce. */
+  grade?: Grade;
 }
 
 export interface Critter {

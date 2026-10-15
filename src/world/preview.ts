@@ -1,6 +1,7 @@
 import { CROPS } from "@/game/crops";
 import { buildingAt, canPlantHere, facingTile, selectedItem, tileAt } from "./engine";
 import { ITEMS, WORLD_CROPS } from "./items";
+import { amendmentPoints, MAX_BOOST } from "./grades";
 import { on } from "./settings";
 import type { WorldState } from "./types";
 
@@ -43,7 +44,12 @@ export function previewAction(state: WorldState): ActionPreview {
       if (slot.item === "labKit") return t.known.lab
         ? { label: "Test", text: "You already have lab results here.", ok: false }
         : { label: "Test", text: "Reveals organic matter, nutrients, and pH for this spot.", ok: true };
-      return { label: "Apply", text: def.desc, ok: !t.obstacle };
+      {
+        const pts = amendmentPoints(slot.item, t);
+        const room = Math.max(0, MAX_BOOST - (t.boost ?? 0));
+        const bonus = pts && room ? ` Raises the next crop's grade (+${Math.min(pts, room)}).` : "";
+        return { label: "Apply", text: def.desc + bonus, ok: !t.obstacle };
+      }
     case "kit":
       return { label: "Build", text: `Place a ${def.name}. ${def.desc}`, ok: true };
     case "tool":
