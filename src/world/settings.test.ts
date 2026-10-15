@@ -3,6 +3,7 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import { dateOf, daysPerYear, formatDate, msPerGameMinute, seasonLabel, seasonOf, seasonStartDay, startOfDay, yearFraction } from "./clock";
 import { addItem, applyTool, growthFactor, knownSoil, loadWorld, newWorld, saveWorld, sleep, tick, WORLD_VERSION } from "./engine";
+import { expectedGrade } from "./grades";
 import { cropDays, tempFactor } from "./items";
 import { idx } from "./map";
 import {
@@ -260,6 +261,14 @@ describe("each science feature can be switched off", () => {
     };
     expect(replant(true)).toMatch(/Same plant family/);
     expect(replant(false)).not.toMatch(/Same plant family/);
+  });
+});
+
+describe("crop grades feature", () => {
+  it("cropGrades: off means soil health no longer sets the grade", () => {
+    const rich = (v: boolean) => withTile(world({ cropGrades: v }), X, Y, { tilled: true, crop: crop("carrot", { growth: 1 }), soil: { om: 95, life: 95, structure: 95, water: 95, nutrients: 95, ph: 6.5 } });
+    expect(expectedGrade(rich(true), at(rich(true))).grade).toBe("S");
+    expect(expectedGrade(rich(false), at(rich(false))).grade).toBe("E");
   });
 });
 

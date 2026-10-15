@@ -5,10 +5,11 @@ import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf
 import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
 import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
+import { expectedGrade } from "@/world/grades";
 import { previewAction } from "@/world/preview";
 import type { Tile, WorldState } from "@/world/types";
 import { tempAt, WEATHER } from "@/world/weather";
-import { ItemIcon } from "./ItemIcon";
+import { GradeBadge, ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 const SEASON_ICON = { Spring: "🌸", Summer: "☀️", Fall: "🍂", Winter: "❄️" };
@@ -82,7 +83,7 @@ export function Hotbar() {
               i === selected ? "bg-sun ring-2 ring-white" : "bg-card/90 hover:bg-white"
             }`}
           >
-            {s && <ItemIcon id={s.item} />}
+            {s && <ItemIcon id={s.item} grade={s.grade} />}
             <span className="absolute left-1 top-0 text-[10px] font-black text-muted">{(i + 1) % 10}</span>
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black text-ink">{s.qty}</span>}
           </button>
@@ -194,6 +195,7 @@ function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y:
   if (t.obstacle) lines.push(`A ${t.obstacle} is in the way.`);
   if (t.weeds) lines.push("Weeds are growing here.");
   if (t.mulch) lines.push("Covered with straw mulch.");
+  if ((t.boost ?? 0) > 0 && !t.crop) lines.push(`🏅 Amendments: grade bonus +${t.boost} for the next crop here.`);
   const c = t.crop;
   if (c) {
     const crop = CROPS[c.id];
@@ -211,6 +213,7 @@ function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y:
         <p className="text-[11px] text-muted">
           {wc.type === "cool" ? "Cool" : "Warm"}-season · about {cropDays(c.id, w.settings.daysPerMonth, c.harvests > 0)} days to grow
         </p>
+        {!c.dead && wc.yield[1] > 0 && <GradeLine w={w} t={t} />}
         {c.growth < 1 && reasons.map((r) => <p key={r} className="text-xs">• {r}</p>)}
         {lines.map((l) => <p key={l} className="text-xs">{l}</p>)}
       </div>
@@ -218,4 +221,21 @@ function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y:
   }
   if (!lines.length) return null;
   return <div className="space-y-0.5">{lines.map((l) => <p key={l} className="text-xs">{l}</p>)}</div>;
+}
+
+/** The grade this crop would get if harvested now, and why. */
+function GradeLine({ w, t }: { w: WorldState; t: Tile }) {
+  const est = expectedGrade(w, t);
+  const known = knownSoil(w, t);
+  const tested = known.lab && known.shovel && known.water;
+  const parts = est.parts.map((p) => (p.startsWith("Soil health") && !tested ? "Soil health: run all three soil tests to see it" : p));
+  return (
+    <div className="flex items-start gap-2 rounded-lg bg-paper px-2 py-1 text-xs">
+      <GradeBadge grade={est.grade} className="mt-0.5 shrink-0" />
+      <span>
+        <b>Expected grade {est.grade}</b>
+        <span className="block text-[11px] text-muted">{parts.join(" · ")}</span>
+      </span>
+    </div>
+  );
 }

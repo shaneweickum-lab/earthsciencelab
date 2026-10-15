@@ -207,11 +207,11 @@ describe("money", () => {
     let s = addItem(newWorld(1), "crop_tomato", 4)!;
     const slot = s.inventory.findIndex((x) => x?.item === "crop_tomato");
     const sold = sellNow(s, slot, 2);
-    expect(sold.coins).toBe(300 + Math.round(38 * 2 * 1.25));
+    expect(sold.coins).toBe(300 + 2 * Math.round(38 * 1.25));
     s = ship(s, slot);
     expect(countItem(s, "crop_tomato")).toBe(0);
     s = sleep(s);
-    expect(s.coins).toBe(300 + Math.round(38 * 4 * 1.25));
+    expect(s.coins).toBe(300 + 4 * Math.round(38 * 1.25));
     expect(s.shipping).toEqual([]);
   });
 });

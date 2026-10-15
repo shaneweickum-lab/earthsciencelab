@@ -1,5 +1,5 @@
 import { CROPS, type CropId } from "@/game/crops";
-import type { BuildingKind, Season } from "./types";
+import type { BuildingKind, Grade, Season } from "./types";
 
 /** How each crop behaves in the world: seasons, days to grow, temperature needs, prices. */
 export interface WorldCrop {
@@ -16,21 +16,23 @@ export interface WorldCrop {
   killF: number;
   seedPrice: number;
   sellPrice: number;
+  /** How many you harvest from one tile at grade C (a seeded roll in this range). */
+  yield: [number, number];
   /** Cover crop: dug into the soil instead of sold. */
   cover?: boolean;
 }
 
 export const WORLD_CROPS: Record<CropId, WorldCrop> = {
-  clover: { id: "clover", seasons: ["Spring", "Summer", "Fall"], realDays: 60, type: "cool", killF: 20, seedPrice: 8, sellPrice: 0, cover: true },
-  beans: { id: "beans", seasons: ["Spring", "Summer", "Fall"], realDays: 55, regrowDays: 7, type: "warm", killF: 32, seedPrice: 25, sellPrice: 20 },
-  buckwheat: { id: "buckwheat", seasons: ["Spring", "Summer", "Fall"], realDays: 70, type: "warm", killF: 33, seedPrice: 10, sellPrice: 14 },
-  carrot: { id: "carrot", seasons: ["Spring", "Summer", "Fall"], realDays: 70, type: "cool", killF: 25, seedPrice: 15, sellPrice: 32 },
-  wheat: { id: "wheat", seasons: ["Spring", "Summer", "Fall"], realDays: 100, type: "cool", killF: 22, seedPrice: 10, sellPrice: 24 },
-  potato: { id: "potato", seasons: ["Spring", "Summer"], realDays: 90, type: "cool", killF: 30, seedPrice: 30, sellPrice: 62 },
-  sunflower: { id: "sunflower", seasons: ["Spring", "Summer", "Fall"], realDays: 80, type: "warm", killF: 32, seedPrice: 20, sellPrice: 48 },
-  squash: { id: "squash", seasons: ["Spring", "Summer", "Fall"], realDays: 100, type: "warm", killF: 32, seedPrice: 30, sellPrice: 72 },
-  corn: { id: "corn", seasons: ["Spring", "Summer"], realDays: 80, type: "warm", killF: 32, seedPrice: 35, sellPrice: 45 },
-  tomato: { id: "tomato", seasons: ["Spring", "Summer", "Fall"], realDays: 80, regrowDays: 7, type: "warm", killF: 32, seedPrice: 45, sellPrice: 38 },
+  clover: { id: "clover", seasons: ["Spring", "Summer", "Fall"], realDays: 60, type: "cool", killF: 20, seedPrice: 8, sellPrice: 0, yield: [0, 0], cover: true },
+  beans: { id: "beans", seasons: ["Spring", "Summer", "Fall"], realDays: 55, regrowDays: 7, type: "warm", killF: 32, seedPrice: 25, sellPrice: 20, yield: [2, 5] },
+  buckwheat: { id: "buckwheat", seasons: ["Spring", "Summer", "Fall"], realDays: 70, type: "warm", killF: 33, seedPrice: 10, sellPrice: 14, yield: [2, 4] },
+  carrot: { id: "carrot", seasons: ["Spring", "Summer", "Fall"], realDays: 70, type: "cool", killF: 25, seedPrice: 15, sellPrice: 32, yield: [3, 6] },
+  wheat: { id: "wheat", seasons: ["Spring", "Summer", "Fall"], realDays: 100, type: "cool", killF: 22, seedPrice: 10, sellPrice: 24, yield: [2, 4] },
+  potato: { id: "potato", seasons: ["Spring", "Summer"], realDays: 90, type: "cool", killF: 30, seedPrice: 30, sellPrice: 62, yield: [3, 8] },
+  sunflower: { id: "sunflower", seasons: ["Spring", "Summer", "Fall"], realDays: 80, type: "warm", killF: 32, seedPrice: 20, sellPrice: 48, yield: [1, 3] },
+  squash: { id: "squash", seasons: ["Spring", "Summer", "Fall"], realDays: 100, type: "warm", killF: 32, seedPrice: 30, sellPrice: 72, yield: [1, 3] },
+  corn: { id: "corn", seasons: ["Spring", "Summer"], realDays: 80, type: "warm", killF: 32, seedPrice: 35, sellPrice: 45, yield: [2, 4] },
+  tomato: { id: "tomato", seasons: ["Spring", "Summer", "Fall"], realDays: 80, regrowDays: 7, type: "warm", killF: 32, seedPrice: 45, sellPrice: 38, yield: [3, 8] },
 };
 
 /** Game days to grow, scaled so crops fit the calendar: real days at 30-day months, shorter for shorter months. */
@@ -147,6 +149,15 @@ const IMAGE_ICONS = new Set([
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
   [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, IMAGE_ICONS.has(i.id) ? { ...i, image: `/icons/${i.id}.png` } : i]),
 );
+
+/** What the store or shipping bin pays for one item of a given grade, with the organic bonus. */
+export function sellPrice(def: ItemDef, grade: Grade | undefined, organic: boolean): number {
+  const g = def.kind === "produce" && grade ? GRADE_PRICE[grade] : 1;
+  return Math.round((def.sell ?? 0) * g * (organic && def.kind === "produce" ? 1.25 : 1));
+}
+
+/** Price multipliers by grade (also in grades.ts, kept here to avoid an import cycle). */
+export const GRADE_PRICE: Record<Grade, number> = { E: 0.5, D: 0.75, C: 1, B: 1.25, A: 1.6, S: 2.2 };
 
 export function item(id: string): ItemDef {
   const i = ITEMS[id];

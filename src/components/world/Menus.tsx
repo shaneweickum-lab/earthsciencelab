@@ -6,6 +6,7 @@ import { HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/
 import { formatTemp } from "@/world/settings";
 import { ITEMS } from "@/world/items";
 import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
+import { GRADE_INFO } from "@/world/grades";
 import { WEATHER } from "@/world/weather";
 import { ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
@@ -226,12 +227,12 @@ export function Bag() {
           <button
             key={i}
             onClick={() => click(i)}
-            aria-label={s ? `${ITEMS[s.item].name} ×${s.qty}` : `Empty slot ${i + 1}`}
+            aria-label={s ? `${ITEMS[s.item].name}${s.grade ? ` grade ${s.grade}` : ""} ×${s.qty}` : `Empty slot ${i + 1}`}
             className={`relative grid aspect-square place-items-center rounded-xl text-2xl transition ${
               held === i ? "bg-sun ring-2 ring-soil" : i < HOTBAR_SIZE ? "bg-leaf-light hover:bg-white" : "bg-paper hover:bg-white"
             }`}
           >
-            {s && <ItemIcon id={s.item} />}
+            {s && <ItemIcon id={s.item} grade={s.grade} />}
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black">{s.qty}</span>}
           </button>
         ))}
@@ -239,7 +240,12 @@ export function Bag() {
       <div className="mt-3 min-h-16 rounded-xl bg-paper p-3 text-sm">
         {shown ? (
           <>
-            <p className="flex items-center gap-1 font-black"><ItemIcon id={shown.item} /> {ITEMS[shown.item].name} ×{shown.qty}</p>
+            <p className="flex items-center gap-2.5 font-black"><ItemIcon id={shown.item} grade={shown.grade} /> {ITEMS[shown.item].name} ×{shown.qty}</p>
+            {shown.grade && (
+              <p className="mt-1 text-xs font-bold">
+                Grade {shown.grade}: sells for ×{GRADE_INFO[shown.grade].price} the normal price. Healthier soil and good care grow higher grades.
+              </p>
+            )}
             <p className="mt-1 text-muted">{ITEMS[shown.item].desc}</p>
           </>
         ) : (

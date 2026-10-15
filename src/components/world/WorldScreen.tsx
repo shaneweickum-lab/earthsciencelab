@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
-import { act, buildingAt, facingTile, interactTarget, pickUpBuilding, soilHealth } from "@/world/engine";
+import { act, buildingAt, facingTile, interact, interactTarget, pickUpBuilding, soilHealth } from "@/world/engine";
 import { useElementsPanel } from "@/store/elementsPanel";
 import { useProgress } from "@/store/progress";
 import { Hotbar, Messages, StatusBar, TileInspector } from "./Hud";
@@ -26,8 +26,11 @@ function isTyping(target: EventTarget | null) {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-/** The main action: open a building's menu, or act on the tile in front of you. */
-export function doAction() {
+/**
+ * Space (or the A button) uses the item in your hand; E always interacts: harvest, observe a critter,
+ * or open a building, whatever you're holding.
+ */
+export function doAction(mode: "use" | "interact" = "use") {
   const st = useWorld.getState();
   const w = st.world;
   if (!w || st.menu) return;
@@ -37,7 +40,7 @@ export function doAction() {
   else if (target === "shipping") st.open("shipping");
   else {
     runtime.actionAt = performance.now();
-    st.update(act);
+    st.update(mode === "interact" ? interact : act);
   }
 }
 
@@ -76,7 +79,7 @@ function useGameKeys() {
       }
       if (k === " " || k === "e") {
         e.preventDefault();
-        if (!e.repeat) doAction();
+        if (!e.repeat) doAction(k === "e" ? "interact" : "use");
         return;
       }
       if (/^[0-9]$/.test(k)) {
@@ -159,8 +162,9 @@ function TouchControls() {
         <div className="flex gap-2">
           <button className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("bag")}>🎒</button>
           <button className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("journal")}>📓</button>
+          <button aria-label="Interact" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => doAction("interact")}>✋</button>
         </div>
-        <button aria-label="Action" className="grid h-16 w-16 place-items-center rounded-full bg-leaf text-lg font-black text-white shadow-xl active:scale-95" onClick={doAction}>
+        <button aria-label="Action" className="grid h-16 w-16 place-items-center rounded-full bg-leaf text-lg font-black text-white shadow-xl active:scale-95" onClick={() => doAction("use")}>
           A
         </button>
       </div>

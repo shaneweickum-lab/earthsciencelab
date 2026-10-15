@@ -80,7 +80,7 @@ await page.getByRole("button", { name: /New Game/ }).click();
 await page.getByRole("radio", { name: /Farmer male-c/ }).click();
 await page.getByRole("button", { name: /^Next/ }).click();
 await page.getByRole("radio", { name: /Real Science/ }).click();
-await page.getByText("17 of 17 science features on").waitFor();
+await page.getByText(/^Real Science · (\d+) of \1 science features on$/).waitFor();
 await shot("06-setup-science");
 await page.getByRole("button", { name: /^Next/ }).click();
 await page.getByRole("button", { name: "30×", exact: true }).click();
@@ -103,6 +103,7 @@ async function teleport(x, y, facing, tiles = {}) {
   await page.evaluate(({ SAVE, x, y, facing, tiles }) => {
     const w = JSON.parse(localStorage.getItem(SAVE));
     w.player = { x, y, facing };
+    w.critters = [];
     for (const [i, patch] of Object.entries(tiles)) Object.assign(w.tiles[Number(i)], patch);
     localStorage.setItem(SAVE, JSON.stringify(w));
   }, { SAVE, x, y, facing, tiles });
@@ -146,9 +147,17 @@ await shot("07-day-summary");
 await page.getByRole("button", { name: "Start the day" }).click();
 await teleport(10, 13, "down");
 await inspector.getByText(/\d+%/).waitFor();
+await inspector.getByText(/Expected grade [EDCBAS]/).waitFor();
 
+// Harvest a ripe crop: you get a random amount at a grade set by the soil.
+await teleport(10, 13, "down", { [14 * 40 + 10]: { crop: { id: "carrot", growth: 1, harvests: 0, dead: false, pests: false } } });
+await page.keyboard.press("e");
+await page.getByText(/^Harvested \d+ Carrots · Grade [EDCBAS]!/).waitFor();
 await page.keyboard.press("i");
 await page.getByRole("dialog", { name: "Your bag" }).waitFor();
+await page.getByRole("dialog", { name: "Your bag" }).getByRole("button", { name: /Carrots grade [EDCBAS]/ }).click();
+await page.getByText(/sells for ×/).waitFor();
+await shot("07a-graded-harvest");
 await page.keyboard.press("Escape");
 await page.keyboard.press("j");
 await page.getByRole("dialog", { name: /Nature Journal/ }).waitFor();

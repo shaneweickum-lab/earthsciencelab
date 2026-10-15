@@ -29,7 +29,7 @@ Progress (XP, levels, 18 badges, lesson scores, visited regions, journal pages) 
 | --- | --- |
 | W A S D or arrows | Walk |
 | Space | Use the item in your hand on the tile in front of you (harvests ripe crops, observes critters) |
-| E | Talk, open buildings, and harvest |
+| E | Interact whatever you're holding: harvest, observe critters, open buildings |
 | 1–0 | Pick a hotbar slot |
 | I | Bag (click two slots to swap) |
 | J | Nature Journal |
@@ -43,10 +43,12 @@ On touch screens, an on-screen D-pad and action button appear.
 
 The game opens on a main menu. **Start** begins a new farm with the recommended (Classic) settings, **Continue** loads your saved farm, and **New Game** opens a setup screen (farmer, science features, time speed, calendar). There's one save per browser, kept in localStorage.
 
-- **Science features** (`src/world/settings.ts`): 17 realism features that can each be switched on or off: hidden soil, pH, nutrients, tillage damage, living soil, erosion, thirsty plants, waterlogging, crop rotation, planting seasons, pollinators, weeds, pests, temperature, frost & snow, energy, and bedtime. Presets: Sandbox (all off), Classic (all but waterlogging and temperature), and Real Science (all on). They can be changed mid-game from the pause menu.
+- **Science features** (`src/world/settings.ts`): 18 realism features that can each be switched on or off: hidden soil, crop grades from soil, pH, nutrients, tillage damage, living soil, erosion, thirsty plants, waterlogging, crop rotation, planting seasons, pollinators, weeds, pests, temperature, frost & snow, energy, and bedtime. Presets: Sandbox (all off), Classic (all but waterlogging and temperature), and Real Science (all on). They can be changed mid-game from the pause menu.
 - **Time speed**: 1× (one game minute per real minute) up to 60× (one game hour per real minute).
 - **Calendar**: 12 months of 5–30 days. Seasons start on the 21st of March, June, September, and December, scaled for shorter months (the 3rd for 5-day months). Seasons can be turned off for an endless mild growing season. Crop growing times are real seed-packet days at 30-day months and scale down with shorter months.
 - **Temperature**: each day has a high and low from a temperate climate curve (cold Januaries, hot Julys). Rain near freezing falls as snow, and clear nights below freezing bring frost. Shown in °F or °C.
+
+**Crop grades** (`src/world/grades.ts`): every harvest gets a grade from E (lowest) through D, C, B, A, to S (highest). Higher grades sell for more (E ×0.5 up to S ×2.2) and yield more. With the "Crop grades from soil" feature on, the grade comes from soil health, minus a penalty for hours the crop spent thirsty, waterlogged, weedy, or with pests, plus a bonus from amendments. With it off, only amendments raise the grade: compost, biochar, and fertilizer +2, mulch +1, lime +1 (+2 on acidic soil), so one compost gives C and three give S. Amendment bonuses are used up at harvest. Harvest amounts are a seeded roll in each crop's per-tile range (beans 2–5, tomatoes and potatoes 3–8, carrots 3–6, corn, wheat, and buckwheat 2–4, squash and sunflowers 1–3), scaled by grade: about half at E, normal at C, and up to triple at S. Graded produce stacks by grade. **Space** uses the item in your hand; **E** always harvests, observes, or opens.
 
 **Adding a science feature:** add it to `SCIENCE_FEATURES`, wrap its code in `on(state, "yourId")`, and add a test in `src/world/settings.test.ts` showing it has no effect when off. A test fails if a feature is registered but never checked, or checked but not registered.
 

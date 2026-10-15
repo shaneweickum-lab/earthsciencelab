@@ -3,17 +3,14 @@
 import { useState } from "react";
 import { CROPS } from "@/game/crops";
 import { dayOf, seasonOf } from "@/world/clock";
-import { buy, ORGANIC_BONUS, sellNow, ship } from "@/world/engine";
-import { cropDays, ITEMS, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
+import { buy, sellNow, ship } from "@/world/engine";
+import { cropDays, ITEMS, sellPrice, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
 import { on } from "@/world/settings";
 import type { WorldState } from "@/world/types";
 import { Modal } from "./Menus";
 import { ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
-function sellPrice(w: WorldState, def: ItemDef) {
-  return Math.round((def.sell ?? 0) * (w.organic && def.kind === "produce" ? ORGANIC_BONUS : 1));
-}
 
 export function StoreMenu() {
   const w = useWorld((s) => s.world!);
@@ -97,11 +94,11 @@ export function StoreMenu() {
           <ul className="space-y-1.5">
             {sellable.map(({ s, i }) => {
               const def = ITEMS[s!.item];
-              const each = sellPrice(w, def);
+              const each = sellPrice(def, s!.grade, w.organic);
               return (
                 <li key={i} className="flex items-center gap-3 rounded-xl border border-line p-2">
-                  <ItemIcon id={s!.item} className="text-2xl" />
-                  <span className="flex-1 font-bold">{def.name} ×{s!.qty}</span>
+                  <ItemIcon id={s!.item} grade={s!.grade} className="text-2xl" />
+                  <span className="flex-1 font-bold">{def.name}{s!.grade ? ` (grade ${s!.grade})` : ""} ×{s!.qty}</span>
                   <span className="text-sm text-muted">🪙 {each} each</span>
                   <button className="btn btn-ghost py-1 text-sm" onClick={() => update((x) => sellNow(x, i, 1))}>Sell 1</button>
                   <button className="btn btn-primary py-1 text-sm" onClick={() => update((x) => sellNow(x, i, s!.qty))}>All · {each * s!.qty}</button>
@@ -151,14 +148,14 @@ export function ShippingMenu() {
   const update = useWorld((s) => s.update);
   const close = useWorld((s) => s.close);
   const sellable = w.inventory.map((s, i) => ({ s, i })).filter(({ s }) => s && ITEMS[s.item].sell);
-  const payout = w.shipping.reduce((n, s) => n + sellPrice(w, ITEMS[s.item]) * s.qty, 0);
+  const payout = w.shipping.reduce((n, s) => n + sellPrice(ITEMS[s.item], s.grade, w.organic) * s.qty, 0);
   return (
     <Modal title="Shipping bin" icon="📦" onClose={close}>
       <p className="mb-3 text-sm text-muted">Put things in the bin. The truck picks them up overnight and you&apos;re paid in the morning.</p>
       <div className="mb-3 rounded-xl bg-paper p-3">
         <p className="text-xs font-black uppercase tracking-wider text-muted">In the bin</p>
         {w.shipping.length === 0 ? <p className="text-sm text-muted">Empty</p> : (
-          <p className="text-sm">{w.shipping.map((s) => `${ITEMS[s.item].icon} ${ITEMS[s.item].name} ×${s.qty}`).join(" · ")}</p>
+          <p className="text-sm">{w.shipping.map((s) => `${ITEMS[s.item].icon} ${ITEMS[s.item].name}${s.grade ? ` (${s.grade})` : ""} ×${s.qty}`).join(" · ")}</p>
         )}
         <p className="mt-1 font-black">Tomorrow&apos;s payout: 🪙 {payout}</p>
       </div>
@@ -168,8 +165,8 @@ export function ShippingMenu() {
         <ul className="space-y-1.5">
           {sellable.map(({ s, i }) => (
             <li key={i} className="flex items-center gap-3 rounded-xl border border-line p-2">
-              <ItemIcon id={s!.item} className="text-2xl" />
-              <span className="flex-1 font-bold">{ITEMS[s!.item].name} ×{s!.qty}</span>
+              <ItemIcon id={s!.item} grade={s!.grade} className="text-2xl" />
+              <span className="flex-1 font-bold">{ITEMS[s!.item].name}{s!.grade ? ` (grade ${s!.grade})` : ""} ×{s!.qty}</span>
               <button className="btn btn-primary py-1 text-sm" onClick={() => update((x) => ship(x, i))}>Ship all</button>
             </li>
           ))}
