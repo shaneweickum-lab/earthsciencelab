@@ -1,11 +1,21 @@
 "use client";
 
+import { useGLTF } from "@react-three/drei";
 import { memo, Suspense, useMemo } from "react";
 import type { CropId } from "@/game/crops";
 import { W } from "@/world/map";
 import type { CropInstance, Tile } from "@/world/types";
-import { hash, type Inst } from "./Instanced";
-import { groupBy, model, ModelGroups } from "./models";
+import { CROP_LOOKS, CROP_MODELS, stageOf, type Shape } from "./cropLooks";
+import { hash, Instanced, type Inst } from "./Instanced";
+import { groupBy, model, ModelGroups, type Pack } from "./models";
+
+// Load every crop model up front so plants don't pop back to simple shapes as they grow.
+if (typeof window !== "undefined") {
+  for (const m of CROP_MODELS) {
+    const [pack, name] = m.split("/") as [Pack, string];
+    useGLTF.preload(model(pack, name));
+  }
+}
 
 const Mat = ({ color }: { color: string }) => <meshStandardMaterial color={color} flatShading />;
 
@@ -113,20 +123,6 @@ export function Plant({ crop, vigor, seed }: { crop: CropId; vigor: number; seed
 
 const SPOTS: [number, number][] = [[-0.22, -0.2], [0.22, -0.18], [-0.2, 0.22], [0.2, 0.2]];
 
-/** Kenney model for a crop at a growth stage, or null to draw it from simple shapes. */
-function stageModel(id: CropId, g: number): { name: string; s: number } | null {
-  if (g < 0.1) return null;
-  const sprout = { name: "crops_leafsStageA", s: 1.1 };
-  const leafy = { name: "crops_leafsStageB", s: 1.3 };
-  switch (id) {
-    case "corn": return { name: g < 0.35 ? "crops_cornStageA" : g < 0.7 ? "crops_cornStageB" : g < 1 ? "crops_cornStageC" : "crops_cornStageD", s: 1.1 };
-    case "wheat": return g < 0.35 ? sprout : { name: g < 1 ? "crops_wheatStageA" : "crops_wheatStageB", s: 1.3 };
-    case "carrot": return g < 0.5 ? sprout : g < 1 ? leafy : { name: "crop_carrot", s: 1.2 };
-    case "squash": return g < 0.5 ? sprout : g < 1 ? leafy : { name: "crop_pumpkin", s: 1.6 };
-    default: return g < 0.35 ? sprout : null;
-  }
-}
-
 /** Seeds, dead plants, pests, the ripe sparkle, and crops without a model. */
 const CropTile = memo(function CropTile({ crop, x, z, modeled }: { crop: CropInstance; x: number; z: number; modeled: boolean }) {
   if (crop.dead) {
@@ -166,21 +162,58 @@ const CropTile = memo(function CropTile({ crop, x, z, modeled }: { crop: CropIns
   );
 });
 
+const SHAPE_COLOR: Record<Shape, string> = {
+  pod: "#b7d96a", tuber: "#b98a55", blossomWhite: "#fbf6ef", blossomPink: "#e58fb4", sunPetals: "#f2c230", sunSeeds: "#5a3a22",
+};
+
 function ModelCrops({ tiles }: { tiles: Tile[] }) {
-  const { list, groups } = useMemo(() => {
+  const { list, groups, shapes } = useMemo(() => {
     const entries: [string, Inst][] = [];
+    const shapes: Record<Shape, Inst[]> = { pod: [], tuber: [], blossomWhite: [], blossomPink: [], sunPetals: [], sunSeeds: [] };
     const list = tiles.flatMap((t, i) => {
       if (!t.crop) return [];
       const x = i % W, z = Math.floor(i / W);
-      const m = t.crop.dead ? null : stageModel(t.crop.id, t.crop.growth);
-      if (m) SPOTS.forEach(([dx, dz], k) => entries.push([model("nature", m.name), { x: x + dx, y: 0.03, z: z + dz, s: m.s, ry: hash(i * 4 + k) * 6 }]));
-      return [{ crop: t.crop, x, z, i, modeled: m !== null }];
+      const stage = t.crop.dead ? null : stageOf(t.crop.growth);
+      const turn = hash(i) * Math.PI * 2;
+      for (const p of stage ? CROP_LOOKS[t.crop.id][stage] : []) {
+        // Flower heads keep facing the sun (south, toward the camera); everything else gets a random turn.
+        const inst: Inst = { x: x + p.x, y: 0.03 + (p.y ?? 0), z: z + p.z, s: p.s, rx: p.rx, ry: p.rx ? 0 : (p.ry ?? 0) + turn };
+        if (p.m) {
+          const [pack, name] = p.m.split("/") as [Pack, string];
+          entries.push([model(pack, name), inst]);
+        } else if (p.shape) shapes[p.shape].push(inst);
+      }
+      return [{ crop: t.crop, x, z, i, modeled: stage !== null }];
     });
-    return { list, groups: groupBy(entries) };
+    return { list, groups: groupBy(entries), shapes };
   }, [tiles]);
   return (
     <group>
       <ModelGroups groups={groups} />
+      <Instanced items={shapes.pod}>
+        <capsuleGeometry args={[0.035, 0.2, 3, 6]} />
+        <meshStandardMaterial color={SHAPE_COLOR.pod} flatShading />
+      </Instanced>
+      <Instanced items={shapes.tuber}>
+        <dodecahedronGeometry args={[0.07, 0]} />
+        <meshStandardMaterial color={SHAPE_COLOR.tuber} flatShading />
+      </Instanced>
+      <Instanced items={shapes.blossomWhite}>
+        <icosahedronGeometry args={[0.035, 0]} />
+        <meshStandardMaterial color={SHAPE_COLOR.blossomWhite} flatShading />
+      </Instanced>
+      <Instanced items={shapes.sunPetals}>
+        <cylinderGeometry args={[0.17, 0.17, 0.03, 12]} />
+        <meshStandardMaterial color={SHAPE_COLOR.sunPetals} flatShading />
+      </Instanced>
+      <Instanced items={shapes.sunSeeds}>
+        <cylinderGeometry args={[0.08, 0.08, 0.03, 10]} />
+        <meshStandardMaterial color={SHAPE_COLOR.sunSeeds} flatShading />
+      </Instanced>
+      <Instanced items={shapes.blossomPink}>
+        <icosahedronGeometry args={[0.04, 0]} />
+        <meshStandardMaterial color={SHAPE_COLOR.blossomPink} flatShading />
+      </Instanced>
       {list.map((c) => <CropTile key={c.i} crop={c.crop} x={c.x} z={c.z} modeled={c.modeled} />)}
     </group>
   );

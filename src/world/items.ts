@@ -116,7 +116,9 @@ const produce: ItemDef[] = Object.values(WORLD_CROPS)
   }));
 
 /** Items with a picture icon made by `npm run assets`. */
-const IMAGE_ICONS = new Set(["pickaxe", "shovel", "wood", "crop_carrot", "crop_corn", "crop_squash", "kit_fence", "kit_flowerBed", "kit_pathStone"]);
+const IMAGE_ICONS = new Set([
+  "pickaxe", "shovel", "wood", "crop_carrot", "crop_corn", "crop_squash", "crop_tomato", "honey", "kit_fence", "kit_flowerBed", "kit_pathStone",
+]);
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
   [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, IMAGE_ICONS.has(i.id) ? { ...i, image: `/icons/${i.id}.png` } : i]),
