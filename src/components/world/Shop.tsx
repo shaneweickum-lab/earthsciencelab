@@ -4,7 +4,8 @@ import { useState } from "react";
 import { CROPS } from "@/game/crops";
 import { dayOf, seasonOf } from "@/world/clock";
 import { buy, ORGANIC_BONUS, sellNow, ship } from "@/world/engine";
-import { ITEMS, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
+import { cropDays, ITEMS, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
+import { on } from "@/world/settings";
 import type { WorldState } from "@/world/types";
 import { Modal } from "./Menus";
 import { ItemIcon } from "./ItemIcon";
@@ -19,10 +20,11 @@ export function StoreMenu() {
   const update = useWorld((s) => s.update);
   const close = useWorld((s) => s.close);
   const [tab, setTab] = useState<"seeds" | "soil" | "build" | "sell">("seeds");
-  const season = seasonOf(dayOf(w.minute));
+  const season = seasonOf(dayOf(w.minute), w.settings);
+  const seasonal = w.settings.seasons && on(w, "plantingSeasons");
   const hasGreenhouse = w.buildings.some((b) => b.kind === "greenhouse");
   const all = Object.values(ITEMS);
-  const seeds = all.filter((i) => i.kind === "seed" && (hasGreenhouse || WORLD_CROPS[i.crop!].seasons.includes(season)));
+  const seeds = all.filter((i) => i.kind === "seed" && (!seasonal || hasGreenhouse || WORLD_CROPS[i.crop!].seasons.includes(season)));
   const soil = all.filter((i) => i.kind === "amendment");
   const kits = all.filter((i) => i.kind === "kit");
   const sellable = w.inventory.map((s, i) => ({ s, i })).filter(({ s }) => s && ITEMS[s.item].sell);
@@ -38,9 +40,11 @@ export function StoreMenu() {
       {tab === "seeds" && (
         <>
           <p className="mb-2 text-sm text-muted">
-            {hasGreenhouse
-              ? "You have a greenhouse, so every seed is for sale. Out-of-season seeds only grow inside it."
-              : `In stock for ${season}. Build a greenhouse to grow crops in any season!`}
+            {!seasonal
+              ? "Every seed is for sale. Cool-season crops like it mild; warm-season crops like it hot."
+              : hasGreenhouse
+                ? "You have a greenhouse, so every seed is for sale. Out-of-season seeds only grow inside it."
+                : `In stock for ${season}. Build a greenhouse to grow crops in any season!`}
           </p>
           <ItemList items={seeds} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} extra={(i) => {
             const wc = WORLD_CROPS[i.crop!];
@@ -48,9 +52,11 @@ export function StoreMenu() {
             return (
               <>
                 <span className="text-[11px] font-bold text-muted">
-                  {wc.seasons.join(", ")} · {wc.days} days{wc.regrow ? ` · regrows` : ""}{wc.cover ? " · cover crop" : ` · sells ${wc.sellPrice}`}
+                  {wc.type === "cool" ? "Cool" : "Warm"}-season · about {cropDays(wc.id, w.settings.daysPerMonth)} days{wc.regrowDays ? " · keeps producing" : ""}
+                  {wc.cover ? " · cover crop" : ` · sells ${wc.sellPrice}`}
+                  {on(w, "frost") && (wc.killF >= 30 ? " · frost-tender" : " · frost-hardy")}
                 </span>
-                {!inSeason && <span className="ml-1 rounded-full bg-sky/20 px-1.5 text-[10px] font-black text-sky">greenhouse only</span>}
+                {seasonal && !inSeason && <span className="ml-1 rounded-full bg-sky/20 px-1.5 text-[10px] font-black text-sky">greenhouse only</span>}
                 <span className="block text-[11px]"><b>Takes:</b> {CROPS[i.crop!].takes} <b>Gives back:</b> {CROPS[i.crop!].givesText}</span>
               </>
             );

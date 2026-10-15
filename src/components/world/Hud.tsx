@@ -1,12 +1,13 @@
 "use client";
 
 import { CROPS } from "@/game/crops";
-import { dayOf, dayOfSeason, formatTime, seasonOf, yearOf } from "@/world/clock";
-import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, pickUpBuilding, soilHealth, tileAt, todayWeather } from "@/world/engine";
-import { ITEMS, WORLD_CROPS } from "@/world/items";
+import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf } from "@/world/clock";
+import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
+import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
+import { formatTemp, on } from "@/world/settings";
 import { previewAction } from "@/world/preview";
 import type { Tile, WorldState } from "@/world/types";
-import { WEATHER } from "@/world/weather";
+import { tempAt, WEATHER } from "@/world/weather";
 import { ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
@@ -15,24 +16,32 @@ const SEASON_ICON = { Spring: "🌸", Summer: "☀️", Fall: "🍂", Winter: "�
 export function StatusBar() {
   const w = useWorld((s) => s.world!);
   const d = dayOf(w.minute);
-  const season = seasonOf(d);
-  const weather = WEATHER[todayWeather(w)];
+  const cal = w.settings;
+  const climate = todayClimate(w);
+  const weather = WEATHER[climate.kind];
+  const units = w.settings.units;
   return (
     <div className="pointer-events-auto flex flex-col items-end gap-1.5">
       <div className="rounded-2xl border-2 border-soil-dark/20 bg-card/95 px-3 py-2 text-right shadow-lg">
         <div className="text-xs font-black uppercase tracking-wider text-muted">
-          {SEASON_ICON[season]} {season} {dayOfSeason(d)} · Year {yearOf(d)}
+          {cal.seasons ? SEASON_ICON[seasonOf(d, cal)] : "🌱"} {seasonLabel(d, cal)} · {formatDate(d, cal, true)} · Year {yearOf(d, cal)}
         </div>
         <div className="flex items-center justify-end gap-2 font-display text-xl font-black tabular-nums">
           <span title={weather.name} aria-label={`Weather: ${weather.name}`}>{weather.icon}</span>
+          <span aria-label="Temperature" title={`High ${formatTemp(climate.high, units)}, low ${formatTemp(climate.low, units)}`}>
+            {formatTemp(tempAt(climate, timeOfDay(w.minute)), units)}
+          </span>
           <span aria-label="Time">{formatTime(w.minute)}</span>
+        </div>
+        <div className="text-[11px] font-bold text-muted">
+          High {formatTemp(climate.high, units)} · Low {formatTemp(climate.low, units)}
         </div>
       </div>
       <div className="flex gap-1.5">
         <div className="rounded-full bg-card/95 px-3 py-1 text-sm font-black shadow" aria-label="Coins">🪙 {w.coins.toLocaleString()}</div>
         {w.organic && <div className="rounded-full bg-leaf px-2.5 py-1 text-xs font-black text-white shadow" title="Certified organic: produce sells for 25% more">🌿 Organic</div>}
       </div>
-      <Meter label="Energy" icon="⚡" value={w.energy} max={w.maxEnergy} color={w.energy < 20 ? "bg-danger" : "bg-sun"} />
+      {on(w, "energy") && <Meter label="Energy" icon="⚡" value={w.energy} max={w.maxEnergy} color={w.energy < 20 ? "bg-danger" : "bg-sun"} />}
       <Meter label="Watering can" icon="💧" value={w.water} max={w.canSize} color="bg-sky" />
     </div>
   );
@@ -133,6 +142,7 @@ export function TileInspector() {
   const b = buildingAt(w, x, y);
   const preview = previewAction(w);
   const garden = t.ground === "farm" || t.greenhouse;
+  const known = knownSoil(w, t);
   const critter = w.critters.find((c) => c.x === x && c.y === y);
   const pickable = b && !["house", "store", "shippingBin"].includes(b.kind);
   return (
@@ -145,13 +155,13 @@ export function TileInspector() {
       {garden && !b && (
         <div className="space-y-1 border-t border-line pt-2">
           <SoilRow label="Moisture" value={t.moisture} known tip="" />
-          <SoilRow label="Organic matter" value={t.soil.om} known={t.known.lab} tip="Lab test 🧪" />
-          <SoilRow label="Nutrients" value={t.soil.nutrients} known={t.known.lab} tip="Lab test 🧪" />
-          <SoilRow label="pH" value={t.soil.ph} known={t.known.lab} unit="pH" tip="Lab test 🧪" />
-          <SoilRow label="Soil life" value={t.soil.life} known={t.known.shovel} tip="Shovel test 🕳️" />
-          <SoilRow label="Structure" value={t.soil.structure} known={t.known.shovel} tip="Shovel test 🕳️" />
-          <SoilRow label="Water holding" value={t.soil.water} known={t.known.water} tip="Ring test 💧" />
-          {t.known.lab && t.known.shovel && t.known.water && (
+          <SoilRow label="Organic matter" value={t.soil.om} known={known.lab} tip="Lab test 🧪" />
+          <SoilRow label="Nutrients" value={t.soil.nutrients} known={known.lab} tip="Lab test 🧪" />
+          <SoilRow label="pH" value={t.soil.ph} known={known.lab} unit="pH" tip="Lab test 🧪" />
+          <SoilRow label="Soil life" value={t.soil.life} known={known.shovel} tip="Shovel test 🕳️" />
+          <SoilRow label="Structure" value={t.soil.structure} known={known.shovel} tip="Shovel test 🕳️" />
+          <SoilRow label="Water holding" value={t.soil.water} known={known.water} tip="Ring test 💧" />
+          {known.lab && known.shovel && known.water && (
             <div className="text-xs font-black">Soil health: {soilHealth(t)}</div>
           )}
         </div>
@@ -198,7 +208,9 @@ function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y:
           <span className="ml-auto text-xs text-muted">{c.growth >= 1 ? "Ready!" : `${Math.round(c.growth * 100)}%`}</span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-line"><div className="h-full bg-leaf" style={{ width: `${c.growth * 100}%` }} /></div>
-        <p className="text-[11px] text-muted">{wc.seasons.join(", ")} · {c.harvests > 0 && wc.regrow ? wc.regrow : wc.days} days to grow</p>
+        <p className="text-[11px] text-muted">
+          {wc.type === "cool" ? "Cool" : "Warm"}-season · about {cropDays(c.id, w.settings.daysPerMonth, c.harvests > 0)} days to grow
+        </p>
         {c.growth < 1 && reasons.map((r) => <p key={r} className="text-xs">• {r}</p>)}
         {lines.map((l) => <p key={l} className="text-xs">{l}</p>)}
       </div>

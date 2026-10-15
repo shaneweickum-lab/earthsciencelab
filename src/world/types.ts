@@ -1,4 +1,6 @@
 import type { CropFamily, CropId } from "@/game/crops";
+import type { GameSettings } from "./settings";
+import type { DayWeather } from "./weather";
 
 export type Season = "Spring" | "Summer" | "Fall" | "Winter";
 export type WeatherId = "sunny" | "cloudy" | "rain" | "storm" | "heat" | "fog" | "frost" | "snow";
@@ -103,11 +105,12 @@ export interface WorldState {
   /** Crops harvested so far (for badges). */
   harvests: number;
   /** Weather for each day, keyed by day number, generated as days arrive. */
-  weather: Record<number, WeatherId>;
+  weather: Record<number, DayWeather>;
   log: DayLog | null;
   /** Short messages for the HUD feed. */
   messages: { text: string; at: number }[];
   introSeen: boolean;
+  settings: GameSettings;
   /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */
   avatar?: string;
 }
