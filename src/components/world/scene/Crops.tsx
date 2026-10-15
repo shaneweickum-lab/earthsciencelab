@@ -1,9 +1,11 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, Suspense, useMemo } from "react";
 import type { CropId } from "@/game/crops";
 import { W } from "@/world/map";
 import type { CropInstance, Tile } from "@/world/types";
+import { hash, type Inst } from "./Instanced";
+import { groupBy, model, ModelGroups } from "./models";
 
 const Mat = ({ color }: { color: string }) => <meshStandardMaterial color={color} flatShading />;
 
@@ -111,8 +113,22 @@ export function Plant({ crop, vigor, seed }: { crop: CropId; vigor: number; seed
 
 const SPOTS: [number, number][] = [[-0.22, -0.2], [0.22, -0.18], [-0.2, 0.22], [0.2, 0.2]];
 
-/** All the crops on one tile: a few plants that grow bigger as the crop matures. */
-const CropTile = memo(function CropTile({ crop, x, z }: { crop: CropInstance; x: number; z: number }) {
+/** Kenney model for a crop at a growth stage, or null to draw it from simple shapes. */
+function stageModel(id: CropId, g: number): { name: string; s: number } | null {
+  if (g < 0.1) return null;
+  const sprout = { name: "crops_leafsStageA", s: 1.1 };
+  const leafy = { name: "crops_leafsStageB", s: 1.3 };
+  switch (id) {
+    case "corn": return { name: g < 0.35 ? "crops_cornStageA" : g < 0.7 ? "crops_cornStageB" : g < 1 ? "crops_cornStageC" : "crops_cornStageD", s: 1.1 };
+    case "wheat": return g < 0.35 ? sprout : { name: g < 1 ? "crops_wheatStageA" : "crops_wheatStageB", s: 1.3 };
+    case "carrot": return g < 0.5 ? sprout : g < 1 ? leafy : { name: "crop_carrot", s: 1.2 };
+    case "squash": return g < 0.5 ? sprout : g < 1 ? leafy : { name: "crop_pumpkin", s: 1.6 };
+    default: return g < 0.35 ? sprout : null;
+  }
+}
+
+/** Seeds, dead plants, pests, the ripe sparkle, and crops without a model. */
+const CropTile = memo(function CropTile({ crop, x, z, modeled }: { crop: CropInstance; x: number; z: number; modeled: boolean }) {
   if (crop.dead) {
     return (
       <group position={[x, 0.05, z]}>
@@ -124,27 +140,24 @@ const CropTile = memo(function CropTile({ crop, x, z }: { crop: CropInstance; x:
       </group>
     );
   }
-  // Seed → sprout → young → mature: growth shows as size.
   const g = crop.growth;
-  const vigor = g < 0.1 ? 0.25 : 0.35 + g * 0.75;
-  const ripe = g >= 1;
+  const vigor = 0.35 + g * 0.75;
   return (
     <group position={[x, 0.05, z]}>
-      {g < 0.1 ? (
+      {g < 0.1 &&
         SPOTS.map(([dx, dz], i) => (
           <mesh key={i} position={[dx, 0.03, dz]}><sphereGeometry args={[0.035, 5, 4]} /><Mat color="#7cc35a" /></mesh>
-        ))
-      ) : (
+        ))}
+      {g >= 0.1 && !modeled &&
         SPOTS.map(([dx, dz], i) => (
           <group key={i} position={[dx, 0, dz]} scale={1.7}>
             <Plant crop={crop.id as CropId} vigor={vigor} seed={i * 5 + x * 3 + z} />
           </group>
-        ))
-      )}
+        ))}
       {crop.pests && (
         <mesh position={[0.1, 0.35, 0.1]}><sphereGeometry args={[0.04, 6, 5]} /><Mat color="#c0392b" /></mesh>
       )}
-      {ripe && (
+      {g >= 1 && (
         <mesh position={[0, 1.0, 0]} rotation={[0, 0, Math.PI / 4]}>
           <octahedronGeometry args={[0.09, 0]} /><meshStandardMaterial color="#ffe066" emissive="#ffcc33" emissiveIntensity={0.7} />
         </mesh>
@@ -153,14 +166,34 @@ const CropTile = memo(function CropTile({ crop, x, z }: { crop: CropInstance; x:
   );
 });
 
+function ModelCrops({ tiles }: { tiles: Tile[] }) {
+  const { list, groups } = useMemo(() => {
+    const entries: [string, Inst][] = [];
+    const list = tiles.flatMap((t, i) => {
+      if (!t.crop) return [];
+      const x = i % W, z = Math.floor(i / W);
+      const m = t.crop.dead ? null : stageModel(t.crop.id, t.crop.growth);
+      if (m) SPOTS.forEach(([dx, dz], k) => entries.push([model("nature", m.name), { x: x + dx, y: 0.03, z: z + dz, s: m.s, ry: hash(i * 4 + k) * 6 }]));
+      return [{ crop: t.crop, x, z, i, modeled: m !== null }];
+    });
+    return { list, groups: groupBy(entries) };
+  }, [tiles]);
+  return (
+    <group>
+      <ModelGroups groups={groups} />
+      {list.map((c) => <CropTile key={c.i} crop={c.crop} x={c.x} z={c.z} modeled={c.modeled} />)}
+    </group>
+  );
+}
+
 export function Crops({ tiles }: { tiles: Tile[] }) {
-  const list = useMemo(
+  const fallback = useMemo(
     () => tiles.flatMap((t, i) => (t.crop ? [{ crop: t.crop, x: i % W, z: Math.floor(i / W), i }] : [])),
     [tiles],
   );
   return (
-    <group>
-      {list.map((c) => <CropTile key={c.i} crop={c.crop} x={c.x} z={c.z} />)}
-    </group>
+    <Suspense fallback={<group>{fallback.map((c) => <CropTile key={c.i} crop={c.crop} x={c.x} z={c.z} modeled={false} />)}</group>}>
+      <ModelCrops tiles={tiles} />
+    </Suspense>
   );
 }

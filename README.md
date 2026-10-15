@@ -38,6 +38,10 @@ Progress (XP, levels, 18 badges, lesson scores, visited regions, journal pages) 
 
 On touch screens, an on-screen D-pad and action button appear.
 
+### Game art
+
+The farm's 3D models and item pictures are free CC0 packs by [Kenney](https://kenney.nl) (Nature Kit, Fantasy Town Kit, Survival Kit, Mini Characters), committed under `public/models` and `public/icons`. `npm run assets` re-downloads the packs, copies only the models the game uses, renders the item icons, and writes `public/models/CREDITS.md`. Each model has a hand-built fallback shape, so the game still works while models load.
+
 ## Stack
 
 - Next.js 15 (App Router) + TypeScript + Tailwind CSS 4
@@ -74,6 +78,7 @@ src/game/                  crop data (what each crop takes from and gives back t
 src/world/                 the farm game's pure simulation: clock, weather, map, items, engine, nature, journal
 src/store/                 progress rules (pure) and the zustand store
 src/components/            UI, split into learn/, world/, globe/, elements/
+public/models, public/icons Kenney CC0 game art (regenerate with npm run assets)
 ```
 
 The farm simulation (`src/world/engine.ts`) is pure: `state + action → state`, with seeded weather, weeds, pests, and critters. `tick(state, minutes)` advances the clock; tools, planting, the shop, and building are plain functions. React (`src/components/world/`) only renders it: a zustand store runs the clock with `requestAnimationFrame`, pauses for menus and hidden tabs, and saves to localStorage. Tests in `src/world/engine.test.ts` cover growth, weather, frost, the greenhouse, money, composting, saving, and the journal.

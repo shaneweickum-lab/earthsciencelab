@@ -13,6 +13,13 @@ const GROUPS: { type: SourceType; title: string }[] = [
   { type: "standards", title: "Education standards" },
 ];
 
+const GAME_ART = [
+  { name: "Nature Kit", url: "https://kenney.nl/assets/nature-kit" },
+  { name: "Fantasy Town Kit", url: "https://kenney.nl/assets/fantasy-town-kit" },
+  { name: "Survival Kit", url: "https://kenney.nl/assets/survival-kit" },
+  { name: "Mini Characters", url: "https://kenney.nl/assets/mini-characters" },
+];
+
 export default function SourcesPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -44,6 +51,21 @@ export default function SourcesPage() {
           </section>
         );
       })}
+      <section className="card p-5" id="game-art">
+        <h2 className="mb-3 text-xl font-black">Game art</h2>
+        <p className="text-sm">
+          The 3D models and item pictures in Soil &amp; Sprout come from{" "}
+          <a href="https://kenney.nl" target="_blank" rel="noreferrer" className="font-semibold underline">Kenney</a>&apos;s free{" "}
+          {GAME_ART.map((p, i) => (
+            <span key={p.url}>
+              {i > 0 && (i === GAME_ART.length - 1 ? ", and " : ", ")}
+              <a href={p.url} target="_blank" rel="noreferrer" className="italic underline decoration-dotted">{p.name}</a>
+            </span>
+          ))}
+          , shared under the{" "}
+          <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noreferrer" className="underline">CC0 public domain dedication</a>.
+        </p>
+      </section>
     </div>
   );
 }

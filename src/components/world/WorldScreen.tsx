@@ -34,7 +34,10 @@ export function doAction() {
   if (target === "house") st.open("house");
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
-  else st.update(act);
+  else {
+    runtime.actionAt = performance.now();
+    st.update(act);
+  }
 }
 
 function pickUp() {

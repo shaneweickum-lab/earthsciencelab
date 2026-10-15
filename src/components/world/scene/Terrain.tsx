@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useGLTF } from "@react-three/drei";
+import { Suspense, useMemo } from "react";
 import { H, W } from "@/world/map";
-import type { Season, Tile } from "@/world/types";
+import type { Building, Season, Tile } from "@/world/types";
+import { BUILDING_SIZE } from "@/world/map";
 import { hash, Instanced, type Inst } from "./Instanced";
+import { groupBy, model, ModelGroups } from "./models";
 
 const GRASS: Record<Season, string[]> = {
   Spring: ["#86b85f", "#7fb069", "#8cbf66"],
@@ -86,8 +89,8 @@ export function Pond({ tiles }: { tiles: Tile[] }) {
   );
 }
 
-/** Trees, rocks, sticks, stumps, logs, and weeds. */
-export function Obstacles({ tiles, season }: { tiles: Tile[]; season: Season }) {
+/** Simple shapes, shown while the models load (or if they fail). */
+function ProceduralObstacles({ tiles, season }: { tiles: Tile[]; season: Season }) {
   const groups = useMemo(() => {
     const trunks: Inst[] = [], canopy: Inst[] = [], canopyTop: Inst[] = [], stones: Inst[] = [], sticks: Inst[] = [];
     const stumps: Inst[] = [], logs: Inst[] = [], weeds: Inst[] = [], flowers: Inst[] = [];
@@ -161,5 +164,80 @@ export function Obstacles({ tiles, season }: { tiles: Tile[]; season: Season }) 
         <meshStandardMaterial color="#f2c230" />
       </Instanced>
     </group>
+  );
+}
+
+const PINES = ["tree_pineRoundA", "tree_pineRoundC", "tree_pineTallA", "tree_pineSmallB"];
+const LEAFY = ["tree_default", "tree_oak", "tree_detailed"];
+const LEAF_SUFFIX: Record<Season, string> = { Spring: "", Summer: "", Fall: "_fall", Winter: "_dark" };
+const pick = <T,>(list: T[], r: number) => list[Math.floor(r * list.length) % list.length];
+const n = (name: string) => model("nature", name);
+
+// Load every season's trees up front so the forest doesn't flicker back to simple shapes when the season changes.
+if (typeof window !== "undefined") {
+  for (const t of [...PINES, ...LEAFY.flatMap((l) => Object.values(LEAF_SUFFIX).map((sfx) => l + sfx))]) useGLTF.preload(n(t));
+}
+
+/** Kenney models for trees, rocks, stumps, logs, weeds, and wild plants. */
+function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: Season; buildings: Building[] }) {
+  const { tall, low, sticks } = useMemo(() => {
+    const covered = new Set<number>();
+    for (const b of buildings) {
+      const [bw, bh] = BUILDING_SIZE[b.kind];
+      for (let y = b.y; y < b.y + bh; y++) for (let x = b.x; x < b.x + bw; x++) covered.add(y * W + x);
+    }
+    const tallE: [string, Inst][] = [], lowE: [string, Inst][] = [], sticksL: Inst[] = [];
+    const flowers = ["flower_yellowA", "flower_redA", "flower_purpleA", "flower_yellowB"];
+    tiles.forEach((t, i) => {
+      const x = i % W, z = Math.floor(i / W);
+      const r = hash(i + 7), r2 = hash(i * 3 + 1), ry = hash(i * 5 + 2) * Math.PI * 2;
+      switch (t.obstacle) {
+        case "tree": {
+          const name = r < 0.35 ? pick(PINES, r2) : pick(LEAFY, r2) + LEAF_SUFFIX[season];
+          tallE.push([n(name), { x: x + (r2 - 0.5) * 0.2, z: z + (r - 0.5) * 0.2, s: 1.3 + r * 0.45, ry }]);
+          break;
+        }
+        case "stone": lowE.push([n(pick(["stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA"], r2)), { x, z, s: 1.9, ry }]); break;
+        case "stump": lowE.push([n(r2 > 0.5 ? "stump_round" : "stump_old"), { x, z, s: 2, ry }]); break;
+        case "log": lowE.push([n(r2 > 0.5 ? "log" : "log_large"), { x, z, s: 1.4, ry }]); break;
+        case "stick": sticksL.push({ x, y: 0.05, z, ry, rz: 0.1 }); break;
+      }
+      if (t.weeds) {
+        for (let k = 0; k < 3; k++) {
+          const name = pick(["grass_large", "grass_leafs", "plant_flatShort", "grass"], hash(i * 17 + k));
+          lowE.push([n(name), { x: x + (hash(i * 7 + k) - 0.5) * 0.6, z: z + (hash(i * 11 + k) - 0.5) * 0.6, s: 1.5 + hash(i + k) * 0.6, ry: hash(i * 13 + k) * 6 }]);
+        }
+        if (r > 0.65 && season !== "Winter") lowE.push([n(pick(flowers, r2)), { x: x + 0.2, z: z - 0.15, s: 1.6, ry }]);
+      }
+      // Wild plants on open grass and lily pads on the pond make the farm feel alive.
+      if (!t.obstacle && !covered.has(i)) {
+        if (t.ground === "grass" && season !== "Winter") {
+          if (r < 0.1) lowE.push([n(r2 > 0.5 ? "grass" : "grass_large"), { x: x + (r2 - 0.5) * 0.5, z, s: 1.4, ry }]);
+          else if (r < 0.13) lowE.push([n(pick(flowers, r2)), { x, z, s: 1.6, ry }]);
+          else if (r < 0.15) lowE.push([n(r2 > 0.5 ? "plant_bushSmall" : "plant_bush"), { x, z, s: 1.4, ry }]);
+        }
+        if (t.ground === "water" && r < 0.18) lowE.push([n(r2 > 0.5 ? "lily_large" : "lily_small"), { x, y: -0.06, z, s: 1.8, ry }]);
+      }
+    });
+    return { tall: groupBy(tallE), low: groupBy(lowE), sticks: sticksL };
+  }, [tiles, season, buildings]);
+  return (
+    <group>
+      <ModelGroups groups={tall} castShadow />
+      <ModelGroups groups={low} />
+      <Instanced items={sticks}>
+        <boxGeometry args={[0.7, 0.06, 0.07]} />
+        <meshStandardMaterial color="#7a5636" />
+      </Instanced>
+    </group>
+  );
+}
+
+/** Trees, rocks, sticks, stumps, logs, weeds, and wild plants. */
+export function Obstacles({ tiles, season, buildings }: { tiles: Tile[]; season: Season; buildings: Building[] }) {
+  return (
+    <Suspense fallback={<ProceduralObstacles tiles={tiles} season={season} />}>
+      <ModelObstacles tiles={tiles} season={season} buildings={buildings} />
+    </Suspense>
   );
 }

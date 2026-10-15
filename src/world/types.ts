@@ -108,4 +108,6 @@ export interface WorldState {
   /** Short messages for the HUD feed. */
   messages: { text: string; at: number }[];
   introSeen: boolean;
+  /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */
+  avatar?: string;
 }

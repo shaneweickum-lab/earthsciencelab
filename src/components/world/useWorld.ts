@@ -29,6 +29,8 @@ export const runtime = {
   player: { x: 10, y: 10, facing: "down" as WorldState["player"]["facing"] },
   keys: new Set<string>(),
   moving: false,
+  /** When the player last pressed the action button (for the reach animation). */
+  actionAt: 0,
 };
 
 function withRuntime(w: WorldState): WorldState {

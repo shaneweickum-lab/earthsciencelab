@@ -1,18 +1,21 @@
 "use client";
 
-import { Html } from "@react-three/drei";
+import { Html, useAnimations, useGLTF } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
-import { BufferAttribute, Color, type AmbientLight, type DirectionalLight, type Group, type Mesh, type PointLight, type Points } from "three";
+import { Suspense, useEffect, useMemo, useRef } from "react";
+import { BufferAttribute, Color, LoopOnce, type AmbientLight, type DirectionalLight, type Group, type Mesh, type PointLight, type Points } from "three";
 import { daylight, dayOf, MS_PER_GAME_MINUTE, seasonOf, timeOfDay } from "@/world/clock";
 import { canPlace, DIRS, facingTile, movePlayer, placementFor, tick, todayWeather } from "@/world/engine";
 import { ITEMS } from "@/world/items";
 import { BUILDING_SIZE } from "@/world/map";
 import { critterIcon, expireCritters } from "@/world/nature";
 import type { WeatherId, WorldState } from "@/world/types";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { DEFAULT_AVATAR } from "@/world/avatars";
 import { runtime, useWorld } from "../useWorld";
 import { Buildings } from "./Buildings";
 import { Crops } from "./Crops";
+import { model } from "./models";
 import { Obstacles, Pond, Terrain } from "./Terrain";
 
 const SPEED = 4.2; // tiles per second
@@ -96,11 +99,67 @@ function GameLoop() {
   return null;
 }
 
+/** The hand-built farmer, shown while the character model loads. */
+function SimpleFarmer() {
+  const body = useRef<Group>(null);
+  const t = useRef(0);
+  useFrame((_, dt) => {
+    if (runtime.moving) t.current += dt * 12;
+    if (body.current) body.current.position.y = runtime.moving ? Math.abs(Math.sin(t.current)) * 0.08 : 0;
+  });
+  return (
+    <group ref={body}>
+      <mesh position={[0, 0.32, 0]} castShadow><capsuleGeometry args={[0.2, 0.3, 4, 8]} /><meshStandardMaterial color="#3f6fa0" flatShading /></mesh>
+      <mesh position={[0, 0.78, 0]} castShadow><sphereGeometry args={[0.19, 12, 10]} /><meshStandardMaterial color="#e8b98f" flatShading /></mesh>
+      <mesh position={[0, 0.92, 0]}><cylinderGeometry args={[0.36, 0.36, 0.03, 16]} /><meshStandardMaterial color="#e0c27a" flatShading /></mesh>
+      <mesh position={[0, 1.0, 0]}><cylinderGeometry args={[0.16, 0.19, 0.16, 12]} /><meshStandardMaterial color="#d6b04a" flatShading /></mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[s * 0.07, 0.8, 0.17]}><sphereGeometry args={[0.025, 6, 5]} /><meshStandardMaterial color="#2a2017" /></mesh>
+      ))}
+    </group>
+  );
+}
+
+/** A Kenney mini character that walks, idles, and reaches out when you use a tool. */
+function Farmer({ avatar }: { avatar: string }) {
+  const { scene, animations } = useGLTF(model("characters", `character-${avatar}`));
+  const clone = useMemo(() => {
+    const c = cloneSkinned(scene);
+    c.traverse((o) => (o.castShadow = true));
+    return c;
+  }, [scene]);
+  const ref = useRef<Group>(null);
+  const { actions } = useAnimations(animations, ref);
+  const current = useRef<string>("");
+  const seenAction = useRef(runtime.actionAt);
+  useFrame(() => {
+    let next = runtime.moving ? "walk" : "idle";
+    if (runtime.actionAt !== seenAction.current) {
+      seenAction.current = runtime.actionAt;
+      const reach = actions["interact-right"];
+      if (reach) {
+        reach.reset().setLoop(LoopOnce, 1).fadeIn(0.05).play();
+        reach.clampWhenFinished = false;
+      }
+    }
+    if (actions["interact-right"]?.isRunning() && !runtime.moving) next = "interact-right";
+    if (next !== current.current) {
+      const prev = actions[current.current];
+      const act = actions[next];
+      if (act) {
+        if (next !== "interact-right") act.reset().fadeIn(0.15).play();
+        prev?.fadeOut(0.15);
+        current.current = next;
+      }
+    }
+  });
+  return <primitive ref={ref} object={clone} scale={1.35} />;
+}
+
 function Player() {
   const ref = useRef<Group>(null);
-  const body = useRef<Group>(null);
   const lamp = useRef<PointLight>(null);
-  const t = useRef(0);
+  const avatar = useWorld((s) => s.world!.avatar ?? DEFAULT_AVATAR);
   const ROT = { down: 0, right: Math.PI / 2, up: Math.PI, left: -Math.PI / 2 };
   useFrame((_, dt) => {
     const g = ref.current;
@@ -112,23 +171,14 @@ function Player() {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     g.rotation.y += diff * Math.min(1, dt * 14);
-    if (runtime.moving) t.current += dt * 12;
-    if (body.current) body.current.position.y = runtime.moving ? Math.abs(Math.sin(t.current)) * 0.08 : 0;
     const w = useWorld.getState().world;
     if (lamp.current && w) lamp.current.intensity = (1 - daylight(w.minute)) * 6;
   });
   return (
     <group ref={ref}>
-      <group ref={body}>
-        <mesh position={[0, 0.32, 0]} castShadow><capsuleGeometry args={[0.2, 0.3, 4, 8]} /><meshStandardMaterial color="#3f6fa0" flatShading /></mesh>
-        <mesh position={[0, 0.78, 0]} castShadow><sphereGeometry args={[0.19, 12, 10]} /><meshStandardMaterial color="#e8b98f" flatShading /></mesh>
-        <mesh position={[0, 0.92, 0]}><cylinderGeometry args={[0.36, 0.36, 0.03, 16]} /><meshStandardMaterial color="#e0c27a" flatShading /></mesh>
-        <mesh position={[0, 1.0, 0]}><cylinderGeometry args={[0.16, 0.19, 0.16, 12]} /><meshStandardMaterial color="#d6b04a" flatShading /></mesh>
-        {/* Eyes face the direction you're walking. */}
-        {[-1, 1].map((s) => (
-          <mesh key={s} position={[s * 0.07, 0.8, 0.17]}><sphereGeometry args={[0.025, 6, 5]} /><meshStandardMaterial color="#2a2017" /></mesh>
-        ))}
-      </group>
+      <Suspense fallback={<SimpleFarmer />}>
+        <Farmer avatar={avatar} />
+      </Suspense>
       <pointLight ref={lamp} position={[0, 1.6, 0.3]} color="#ffcf8a" distance={7} decay={1.6} intensity={0} />
     </group>
   );
@@ -280,7 +330,7 @@ function World() {
       {weather === "fog" ? <fog attach="fog" args={["#a9b5bf", 6, 22]} /> : <fog attach="fog" args={["#bfe3f2", 30, 60]} />}
       <Terrain tiles={tiles} season={season} />
       <Pond tiles={tiles} />
-      <Obstacles tiles={tiles} season={season} />
+      <Obstacles tiles={tiles} season={season} buildings={buildings} />
       <Crops tiles={tiles} />
       <Buildings buildings={buildings} />
       <Critters critters={critters} />

@@ -7,6 +7,7 @@ import { buy, ORGANIC_BONUS, sellNow, ship } from "@/world/engine";
 import { ITEMS, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
 import type { WorldState } from "@/world/types";
 import { Modal } from "./Menus";
+import { ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 function sellPrice(w: WorldState, def: ItemDef) {
@@ -93,7 +94,7 @@ export function StoreMenu() {
               const each = sellPrice(w, def);
               return (
                 <li key={i} className="flex items-center gap-3 rounded-xl border border-line p-2">
-                  <span className="text-2xl">{def.icon}</span>
+                  <ItemIcon id={s!.item} className="text-2xl" />
                   <span className="flex-1 font-bold">{def.name} ×{s!.qty}</span>
                   <span className="text-sm text-muted">🪙 {each} each</span>
                   <button className="btn btn-ghost py-1 text-sm" onClick={() => update((x) => sellNow(x, i, 1))}>Sell 1</button>
@@ -115,7 +116,7 @@ function ItemList({ items, w, onBuy, extra }: {
     <ul className="space-y-1.5">
       {items.map((i) => (
         <li key={i.id} className="flex items-center gap-3 rounded-xl border border-line p-2">
-          <span className="text-2xl" aria-hidden>{i.icon}</span>
+          <ItemIcon id={i.id} className="text-2xl" />
           <div className="min-w-0 flex-1">
             <p className="font-bold">
               {i.name}
@@ -161,7 +162,7 @@ export function ShippingMenu() {
         <ul className="space-y-1.5">
           {sellable.map(({ s, i }) => (
             <li key={i} className="flex items-center gap-3 rounded-xl border border-line p-2">
-              <span className="text-2xl">{ITEMS[s!.item].icon}</span>
+              <ItemIcon id={s!.item} className="text-2xl" />
               <span className="flex-1 font-bold">{ITEMS[s!.item].name} ×{s!.qty}</span>
               <button className="btn btn-primary py-1 text-sm" onClick={() => update((x) => ship(x, i))}>Ship all</button>
             </li>

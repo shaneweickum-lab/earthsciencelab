@@ -1,9 +1,10 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { memo } from "react";
+import { memo, Suspense } from "react";
 import { BUILDING_SIZE } from "@/world/map";
 import type { Building } from "@/world/types";
+import { Model, model } from "./models";
 
 const Mat = ({ color, ...rest }: { color: string; transparent?: boolean; opacity?: number; emissive?: string; emissiveIntensity?: number }) => (
   <meshStandardMaterial color={color} flatShading {...rest} />
@@ -40,7 +41,7 @@ function Cottage({ w, h, wall, roof, trim }: { w: number; h: number; wall: strin
   );
 }
 
-const Model = memo(function Model({ b }: { b: Building }) {
+const Procedural = memo(function Procedural({ b }: { b: Building }) {
   const [w, h] = BUILDING_SIZE[b.kind];
   switch (b.kind) {
     case "house":
@@ -59,9 +60,6 @@ const Model = memo(function Model({ b }: { b: Building }) {
               <boxGeometry args={[0.9, 0.05, 0.8]} /><Mat color={i % 2 ? "#fbf6ef" : "#c0603b"} />
             </mesh>
           ))}
-          <Html position={[0, 3.3, 0]} center zIndexRange={[30, 0]} style={{ pointerEvents: "none" }}>
-            <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">🌱 Seed &amp; Soil Co.</div>
-          </Html>
         </group>
       );
     case "shippingBin":
@@ -176,6 +174,73 @@ const Model = memo(function Model({ b }: { b: Building }) {
   }
 });
 
+const town = (name: string) => model("town", name);
+
+/**
+ * A building made from Kenney's modular town pieces. Each wall piece is a thin panel on the +x edge of a
+ * 1×1 cell, so it's rotated to face outward on each side of a w×d box.
+ */
+function Walls({ w, d, floors, front, z = 0 }: { w: number; d: number; floors: number; front: (i: number, floor: number) => string; z?: number }) {
+  const x0 = -(w - 1) / 2, z0 = -(d - 1) / 2 + z;
+  const pieces: { name: string; x: number; y: number; z: number; ry: number }[] = [];
+  for (let f = 0; f < floors; f++) {
+    const side = (k: number) => (f > 0 || k % 2 === 1 ? "wall-wood-window-shutters" : "wall-wood");
+    for (let i = 0; i < w; i++) {
+      pieces.push({ name: front(i, f), x: x0 + i, y: f, z: z0 + d - 1, ry: -Math.PI / 2 });
+      pieces.push({ name: f > 0 && i % 2 ? "wall-wood-window-small" : "wall-wood", x: x0 + i, y: f, z: z0, ry: Math.PI / 2 });
+    }
+    for (let j = 0; j < d; j++) {
+      pieces.push({ name: side(j), x: x0 + w - 1, y: f, z: z0 + j, ry: 0 });
+      pieces.push({ name: side(j + 1), x: x0, y: f, z: z0 + j, ry: Math.PI });
+    }
+  }
+  return (
+    <group>
+      {pieces.map((p, k) => <Model key={k} url={town(p.name)} position={[p.x, p.y, p.z]} rotation-y={p.ry} />)}
+    </group>
+  );
+}
+
+/** The roof: one gable piece stretched over the whole building. */
+function Roof({ w, d, y, z = 0 }: { w: number; d: number; y: number; z?: number }) {
+  return <Model url={town("roof-high-gable")} position={[0, y, z]} rotation-y={Math.PI / 2} scale={[d / 1.1 + 0.15, 1.1, w / 1.1 + 0.1]} />;
+}
+
+/** Kenney models where we have a good one; everything else keeps its hand-built shape. */
+function Fancy({ b }: { b: Building }) {
+  const [w, h] = BUILDING_SIZE[b.kind];
+  const mid = Math.floor(w / 2);
+  switch (b.kind) {
+    case "house":
+      return (
+        <group>
+          <Walls w={w} d={h} floors={2} front={(i, f) => (f === 0 && i === mid ? "wall-wood-door" : i % 2 ? "wall-wood-window-shutters" : "wall-wood")} />
+          <Roof w={w} d={h} y={2} />
+          <Model url={town("chimney")} position={[1.2, 2.4, -0.6]} scale={[1, 1.2, 1]} />
+          <Model url={town("lantern")} position={[1.1, 0, h / 2 + 0.25]} />
+        </group>
+      );
+    case "store":
+      return (
+        <group>
+          <Walls w={w} d={h - 1} z={-0.5} floors={1} front={(i) => (i === mid ? "wall-wood-door" : "wall-wood-window-shutters")} />
+          <Roof w={w} d={h - 1} y={1} z={-0.5} />
+          <Model url={town("stall-green")} position={[-1.5, 0, h / 2 - 0.5]} />
+          <Model url={town("stall-red")} position={[1.5, 0, h / 2 - 0.5]} />
+          <Model url={town("banner-green")} position={[-0.9, 0, h / 2 - 1]} />
+        </group>
+      );
+    case "shippingBin":
+      return <Model url={model("survival", "chest")} position={[0, 0.12, -0.15]} scale={3} />;
+    case "fence":
+      return <Model url={model("nature", "fence_simple")} position={[0, 0, 0.47]} scale={[1, 1.5, 1]} />;
+    case "pathStone":
+      return <Model url={model("nature", "path_stoneCircle")} position={[0, 0.01, 0]} />;
+    default:
+      return <Procedural b={b} />;
+  }
+}
+
 export function Buildings({ buildings }: { buildings: Building[] }) {
   return (
     <group>
@@ -183,7 +248,14 @@ export function Buildings({ buildings }: { buildings: Building[] }) {
         const [w, h] = BUILDING_SIZE[b.kind];
         return (
           <group key={b.id} position={[b.x + (w - 1) / 2, 0, b.y + (h - 1) / 2]}>
-            <Model b={b} />
+            <Suspense fallback={<Procedural b={b} />}>
+              <Fancy b={b} />
+            </Suspense>
+            {b.kind === "store" && (
+              <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} style={{ pointerEvents: "none" }}>
+                <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">🌱 Seed &amp; Soil Co.</div>
+              </Html>
+            )}
           </group>
         );
       })}
