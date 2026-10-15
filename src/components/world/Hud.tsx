@@ -7,6 +7,7 @@ import { ITEMS, WORLD_CROPS } from "@/world/items";
 import { previewAction } from "@/world/preview";
 import type { Tile, WorldState } from "@/world/types";
 import { WEATHER } from "@/world/weather";
+import { ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 const SEASON_ICON = { Spring: "🌸", Summer: "☀️", Fall: "🍂", Winter: "❄️" };
@@ -72,7 +73,7 @@ export function Hotbar() {
               i === selected ? "bg-sun ring-2 ring-white" : "bg-card/90 hover:bg-white"
             }`}
           >
-            <span aria-hidden>{s ? ITEMS[s.item].icon : ""}</span>
+            {s && <ItemIcon id={s.item} />}
             <span className="absolute left-1 top-0 text-[10px] font-black text-muted">{(i + 1) % 10}</span>
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black text-ink">{s.qty}</span>}
           </button>

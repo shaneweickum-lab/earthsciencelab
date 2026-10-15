@@ -43,6 +43,8 @@ export interface ItemDef {
   desc: string;
   crop?: CropId;
   building?: BuildingKind;
+  /** A picture icon in public/icons (rendered from the Kenney models), used instead of the emoji when present. */
+  image?: string;
   /** Breaks organic certification when used. */
   notOrganic?: boolean;
 }
@@ -113,8 +115,11 @@ const produce: ItemDef[] = Object.values(WORLD_CROPS)
     desc: `Fresh ${CROPS[w.id].name.toLowerCase()} from your garden.`,
   }));
 
+/** Items with a picture icon made by `npm run assets`. */
+const IMAGE_ICONS = new Set(["pickaxe", "shovel", "wood", "crop_carrot", "crop_corn", "crop_squash", "kit_fence", "kit_flowerBed", "kit_pathStone"]);
+
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, i]),
+  [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, IMAGE_ICONS.has(i.id) ? { ...i, image: `/icons/${i.id}.png` } : i]),
 );
 
 export function item(id: string): ItemDef {
