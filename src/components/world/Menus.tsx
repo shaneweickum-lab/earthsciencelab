@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { dayOf, seasonOf, timeOfDay } from "@/world/clock";
-import { HOTBAR_SIZE, sleep, swapSlots, todayWeather, tomorrowWeather } from "@/world/engine";
+import { dayOf, formatDate, seasonLabel, timeOfDay } from "@/world/clock";
+import { HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
+import { formatTemp } from "@/world/settings";
 import { ITEMS } from "@/world/items";
 import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
 import { WEATHER } from "@/world/weather";
@@ -30,10 +31,14 @@ export function Modal({ title, icon, children, onClose, wide = false }: {
   );
 }
 
-/** Pick how your farmer looks. */
+/** Pick how your farmer looks, for the farm you're playing. */
 export function AvatarPicker() {
   const avatar = useWorld((s) => s.world!.avatar ?? DEFAULT_AVATAR);
   const update = useWorld((s) => s.update);
+  return <AvatarChoice value={avatar} onChange={(a) => update((w) => ({ ...w, avatar: a }))} />;
+}
+
+export function AvatarChoice({ value: avatar, onChange }: { value: string; onChange: (avatar: string) => void }) {
   return (
     <div role="radiogroup" aria-label="Choose your farmer" className="grid grid-cols-6 gap-1.5">
       {AVATARS.map((a) => (
@@ -42,7 +47,7 @@ export function AvatarPicker() {
           role="radio"
           aria-checked={a === avatar}
           aria-label={`Farmer ${a}`}
-          onClick={() => update((w) => ({ ...w, avatar: a }))}
+          onClick={() => onChange(a)}
           className={`aspect-square rounded-xl p-0.5 transition ${a === avatar ? "bg-sun ring-2 ring-soil" : "bg-paper hover:bg-white"}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -71,6 +76,10 @@ export function IntroLetter() {
         <p>
           Clear the weeds, test the soil, and feed it with compost and cover crops. Watch the sky, too: the weather decides more than
           you&apos;d think. Keep an eye out for the little creatures. Most of them are friends.
+        </p>
+        <p>
+          I left you carrot and clover seeds. They don&apos;t mind a chilly spring night. Save the beans and tomatoes for when the
+          nights stay above freezing.
         </p>
         <p>The folks at Seed &amp; Soil Co. will buy what you grow. Remember, organic produce sells for more.</p>
         <p className="text-right italic">Love, Grandma Rosa 🌻</p>
@@ -105,9 +114,8 @@ function Tip({ k, text }: { k: string; text: string }) {
 }
 
 export function HouseMenu() {
-  const { update, open, close, save, restart } = useWorld.getState();
+  const { update, open, close, save } = useWorld.getState();
   const minute = useWorld((s) => s.world!.minute);
-  const [confirm, setConfirm] = useState(false);
   const h = timeOfDay(minute) / 60;
   const goToBed = () => {
     update(sleep);
@@ -127,17 +135,7 @@ export function HouseMenu() {
           <div className="mt-2"><AvatarPicker /></div>
         </details>
         <p className="px-1 text-xs text-muted">Your farm saves itself every in-game hour and whenever you sleep.</p>
-        {!confirm ? (
-          <button className="mt-2 text-left text-xs font-bold text-danger underline" onClick={() => setConfirm(true)}>Start a brand-new farm…</button>
-        ) : (
-          <div className="rounded-xl bg-paper p-3 text-sm">
-            <p className="font-bold">Erase this farm and start over? This can&apos;t be undone.</p>
-            <div className="mt-2 flex gap-2">
-              <button className="btn btn-soil bg-danger py-1 text-sm" onClick={restart}>Yes, start over</button>
-              <button className="btn btn-ghost py-1 text-sm" onClick={() => setConfirm(false)}>Keep my farm</button>
-            </div>
-          </div>
-        )}
+        <button className="btn btn-ghost justify-start" onClick={() => open("pause")}>⚙️ Game settings &amp; main menu</button>
       </div>
     </Modal>
   );
@@ -146,23 +144,33 @@ export function HouseMenu() {
 export function TvForecast() {
   const w = useWorld((s) => s.world!);
   const open = useWorld((s) => s.open);
-  const today = WEATHER[todayWeather(w)];
-  const tomorrow = WEATHER[tomorrowWeather(w)];
+  const todayC = todayClimate(w);
+  const tomorrowC = tomorrowClimate(w);
+  const today = WEATHER[todayC.kind];
+  const tomorrow = WEATHER[tomorrowC.kind];
+  const u = w.settings.units;
   return (
     <Modal title="Weather Channel 4" icon="📺" onClose={() => open("house")}>
       <div className="space-y-4">
         <div className="rounded-2xl bg-[#1f3550] p-4 text-white">
-          <p className="text-xs font-bold uppercase tracking-widest text-sky-200">Tomorrow&apos;s forecast · {seasonOf(dayOf(w.minute) + 1)}</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-sky-200">Tomorrow&apos;s forecast · {formatDate(dayOf(w.minute) + 1, w.settings)} · {seasonLabel(dayOf(w.minute) + 1, w.settings)}</p>
           <p className="mt-1 flex items-center gap-3 font-display text-3xl font-black">
             <span aria-hidden>{tomorrow.icon}</span> {tomorrow.name}
           </p>
+          <p className="mt-1 font-display text-xl font-black">High {formatTemp(tomorrowC.high, u)} · Low {formatTemp(tomorrowC.low, u)}</p>
           <p className="mt-1 text-sky-100">{tomorrow.tv}</p>
         </div>
         <div className="rounded-xl bg-leaf-light p-3 text-sm">
           <p className="font-black">🔬 Weather science: {tomorrow.name.toLowerCase()}</p>
           <p className="mt-1">{tomorrow.science}</p>
         </div>
-        <p className="text-sm text-muted">Today: {today.icon} {today.name}. {today.science}</p>
+        <p className="text-sm text-muted">Today: {today.icon} {today.name}, high {formatTemp(todayC.high, u)}. {today.science}</p>
+        {w.settings.seasons && (
+          <p className="rounded-xl bg-paper p-3 text-sm">
+            <b>🌍 Why seasons?</b> Earth&apos;s axis is tilted. In summer your part of the world leans toward the Sun, so sunlight hits
+            more directly and days are longer. In winter sunlight comes in at a low slant and days are short, so it gets cold.
+          </p>
+        )}
       </div>
     </Modal>
   );
@@ -173,11 +181,14 @@ export function DaySummary() {
   const close = useWorld((s) => s.close);
   const log = w.log;
   const d = dayOf(w.minute);
-  const weather = WEATHER[todayWeather(w)];
+  const climate = todayClimate(w);
+  const weather = WEATHER[climate.kind];
   return (
     <Modal title={`Good morning! Day ${d}`} icon="🌅">
       <div className="space-y-3">
-        <p className="text-sm font-bold text-muted">{seasonOf(d)} · Today: {weather.icon} {weather.name}</p>
+        <p className="text-sm font-bold text-muted">
+          {formatDate(d, w.settings)} · {seasonLabel(d, w.settings)} · Today: {weather.icon} {weather.name}, high {formatTemp(climate.high, w.settings.units)}
+        </p>
         {log && log.earned > 0 && (
           <div className="rounded-xl bg-sun/20 p-3 text-center font-display text-2xl font-black">🪙 +{log.earned}</div>
         )}

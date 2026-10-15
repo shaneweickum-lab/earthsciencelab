@@ -2,23 +2,46 @@
 
 import { create } from "zustand";
 import { loadWorld, newWorld, saveWorld } from "@/world/engine";
+import { DEFAULT_SETTINGS, type GameSettings } from "@/world/settings";
 import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "bag" | "journal" | "summary";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "bag" | "journal" | "summary" | "pause";
+
+export type Screen = "menu" | "setup" | "playing";
 
 interface WorldStore {
   world: WorldState | null;
   menu: Menu;
-  /** Load the saved farm, or start a new one. */
+  screen: Screen;
+  /** The saved farm, for the main menu's Continue button. */
+  saved: WorldState | null;
+  /** Show the main menu and look for a saved farm. */
   init: () => void;
+  /** Start: a new farm with the recommended settings. */
+  startQuick: () => void;
+  /** New Game: a new farm with the settings picked on the setup screen. */
+  startNew: (settings: GameSettings, avatar: string) => void;
+  continueGame: () => void;
+  openSetup: () => void;
+  backToMenu: () => void;
+  /** Save, then return to the main menu. */
+  quitToMenu: () => void;
+  updateSettings: (patch: Partial<GameSettings>) => void;
   /** Apply an engine function to the world. */
   update: (fn: (w: WorldState) => WorldState) => void;
   open: (menu: Menu) => void;
   close: () => void;
   save: () => void;
-  restart: () => void;
+}
+
+function readSave(): WorldState | null {
+  try {
+    return loadWorld(localStorage.getItem(SAVE_KEY));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -33,6 +56,12 @@ export const runtime = {
   actionAt: 0,
 };
 
+/**
+ * A container for 3D labels (drei <Html>) that outlives the canvas, so quitting to the menu
+ * doesn't try to remove labels from a canvas wrapper that's already gone.
+ */
+export const labelLayer: { current: HTMLDivElement | null } = { current: null };
+
 function withRuntime(w: WorldState): WorldState {
   return { ...w, player: { ...runtime.player } };
 }
@@ -41,42 +70,52 @@ function syncRuntime(w: WorldState) {
   runtime.player = { ...w.player };
 }
 
-export const useWorld = create<WorldStore>((set, get) => ({
-  world: null,
-  menu: null,
-  init: () => {
-    let saved: WorldState | null = null;
-    try {
-      saved = loadWorld(localStorage.getItem(SAVE_KEY));
-    } catch {
-      saved = null;
-    }
-    const world = saved ?? newWorld();
+export const useWorld = create<WorldStore>((set, get) => {
+  const begin = (world: WorldState) => {
     syncRuntime(world);
-    set({ world, menu: world.introSeen ? null : "intro" });
-  },
-  update: (fn) => {
-    const w = get().world;
-    if (!w) return;
-    const next = fn(withRuntime(w));
-    syncRuntime(next);
-    set({ world: next });
-  },
-  open: (menu) => set({ menu }),
-  close: () => set({ menu: null }),
-  save: () => {
-    const w = get().world;
-    if (!w) return;
-    try {
-      localStorage.setItem(SAVE_KEY, saveWorld(withRuntime(w)));
-    } catch {
-      // Storage can be full or blocked; the game keeps running.
-    }
-  },
-  restart: () => {
-    const world = newWorld();
-    syncRuntime(world);
-    set({ world, menu: "intro" });
+    runtime.keys.clear();
+    set({ world, screen: "playing", menu: world.introSeen ? null : "intro" });
     get().save();
-  },
-}));
+  };
+  return {
+    world: null,
+    menu: null,
+    screen: "menu",
+    saved: null,
+    init: () => set({ saved: readSave(), screen: "menu", world: null, menu: null }),
+    startQuick: () => begin(newWorld(undefined, DEFAULT_SETTINGS)),
+    startNew: (settings, avatar) => begin({ ...newWorld(undefined, settings), avatar }),
+    continueGame: () => {
+      const saved = readSave();
+      if (saved) begin(saved);
+    },
+    openSetup: () => set({ screen: "setup" }),
+    backToMenu: () => set({ screen: "menu" }),
+    quitToMenu: () => {
+      get().save();
+      set({ world: null, menu: null, screen: "menu", saved: readSave() });
+    },
+    updateSettings: (patch) => {
+      const w = get().world;
+      if (w) set({ world: { ...w, settings: { ...w.settings, ...patch } } });
+    },
+    update: (fn) => {
+      const w = get().world;
+      if (!w) return;
+      const next = fn(withRuntime(w));
+      syncRuntime(next);
+      set({ world: next });
+    },
+    open: (menu) => set({ menu }),
+    close: () => set({ menu: null }),
+    save: () => {
+      const w = get().world;
+      if (!w) return;
+      try {
+        localStorage.setItem(SAVE_KEY, saveWorld(withRuntime(w)));
+      } catch {
+        // Storage can be full or blocked; the game keeps running.
+      }
+    },
+  };
+});

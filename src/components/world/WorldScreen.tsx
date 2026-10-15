@@ -7,9 +7,10 @@ import { useElementsPanel } from "@/store/elementsPanel";
 import { useProgress } from "@/store/progress";
 import { Hotbar, Messages, StatusBar, TileInspector } from "./Hud";
 import { JournalBook } from "./JournalBook";
+import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
 import { Bag, DaySummary, HouseMenu, IntroLetter, TvForecast } from "./Menus";
 import { ShippingMenu, StoreMenu } from "./Shop";
-import { runtime, useWorld } from "./useWorld";
+import { labelLayer, runtime, useWorld } from "./useWorld";
 
 const WorldScene = dynamic(() => import("./scene/WorldScene"), {
   ssr: false,
@@ -56,11 +57,16 @@ function useGameKeys() {
       if (useElementsPanel.getState().isOpen) return;
       const k = e.key.toLowerCase();
       const st = useWorld.getState();
+      if (st.screen !== "playing") return;
       // The game owns E (and other keys) while you play: mark them handled so site shortcuts skip them.
       if (st.menu) {
         if (k === "e" || k === "j" || k === "i") e.preventDefault();
         const toggles = (k === "i" && st.menu === "bag") || (k === "j" && st.menu === "journal");
         if ((k === "escape" || toggles) && st.menu !== "intro" && st.menu !== "summary") st.close();
+        return;
+      }
+      if (k === "escape") {
+        st.open("pause");
         return;
       }
       if (MOVE[k]) {
@@ -163,7 +169,8 @@ function TouchControls() {
 }
 
 export function WorldScreen() {
-  const ready = useWorld((s) => s.world !== null);
+  const ready = useWorld((s) => s.world !== null && s.screen === "playing");
+  const screen = useWorld((s) => s.screen);
   const menu = useWorld((s) => s.menu);
   const init = useWorld((s) => s.init);
   const save = useWorld((s) => s.save);
@@ -187,10 +194,20 @@ export function WorldScreen() {
 
   return (
     <div className="relative h-[78vh] min-h-[520px] w-full select-none overflow-hidden rounded-3xl bg-[#0f1a2e] shadow-xl" aria-label="Soil & Sprout game">
+      <div ref={(el) => { labelLayer.current = el; }} className="pointer-events-none absolute inset-0 z-[5]" />
+      {screen === "menu" && <MainMenu />}
+      {screen === "setup" && <NewGameSetup />}
       {ready && <WorldScene />}
       {ready && (
         <>
-          <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-2">
+          <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col items-start gap-2">
+            <button
+              className="pointer-events-auto rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white"
+              onClick={() => open("pause")}
+              aria-label="Pause and settings"
+            >
+              ☰ Menu <kbd className="text-xs text-muted">Esc</kbd>
+            </button>
             <Messages />
           </div>
           <div className="pointer-events-none absolute right-3 top-3 z-10">
@@ -215,6 +232,7 @@ export function WorldScreen() {
           {menu === "store" && <StoreMenu />}
           {menu === "shipping" && <ShippingMenu />}
           {menu === "journal" && <JournalBook />}
+          {menu === "pause" && <PauseMenu />}
         </>
       )}
     </div>

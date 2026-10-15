@@ -1,14 +1,15 @@
 import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
-import { ITEMS, item, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, item, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
 import { BUILDING_SIZE, createMap, doorOf, FARM, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
 import type { Building, BuildingKind, Dir, Slot, Tile, WorldState } from "./types";
-import { isWet, WEATHER, weatherFor } from "./weather";
+import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
+import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 1;
+export const WORLD_VERSION = 2;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -19,13 +20,14 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 
 // ───────────────────────── setup ─────────────────────────
 
-export function newWorld(seed = Date.now() % 2147483647): WorldState {
+export function newWorld(seed = Date.now() % 2147483647, settings?: Partial<GameSettings>): WorldState {
+  const cfg = normalizeSettings(settings);
   const { tiles, buildings } = createMap(seed);
   const inventory: (Slot | null)[] = Array(INVENTORY_SIZE).fill(null);
   const start: Slot[] = [
     { item: "hoe", qty: 1 }, { item: "can", qty: 1 }, { item: "scythe", qty: 1 }, { item: "axe", qty: 1 },
     { item: "pickaxe", qty: 1 }, { item: "shovel", qty: 1 }, { item: "ring", qty: 1 },
-    { item: "seed_beans", qty: 6 }, { item: "seed_carrot", qty: 6 }, { item: "labKit", qty: 3 },
+    { item: "seed_carrot", qty: 6 }, { item: "seed_clover", qty: 6 }, { item: "labKit", qty: 3 },
   ];
   start.forEach((s, i) => (inventory[i] = s));
   return {
@@ -47,10 +49,11 @@ export function newWorld(seed = Date.now() % 2147483647): WorldState {
     critters: [],
     journal: [],
     harvests: 0,
-    weather: { 1: weatherFor(seed, 1), 2: weatherFor(seed, 2) },
+    weather: { 1: weatherFor(seed, 1, cfg), 2: weatherFor(seed, 2, cfg) },
     log: null,
     messages: [],
     introSeen: false,
+    settings: cfg,
   };
 }
 
@@ -60,14 +63,36 @@ export function day(state: WorldState) {
   return dayOf(state.minute);
 }
 
+/** The weather (sky, high, low) for a day. */
+export function weatherOn(state: WorldState, d: number): DayWeather {
+  return state.weather[d] ?? weatherFor(state.seed, d, state.settings);
+}
+
+export function todayClimate(state: WorldState): DayWeather {
+  return weatherOn(state, day(state));
+}
+
+export function tomorrowClimate(state: WorldState): DayWeather {
+  return weatherOn(state, day(state) + 1);
+}
+
 export function todayWeather(state: WorldState) {
-  const d = day(state);
-  return state.weather[d] ?? weatherFor(state.seed, d);
+  return todayClimate(state).kind;
 }
 
 export function tomorrowWeather(state: WorldState) {
-  const d = day(state) + 1;
-  return state.weather[d] ?? weatherFor(state.seed, d);
+  return tomorrowClimate(state).kind;
+}
+
+/** Today's season (always a mild growing season when seasons are off). */
+export function seasonNow(state: WorldState) {
+  return seasonOf(day(state), state.settings);
+}
+
+/** Today's average temperature, °F. Greenhouses trap the sun's heat and stay much warmer. */
+export function meanTempF(state: WorldState, greenhouse = false) {
+  const w = todayClimate(state);
+  return (w.high + w.low) / 2 + (greenhouse ? 18 : 0);
 }
 
 export function tileAt(state: WorldState, x: number, y: number): Tile | null {
@@ -162,8 +187,14 @@ function setTile(state: WorldState, x: number, y: number, fn: (t: Tile) => Tile)
 }
 
 function spend(state: WorldState, energy: number): WorldState | null {
+  if (!on(state, "energy")) return state;
   if (state.energy < energy) return null;
   return { ...state, energy: state.energy - energy };
+}
+
+/** Which soil numbers the player can see on a tile. With "Hidden soil" off, everything is visible. */
+export function knownSoil(state: WorldState, t: Tile): Tile["known"] {
+  return on(state, "soilTesting") ? t.known : { lab: true, shovel: true, water: true };
 }
 
 export function soilQuality(t: Tile): number {
@@ -199,31 +230,48 @@ export function growthFactor(state: WorldState, x: number, y: number): { factor:
   if (!c || c.dead) return { factor: 0, reasons: [] };
   const wc = WORLD_CROPS[c.id];
   const reasons: string[] = [];
-  let f = 0.55 + soilQuality(t) / 110;
-  const season = seasonOf(day(state));
-  if (!t.greenhouse && !wc.seasons.includes(season)) return { factor: 0, reasons: [`Out of season: ${CROPS[c.id].name} doesn't grow outdoors in ${season}.`] };
-  if (t.moisture < 15) {
+  // Soil quality only counts the parts of the soil that are switched on.
+  let f = on(state, "nutrients") ? 0.55 + soilQuality(t) / 110 : 1;
+  const season = seasonNow(state);
+  if (on(state, "plantingSeasons") && state.settings.seasons && !t.greenhouse && !wc.seasons.includes(season))
+    return { factor: 0, reasons: [`Out of season: ${CROPS[c.id].name} doesn't grow outdoors in ${season}.`] };
+  if (on(state, "watering") && t.moisture < 15) {
     f *= 0.15;
     reasons.push("Thirsty! Dry soil nearly stops growth. Water it.");
   }
+  if (on(state, "waterlogging") && t.moisture >= 90 && t.soil.structure < 40) {
+    f *= 0.5;
+    reasons.push("Waterlogged! Soggy, packed soil has no air for roots. Better structure (compost) helps it drain.");
+  }
   const phOff = Math.abs(t.soil.ph - 6.5);
-  if (phOff > 0.8) {
+  if (on(state, "ph") && phOff > 0.8) {
     f *= Math.max(0.5, 1 - 0.2 * phOff);
     reasons.push(t.soil.ph < 6.5 ? "Soil is too acidic, so some nutrients are locked up." : "Soil is too alkaline, so some nutrients are locked up.");
   }
-  if (t.weeds) {
+  if (on(state, "weeds") && t.weeds) {
     f *= 0.5;
     reasons.push("Weeds are stealing water and nutrients.");
   }
-  if (c.pests) {
+  if (on(state, "pests") && c.pests) {
     f *= 0.6;
     reasons.push("Pests are chewing the leaves.");
   }
-  if (near(state, x, y, ["beehive"], 5)) {
+  if (on(state, "temperature")) {
+    const temp = meanTempF(state, t.greenhouse);
+    const tf = tempFactor(wc.type, temp);
+    if (tf < 1) {
+      f *= tf;
+      const name = CROPS[c.id].name.toLowerCase();
+      reasons.push(tf === 0
+        ? `Too cold for ${wc.type}-season ${name} to grow at all (about ${formatTemp(temp, state.settings.units)} today).`
+        : temp > 80 ? `Heat stress: ${name} slows down in hot weather.` : `Chilly: ${wc.type}-season ${name} grows slowly at about ${formatTemp(temp, state.settings.units)}.`);
+    }
+  }
+  if (on(state, "pollinators") && near(state, x, y, ["beehive"], 5)) {
     f *= 1.1;
     reasons.push("Bees nearby help pollinate.");
   }
-  if (t.soil.nutrients < 20) reasons.push("Nutrients are low. Try compost or a legume like beans or clover.");
+  if (on(state, "nutrients") && t.soil.nutrients < 20) reasons.push("Nutrients are low. Try compost or a legume like beans or clover.");
   return { factor: Math.min(1.5, f), reasons };
 }
 
@@ -236,18 +284,17 @@ function hourly(state: WorldState): WorldState {
     const outdoors = !t.greenhouse;
     let moisture = t.moisture;
     if (outdoors && wet) moisture = clamp(moisture + (weather === "storm" ? 18 : 12));
-    else moisture = clamp(moisture - (outdoors ? dry : 1.3) * (t.mulch ? 0.5 : 1) * (1.35 - t.soil.water / 100));
+    else if (on(state, "watering")) moisture = clamp(moisture - (outdoors ? dry : 1.3) * (t.mulch ? 0.5 : 1) * (1.35 - t.soil.water / 100));
     let soil = t.soil;
     const covered = t.mulch || (t.crop && !t.crop.dead && CROPS[t.crop.id].coversSoil);
-    if (outdoors && weather === "storm" && t.tilled && !covered) {
+    if (on(state, "erosion") && outdoors && weather === "storm" && t.tilled && !covered) {
       soil = { ...soil, structure: clamp(soil.structure - 0.25), om: clamp(soil.om - 0.12), nutrients: clamp(soil.nutrients - 0.25) };
     }
     let crop = t.crop;
     if (crop && !crop.dead && crop.growth < 1) {
       const x = i % W, y = Math.floor(i / W);
       const { factor } = growthFactor({ ...state }, x, y);
-      const wc = WORLD_CROPS[crop.id];
-      const days = crop.harvests > 0 && wc.regrow ? wc.regrow : wc.days;
+      const days = cropDays(crop.id, state.settings.daysPerMonth, crop.harvests > 0);
       crop = { ...crop, growth: Math.min(1, crop.growth + factor / (days * 24)) };
     }
     if (moisture === t.moisture && soil === t.soil && crop === t.crop) return t;
@@ -270,15 +317,16 @@ function rollFor(state: WorldState, salt: number) {
 /** Everything that happens overnight, ending at 6 AM on `newDay`. */
 function startDay(prev: WorldState, newDay: number): WorldState {
   let state: WorldState = { ...prev, minute: startOfDay(newDay) };
-  const weather = {
-    ...state.weather,
-    [newDay]: state.weather[newDay] ?? weatherFor(state.seed, newDay),
-    [newDay + 1]: state.weather[newDay + 1] ?? weatherFor(state.seed, newDay + 1),
-  };
+  // Keep about a month of weather history so saves stay small.
+  const weather: WorldState["weather"] = {};
+  for (const [k, v] of Object.entries(state.weather)) if (Number(k) >= newDay - 30) weather[Number(k)] = v;
+  weather[newDay] = state.weather[newDay] ?? weatherFor(state.seed, newDay, state.settings);
+  weather[newDay + 1] = state.weather[newDay + 1] ?? weatherFor(state.seed, newDay + 1, state.settings);
   state = { ...state, weather };
-  const today = weather[newDay];
-  const season = seasonOf(newDay);
-  const newSeason = seasonOf(newDay - 1) !== season;
+  const climate = weather[newDay];
+  const today = climate.kind;
+  const season = seasonOf(newDay, state.settings);
+  const newSeason = state.settings.seasons && seasonOf(newDay - 1, state.settings) !== season;
   const rand = rollFor(state, 101);
   const notes: string[] = [];
 
@@ -295,7 +343,7 @@ function startDay(prev: WorldState, newDay: number): WorldState {
   const tiles = state.tiles.map((t, i) => {
     const x = i % W, y = Math.floor(i / W);
     let next = t;
-    if (t.ground === "farm" || t.greenhouse) {
+    if (on(state, "soilLife") && (t.ground === "farm" || t.greenhouse)) {
       const soil = { ...t.soil };
       soil.life = clamp(soil.life + (soil.om + 10 - soil.life) * 0.05);
       soil.structure = clamp(soil.structure + (soil.life - soil.structure) * 0.03);
@@ -305,16 +353,16 @@ function startDay(prev: WorldState, newDay: number): WorldState {
     const c = next.crop;
     if (c && !c.dead && !next.greenhouse) {
       const wc = WORLD_CROPS[c.id];
-      if (newSeason && !wc.seasons.includes(season)) {
+      if (on(state, "plantingSeasons") && newSeason && !wc.seasons.includes(season)) {
         next = { ...next, crop: { ...c, dead: true } };
         killedSeason++;
-      } else if ((today === "frost" || today === "snow") && !wc.hardy) {
+      } else if (on(state, "frost") && climate.low <= wc.killF) {
         next = { ...next, crop: { ...c, dead: true } };
         killedFrost++;
       }
     }
     // Weeds sprout on uncovered farm soil.
-    if (next.ground === "farm" && !next.greenhouse && !next.weeds && !next.obstacle && !next.mulch && !buildingAt(state, x, y)) {
+    if (on(state, "weeds") && next.ground === "farm" && !next.greenhouse && !next.weeds && !next.obstacle && !next.mulch && !buildingAt(state, x, y)) {
       const covered = next.crop && !next.crop.dead && CROPS[next.crop.id].coversSoil;
       const chance = season === "Winter" ? 0.01 : covered ? 0 : next.crop ? 0.05 : next.tilled ? 0.08 : 0.12;
       if (rand() < chance) {
@@ -324,9 +372,10 @@ function startDay(prev: WorldState, newDay: number): WorldState {
     }
     // Pests find crops grown in the same family again and again.
     const cc = next.crop;
-    if (cc && !cc.dead && !cc.pests) {
+    if (on(state, "pests") && cc && !cc.dead && !cc.pests) {
       const guarded = near(state, x, y, ["bugHotel", "birdHouse"], 6);
-      const chance = (next.familyStreak >= 1 ? 0.2 : 0.04) * (guarded ? 0.25 : 1);
+      const repeat = on(state, "rotation") && next.familyStreak >= 1;
+      const chance = (repeat ? 0.2 : 0.04) * (guarded ? 0.25 : 1);
       if (rand() < chance) {
         next = { ...next, crop: { ...cc, pests: true } };
         newPests++;
@@ -336,7 +385,7 @@ function startDay(prev: WorldState, newDay: number): WorldState {
   });
 
   // Buildings work overnight.
-  const yesterdayWet = isWet(state.weather[newDay - 1] ?? "sunny");
+  const yesterdayWet = isWet(state.weather[newDay - 1]?.kind ?? "sunny");
   const buildings = state.buildings.map((b) => {
     if (b.kind === "composter" && (b.data.fiber ?? 0) >= 5 && b.data.startedDay !== undefined && newDay - b.data.startedDay >= 2) {
       const made = Math.floor((b.data.fiber ?? 0) / 5);
@@ -355,11 +404,13 @@ function startDay(prev: WorldState, newDay: number): WorldState {
     return b;
   });
 
-  if (killedFrost) notes.push(`${today === "snow" ? "Snow" : "Frost"} killed ${killedFrost} tender crop${killedFrost > 1 ? "s" : ""} outside. A greenhouse protects plants from frost.`);
+  if (killedFrost) notes.push(`It dropped to ${formatTemp(climate.low, state.settings.units)} overnight, and the cold killed ${killedFrost} tender crop${killedFrost > 1 ? "s" : ""} outside. A greenhouse protects plants from frost.`);
   if (killedSeason) notes.push(`${killedSeason} crop${killedSeason > 1 ? "s" : ""} died because ${season} arrived and they don't grow this season.`);
   if (newWeeds) notes.push(`${newWeeds} new weed${newWeeds > 1 ? "s" : ""} sprouted on uncovered soil. Mulch and cover crops keep weeds down.`);
   if (newPests) notes.push(`Pests found ${newPests} crop${newPests > 1 ? "s" : ""}. Rotating plant families and a bug hotel or bird house help.`);
-  notes.push(`Tomorrow's forecast: ${WEATHER[weather[newDay + 1]].name}.`);
+  if (newSeason) notes.unshift(`${season} begins today!`);
+  const tomorrow = weather[newDay + 1];
+  notes.push(`Tomorrow's forecast: ${WEATHER[tomorrow.kind].name}, high ${formatTemp(tomorrow.high, state.settings.units)}, low ${formatTemp(tomorrow.low, state.settings.units)}.`);
 
   state = {
     ...state,
@@ -371,7 +422,7 @@ function startDay(prev: WorldState, newDay: number): WorldState {
   };
   state = spawnCritters(state, newDay);
   // Weather you live through goes in the journal.
-  const yesterday = state.weather[newDay - 1];
+  const yesterday = state.weather[newDay - 1]?.kind;
   if (today === "sunny" && yesterday && isWet(yesterday)) {
     state = discover(state, "rainbow");
     state = { ...state, log: { ...state.log!, notes: ["🌈 A rainbow arched over the farm this morning: sunlight behind you, the last raindrops in front.", ...state.log!.notes] } };
@@ -394,7 +445,8 @@ export function tick(state: WorldState, minutes: number): WorldState {
     left -= step;
     if (step === toHour) s = hourly(s);
     if (timeOfDay(s.minute) >= DAY_END) {
-      s = faint(s);
+      // With "Bedtime" off, the clock waits at 2 AM until you go to bed.
+      s = on(s, "bedtime") ? faint(s) : { ...s, minute: s.minute - (timeOfDay(s.minute) - DAY_END) - 1 };
       break;
     }
   }
@@ -485,15 +537,16 @@ export function applyTool(state: WorldState): WorldState {
       if (t.tilled) return say(state, "This soil is already tilled.");
       return say(setTile(paid, x, y, (tt) => ({
         ...tt, tilled: true,
-        soil: { ...tt.soil, structure: clamp(tt.soil.structure - 2), om: clamp(tt.soil.om - 0.5), life: clamp(tt.soil.life - 1) },
-      })), "Tilled! (Each tilling breaks soil crumbs a little, so only till where you'll plant.)");
+        soil: on(state, "tillage") ? { ...tt.soil, structure: clamp(tt.soil.structure - 2), om: clamp(tt.soil.om - 0.5), life: clamp(tt.soil.life - 1) } : tt.soil,
+      })), on(state, "tillage") ? "Tilled! (Each tilling breaks soil crumbs a little, so only till where you'll plant.)" : "Tilled!");
     }
     case "can": {
       if (t.ground === "water") return say({ ...paid, water: state.canSize }, "Filled your watering can at the pond.");
       if (b?.kind === "rainBarrel") return refillFromBarrel(paid, b);
       if (state.water <= 0) return say(state, "Your watering can is empty. Refill it at the pond or a rain barrel.");
       if (!t.tilled) return say(state, "Water tilled soil or crops.");
-      return setTile({ ...paid, water: state.water - 1 }, x, y, (tt) => ({ ...tt, moisture: 100 }));
+      // Each pour soaks the soil part way; keep pouring and it gets waterlogged.
+      return setTile({ ...paid, water: state.water - 1 }, x, y, (tt) => ({ ...tt, moisture: clamp(tt.moisture + 45) }));
     }
     case "scythe": {
       if (t.weeds) {
@@ -557,8 +610,8 @@ export function canPlantHere(state: WorldState, x: number, y: number, crop: Crop
   if (!t.tilled) return "Till the soil with the hoe first.";
   if (t.crop) return "Something is already planted here.";
   if (t.weeds) return "Cut the weeds first.";
-  const season = seasonOf(day(state));
-  if (!t.greenhouse && !WORLD_CROPS[crop].seasons.includes(season))
+  const season = seasonNow(state);
+  if (on(state, "plantingSeasons") && state.settings.seasons && !t.greenhouse && !WORLD_CROPS[crop].seasons.includes(season))
     return `${CROPS[crop].name} won't grow outdoors in ${season}. Try the greenhouse, or plant in ${WORLD_CROPS[crop].seasons.join(" or ")}.`;
   return null;
 }
@@ -576,9 +629,10 @@ export function plant(state: WorldState, x: number, y: number, crop: CropId): Wo
     familyStreak: same ? tt.familyStreak + 1 : 0,
     soil: same ? tt.soil : { ...tt.soil, life: clamp(tt.soil.life + 2) },
   }));
-  return say(out, same
+  const rotation = on(state, "rotation");
+  return say(out, same && rotation
     ? `Planted ${CROPS[crop].name}. ⚠️ Same plant family as last time here: pests love that.`
-    : `Planted ${CROPS[crop].name}.${t.lastFamily ? " Good rotation!" : ""}`);
+    : `Planted ${CROPS[crop].name}.${t.lastFamily && rotation ? " Good rotation!" : ""}`);
 }
 
 export function applyAmendment(state: WorldState, x: number, y: number, id: string): WorldState {
@@ -668,7 +722,9 @@ export function harvest(state: WorldState, x: number, y: number): WorldState {
   const wc = WORLD_CROPS[c.id];
   const applyGives = (soil: Tile["soil"]) => ({
     ...soil,
-    nutrients: clamp(soil.nutrients - crop.nutrientUse * 1.2 - (t.familyStreak >= 1 ? 2 : 0) + (crop.gives.nutrients ?? 0)),
+    nutrients: on(state, "nutrients")
+      ? clamp(soil.nutrients - crop.nutrientUse * 1.2 - (on(state, "rotation") && t.familyStreak >= 1 ? 2 : 0) + (crop.gives.nutrients ?? 0))
+      : soil.nutrients,
     om: clamp(soil.om + (crop.gives.om ?? 0)),
     structure: clamp(soil.structure + (crop.gives.structure ?? 0)),
     life: clamp(soil.life + (crop.gives.life ?? 0)),
@@ -681,7 +737,7 @@ export function harvest(state: WorldState, x: number, y: number): WorldState {
   const qty = 1 + (q > 50 ? 1 : 0) + (q > 70 ? 1 : 0) - (c.pests ? 1 : 0);
   const got = addItem(state, `crop_${c.id}`, Math.max(1, qty));
   if (!got) return say(state, "Your bag is full.");
-  const regrows = wc.regrow && c.harvests < 3;
+  const regrows = !!wc.regrowDays && c.harvests < 3;
   const s = setTile(got, x, y, (tt) => ({
     ...tt,
     crop: regrows ? { ...c, growth: 0, harvests: c.harvests + 1 } : null,
@@ -853,6 +909,18 @@ export function swapSlots(state: WorldState, a: number, b: number): WorldState {
   return { ...state, inventory: inv };
 }
 
+/** Version 1 saves had no settings and stored weather as a plain label. */
+function migrateV1(old: WorldState): WorldState {
+  const settings = normalizeSettings(undefined);
+  const d = dayOf(old.minute);
+  return {
+    ...old,
+    version: WORLD_VERSION,
+    settings,
+    weather: { [d]: weatherFor(old.seed, d, settings), [d + 1]: weatherFor(old.seed, d + 1, settings) },
+  };
+}
+
 export function saveWorld(state: WorldState): string {
   return JSON.stringify(state);
 }
@@ -861,7 +929,9 @@ export function loadWorld(raw: string | null): WorldState | null {
   if (!raw) return null;
   try {
     const s = JSON.parse(raw) as WorldState;
-    return s.version === WORLD_VERSION && Array.isArray(s.tiles) && s.tiles.length === W * H ? s : null;
+    if (!Array.isArray(s.tiles) || s.tiles.length !== W * H) return null;
+    if (s.version === 1) return migrateV1(s);
+    return s.version === WORLD_VERSION ? { ...s, settings: normalizeSettings(s.settings) } : null;
   } catch {
     return null;
   }

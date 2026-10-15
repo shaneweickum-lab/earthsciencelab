@@ -1,5 +1,5 @@
 import { nextRandom } from "@/game/rng";
-import { seasonOf } from "./clock";
+import { seasonOf, yearFraction, type Calendar } from "./clock";
 import type { Season, WeatherId } from "./types";
 
 export const WEATHER: Record<WeatherId, { name: string; icon: string; tv: string; science: string }> = {
@@ -37,25 +37,83 @@ export const WEATHER: Record<WeatherId, { name: string; icon: string; tv: string
   },
 };
 
-const WEIGHTS: Record<Season, [WeatherId, number][]> = {
+type Sky = "sunny" | "cloudy" | "rain" | "storm" | "fog";
+
+const WEIGHTS: Record<Season, [Sky, number][]> = {
   Spring: [["sunny", 4], ["cloudy", 2], ["rain", 3], ["storm", 1], ["fog", 1]],
-  Summer: [["sunny", 5], ["cloudy", 1], ["rain", 2], ["storm", 2], ["heat", 2]],
-  Fall: [["sunny", 3], ["cloudy", 3], ["rain", 3], ["fog", 2], ["frost", 1]],
-  Winter: [["sunny", 2], ["cloudy", 3], ["snow", 3], ["frost", 3]],
+  Summer: [["sunny", 6], ["cloudy", 1], ["rain", 2], ["storm", 2]],
+  Fall: [["sunny", 3], ["cloudy", 3], ["rain", 3], ["fog", 2]],
+  Winter: [["sunny", 3], ["cloudy", 3], ["rain", 3], ["fog", 1]],
 };
 
-/** Deterministic weather for a day. Day 1 is always sunny so new players can learn in peace. */
-export function weatherFor(seed: number, day: number): WeatherId {
-  if (day === 1) return "sunny";
-  const w = WEIGHTS[seasonOf(day)];
-  const total = w.reduce((s, [, n]) => s + n, 0);
-  let [r] = nextRandom((seed ^ (day * 2654435761)) >>> 0);
-  r *= total;
-  for (const [id, n] of w) {
-    r -= n;
-    if (r < 0) return id;
+/** The year-round mix when seasons are off. */
+const MILD: [Sky, number][] = [["sunny", 5], ["cloudy", 2], ["rain", 3], ["storm", 1], ["fog", 1]];
+
+/** How far the high and low swing from the day's average. Clouds and rain keep days and nights closer together. */
+const RANGE: Record<Sky, number> = { sunny: 11, cloudy: 7, rain: 6, storm: 8, fog: 5 };
+
+export interface DayWeather {
+  kind: WeatherId;
+  /** Daytime high and nighttime low, °F. */
+  high: number;
+  low: number;
+}
+
+/**
+ * Average temperature (°F) through the year for a temperate farm: coldest in mid-January (about 30°F)
+ * and warmest in late July (about 78°F), because sunlight is lower and days are shorter in winter.
+ * `f` is the fraction of the year since the first day of spring.
+ */
+export function seasonalMeanF(f: number): number {
+  return 54 + 24 * Math.sin(2 * Math.PI * f - 0.52);
+}
+
+function rand(seed: number, day: number, salt: number) {
+  let s = (seed ^ Math.imul(day, 2654435761) ^ salt) >>> 0;
+  return () => {
+    const [v, n] = nextRandom(s);
+    s = n;
+    return v;
+  };
+}
+
+/**
+ * Deterministic weather for a day: the sky, then temperatures, then what falls.
+ * Rain on a day that stays near freezing falls as snow; a clear night below freezing brings frost.
+ * Day 1 is always a mild, sunny day so new players can learn in peace.
+ */
+export function weatherFor(seed: number, day: number, cal: Calendar): DayWeather {
+  if (day === 1) return { kind: "sunny", high: cal.seasons ? 64 : 74, low: cal.seasons ? 42 : 58 };
+  const r = rand(seed, day, 0x5ea);
+  const weights = cal.seasons ? WEIGHTS[seasonOf(day, cal)] : MILD;
+  const total = weights.reduce((sum, [, n]) => sum + n, 0);
+  let pick = r() * total;
+  let sky: Sky = weights[0][0];
+  for (const [id, n] of weights) {
+    pick -= n;
+    if (pick < 0) {
+      sky = id;
+      break;
+    }
   }
-  return w[0][0];
+  const noise = (r() - 0.5) * 16;
+  const mean = cal.seasons ? seasonalMeanF(yearFraction(day, cal)) + noise : 70 + noise * 0.5;
+  const range = cal.seasons ? RANGE[sky] : Math.min(RANGE[sky], 8);
+  const high = Math.round(mean + range);
+  const low = Math.round(mean - range);
+  let kind: WeatherId = sky;
+  if ((sky === "rain" || sky === "storm") && high <= 34) kind = "snow";
+  else if (sky !== "rain" && sky !== "storm" && low <= 32) kind = "frost";
+  else if (sky === "sunny" && high >= 92) kind = "heat";
+  return { kind, high, low };
+}
+
+/** Temperature at a time of day: coolest around 6 AM, warmest around 3 PM. */
+export function tempAt(w: DayWeather, minuteOfDay: number): number {
+  const h = (minuteOfDay % 1440) / 60;
+  const t = h >= 6 && h <= 15 ? (h - 6) / 9 : h > 15 ? 1 - (h - 15) / 15 : 1 - (h + 9) / 15;
+  const smooth = (1 - Math.cos(Math.PI * Math.max(0, Math.min(1, t)))) / 2;
+  return w.low + (w.high - w.low) * smooth;
 }
 
 export function isWet(w: WeatherId) {

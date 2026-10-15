@@ -4,7 +4,7 @@ import { Html, useAnimations, useGLTF } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { BufferAttribute, Color, LoopOnce, type AmbientLight, type DirectionalLight, type Group, type Mesh, type PointLight, type Points } from "three";
-import { daylight, dayOf, MS_PER_GAME_MINUTE, seasonOf, timeOfDay } from "@/world/clock";
+import { daylight, dayOf, msPerGameMinute, seasonOf, timeOfDay } from "@/world/clock";
 import { canPlace, DIRS, facingTile, movePlayer, placementFor, tick, todayWeather } from "@/world/engine";
 import { ITEMS } from "@/world/items";
 import { BUILDING_SIZE } from "@/world/map";
@@ -12,7 +12,7 @@ import { critterIcon, expireCritters } from "@/world/nature";
 import type { WeatherId, WorldState } from "@/world/types";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { DEFAULT_AVATAR } from "@/world/avatars";
-import { runtime, useWorld } from "../useWorld";
+import { labelLayer, runtime, useWorld } from "../useWorld";
 import { Buildings } from "./Buildings";
 import { Crops } from "./Crops";
 import { model } from "./models";
@@ -72,9 +72,10 @@ function GameLoop() {
     // Clock: game time only passes while you're playing.
     if (!paused) {
       acc.current += dt * 1000;
-      const minutes = Math.floor(acc.current / MS_PER_GAME_MINUTE);
+      const ms = msPerGameMinute(w.settings.speed);
+      const minutes = Math.floor(acc.current / ms);
       if (minutes > 0) {
-        acc.current -= minutes * MS_PER_GAME_MINUTE;
+        acc.current -= minutes * ms;
         const before = useWorld.getState().world!;
         store.update((s) => expireCritters(tick(s, minutes)));
         const after = useWorld.getState().world!;
@@ -310,7 +311,7 @@ function Critters({ critters }: { critters: WorldState["critters"] }) {
   return (
     <group>
       {critters.map((c) => (
-        <Html key={c.id} position={[c.x, 0.5, c.y]} center zIndexRange={[30, 0]} style={{ pointerEvents: "none" }}>
+        <Html key={c.id} position={[c.x, 0.5, c.y]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
           <div className="animate-bounce select-none text-2xl drop-shadow">{critterIcon(c.kind)}</div>
         </Html>
       ))}
@@ -322,7 +323,7 @@ function World() {
   const tiles = useWorld((s) => s.world!.tiles);
   const buildings = useWorld((s) => s.world!.buildings);
   const critters = useWorld((s) => s.world!.critters);
-  const season = useWorld((s) => seasonOf(dayOf(s.world!.minute)));
+  const season = useWorld((s) => seasonOf(dayOf(s.world!.minute), s.world!.settings));
   const weather = useWorld((s) => todayWeather(s.world!));
   return (
     <>

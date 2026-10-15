@@ -67,9 +67,9 @@ function habitatOk(state: WorldState, x: number, y: number, habitat: Spawn["habi
 /** Each morning, a few creatures and fungi appear around the farm for the day. */
 export function spawnCritters(state: WorldState, day: number): WorldState {
   const rand = roll(state.seed ^ (day * 104729) ^ 0x5eed);
-  const season = seasonOf(day);
-  const today = state.weather[day] ?? "sunny";
-  const yesterday = state.weather[day - 1] ?? "sunny";
+  const season = seasonOf(day, state.settings);
+  const today = state.weather[day]?.kind ?? "sunny";
+  const yesterday = state.weather[day - 1]?.kind ?? "sunny";
   const damp = ["rain", "storm", "fog"].includes(today) || ["rain", "storm", "fog"].includes(yesterday);
   const until = startOfDay(day + 1) - 1;
 

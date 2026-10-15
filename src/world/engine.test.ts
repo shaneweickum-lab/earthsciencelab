@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dayOf, formatTime, seasonOf, startOfDay, timeOfDay } from "./clock";
+import { DEFAULT_SETTINGS } from "./settings";
 import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
   sellNow, ship, sleep, tick, tileAt, applyTool,
@@ -7,8 +8,17 @@ import {
 import { idx } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
-import type { Tile, WorldState } from "./types";
-import { weatherFor } from "./weather";
+import type { Tile, WeatherId, WorldState } from "./types";
+import { weatherFor, type DayWeather } from "./weather";
+
+const CAL = DEFAULT_SETTINGS;
+
+/** Typical temperatures for a forced weather type. */
+const TEMPS: Partial<Record<WeatherId, [number, number]>> = { frost: [45, 28], snow: [30, 20], heat: [96, 72] };
+const dayWeather = (kind: WeatherId): DayWeather => {
+  const [high, low] = TEMPS[kind] ?? [75, 58];
+  return { kind, high, low };
+};
 
 const X = 15, Y = 20;
 
@@ -40,9 +50,9 @@ function select(s: WorldState, item: string): WorldState {
 const at = (s: WorldState) => s.tiles[idx(X, Y)];
 
 /** Force every day's weather. */
-function weather(s: WorldState, w: WorldState["weather"][number], days = 60): WorldState {
+function weather(s: WorldState, kind: WeatherId, days = 60): WorldState {
   const all: WorldState["weather"] = {};
-  for (let d = 1; d <= days; d++) all[d] = w;
+  for (let d = 1; d <= days; d++) all[d] = dayWeather(kind);
   return { ...s, weather: all };
 }
 
@@ -55,21 +65,25 @@ describe("clock", () => {
     expect(formatTime(startOfDay(1) + 18 * 60 + 30)).toBe("12:30 AM");
     expect(timeOfDay(startOfDay(3) + 60)).toBe(7 * 60);
   });
-  it("cycles through four 7-day seasons", () => {
-    expect(seasonOf(1)).toBe("Spring");
-    expect(seasonOf(8)).toBe("Summer");
-    expect(seasonOf(22)).toBe("Winter");
-    expect(seasonOf(29)).toBe("Spring");
+  it("cycles through four seasons of three months each", () => {
+    expect(seasonOf(1, CAL)).toBe("Spring");
+    expect(seasonOf(16, CAL)).toBe("Summer");
+    expect(seasonOf(46, CAL)).toBe("Winter");
+    expect(seasonOf(61, CAL)).toBe("Spring");
   });
 });
 
 describe("weather", () => {
   it("is deterministic per seed and day, and day 1 is sunny", () => {
-    expect(weatherFor(1, 1)).toBe("sunny");
-    for (let d = 2; d < 40; d++) expect(weatherFor(7, d)).toBe(weatherFor(7, d));
+    expect(weatherFor(1, 1, CAL).kind).toBe("sunny");
+    for (let d = 2; d < 40; d++) expect(weatherFor(7, d, CAL)).toEqual(weatherFor(7, d, CAL));
   });
-  it("only snows in winter", () => {
-    for (let d = 1; d <= 112; d++) if (weatherFor(99, d) === "snow") expect(seasonOf(d)).toBe("Winter");
+  it("only snows when it's cold enough", () => {
+    for (let d = 1; d <= 240; d++) {
+      const w = weatherFor(99, d, CAL);
+      if (w.kind === "snow") expect(w.high).toBeLessThanOrEqual(34);
+      if (w.kind === "frost") expect(w.low).toBeLessThanOrEqual(32);
+    }
   });
   it("rain waters outdoor soil but not greenhouse soil", () => {
     let s = weather(setup({ tilled: true, moisture: 20 }), "rain");
@@ -90,9 +104,9 @@ describe("farming", () => {
     expect(at(s).tilled).toBe(true);
     s = applyTool(select(s, "seed_beans"));
     expect(at(s).crop?.id).toBe("beans");
-    expect(countItem(s, "seed_beans")).toBe(5);
+    expect(countItem(s, "seed_beans")).toBe(4);
     s = applyTool(select(s, "can"));
-    expect(at(s).moisture).toBe(100);
+    expect(at(s).moisture).toBe(Math.min(100, at(setup()).moisture + 45));
     expect(s.water).toBe(19);
   });
 
@@ -111,7 +125,7 @@ describe("farming", () => {
 
   it("crops ripen over several days and can be harvested", () => {
     let s = weather(setup({ tilled: true, crop: { id: "carrot", growth: 0, harvests: 0, dead: false, pests: false } }), "rain");
-    for (let d = 0; d < 6; d++) s = withTile(sleep(s), X, Y, { weeds: false });
+    for (let d = 0; d < 20; d++) s = withTile(sleep(s), X, Y, { weeds: false });
     s = { ...s, player: { x: X, y: Y - 1, facing: "down" } };
     expect(at(s).crop!.growth).toBe(1);
     s = act(s);
@@ -121,7 +135,8 @@ describe("farming", () => {
 
   it("won't plant out of season outdoors, but will in a greenhouse", () => {
     let s = setup({ tilled: true }, "seed_tomato");
-    expect(day(s)).toBe(1);
+    s = { ...s, minute: startOfDay(46) }; // winter
+    expect(seasonOf(day(s), CAL)).toBe("Winter");
     s = applyTool(s);
     expect(at(s).crop).toBeNull();
     s = applyTool(withTile(s, X, Y, { greenhouse: true }));

@@ -4,6 +4,7 @@ import { Html } from "@react-three/drei";
 import { memo, Suspense } from "react";
 import { BUILDING_SIZE } from "@/world/map";
 import type { Building } from "@/world/types";
+import { labelLayer } from "../useWorld";
 import { Model, model } from "./models";
 
 const Mat = ({ color, ...rest }: { color: string; transparent?: boolean; opacity?: number; emissive?: string; emissiveIntensity?: number }) => (
@@ -252,7 +253,7 @@ export function Buildings({ buildings }: { buildings: Building[] }) {
               <Fancy b={b} />
             </Suspense>
             {b.kind === "store" && (
-              <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} style={{ pointerEvents: "none" }}>
+              <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
                 <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">🌱 Seed &amp; Soil Co.</div>
               </Html>
             )}

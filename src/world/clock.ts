@@ -3,10 +3,20 @@ import type { Season } from "./types";
 export const DAY_START = 6 * 60;
 /** You faint if still awake at 2 AM. */
 export const DAY_END = 26 * 60;
-export const DAYS_PER_SEASON = 7;
 export const SEASONS: Season[] = ["Spring", "Summer", "Fall", "Winter"];
-/** Real milliseconds per game minute (a 20-hour day takes about 10 real minutes). */
-export const MS_PER_GAME_MINUTE = 500;
+export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** The parts of the settings the calendar needs. */
+export interface Calendar {
+  seasons: boolean;
+  /** 5 to 30 days per month, 12 months a year. */
+  daysPerMonth: number;
+}
+
+/** Real milliseconds per game minute at a speed of `speed` game minutes per real minute. */
+export function msPerGameMinute(speed: number): number {
+  return 60000 / speed;
+}
 
 /** Day number (1-based). The day "rolls over" at 6 AM, so 1 AM still belongs to the previous day. */
 export function dayOf(minute: number): number {
@@ -18,16 +28,65 @@ export function timeOfDay(minute: number): number {
   return ((minute - DAY_START) % 1440 + 1440) % 1440 + DAY_START;
 }
 
-export function seasonOf(day: number): Season {
-  return SEASONS[Math.floor((day - 1) / DAYS_PER_SEASON) % 4];
+/**
+ * Seasons start on the 21st of March, June, September, and December, like the real equinoxes and
+ * solstices. Shorter months move the start proportionally: the 3rd for 5-day months, the 7th for 10-day months.
+ */
+export function seasonStartDay(daysPerMonth: number): number {
+  return Math.max(1, Math.floor((21 * daysPerMonth) / 30));
 }
 
-export function dayOfSeason(day: number): number {
-  return ((day - 1) % DAYS_PER_SEASON) + 1;
+export const daysPerYear = (cal: Calendar) => 12 * cal.daysPerMonth;
+export const daysPerSeason = (cal: Calendar) => 3 * cal.daysPerMonth;
+
+/** Day 1 of the game is the first day of spring. Days since January 1st of year 1 for game day 1. */
+function firstDayOffset(cal: Calendar) {
+  return 2 * cal.daysPerMonth + seasonStartDay(cal.daysPerMonth) - 1;
 }
 
-export function yearOf(day: number): number {
-  return Math.floor((day - 1) / (DAYS_PER_SEASON * 4)) + 1;
+export function dateOf(day: number, cal: Calendar): { year: number; month: number; dayOfMonth: number } {
+  const n = firstDayOffset(cal) + day - 1;
+  const inYear = n % daysPerYear(cal);
+  return {
+    year: Math.floor(n / daysPerYear(cal)) + 1,
+    month: Math.floor(inYear / cal.daysPerMonth),
+    dayOfMonth: (inYear % cal.daysPerMonth) + 1,
+  };
+}
+
+/** Days since the spring equinox, within the year (0 = first day of spring). */
+function daysSinceSpring(day: number, cal: Calendar) {
+  return (((day - 1) % daysPerYear(cal)) + daysPerYear(cal)) % daysPerYear(cal);
+}
+
+/** Fraction of the year since the first day of spring, 0–1. */
+export function yearFraction(day: number, cal: Calendar): number {
+  return daysSinceSpring(day, cal) / daysPerYear(cal);
+}
+
+/** The season for growing and visuals. With seasons off it's always a mild growing season (drawn like summer). */
+export function seasonOf(day: number, cal: Calendar): Season {
+  if (!cal.seasons) return "Summer";
+  return SEASONS[Math.floor(daysSinceSpring(day, cal) / daysPerSeason(cal))];
+}
+
+export function seasonLabel(day: number, cal: Calendar): string {
+  return cal.seasons ? seasonOf(day, cal) : "Growing season";
+}
+
+export function dayOfSeason(day: number, cal: Calendar): number {
+  return (daysSinceSpring(day, cal) % daysPerSeason(cal)) + 1;
+}
+
+export function yearOf(day: number, cal: Calendar): number {
+  return dateOf(day, cal).year;
+}
+
+/** "March 21" */
+export function formatDate(day: number, cal: Calendar, short = false): string {
+  const d = dateOf(day, cal);
+  const m = MONTHS[d.month];
+  return `${short ? m.slice(0, 3) : m} ${d.dayOfMonth}`;
 }
 
 export function formatTime(minute: number): string {

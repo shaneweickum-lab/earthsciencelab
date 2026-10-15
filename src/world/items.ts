@@ -1,33 +1,57 @@
 import { CROPS, type CropId } from "@/game/crops";
 import type { BuildingKind, Season } from "./types";
 
-/** How each crop behaves in the world: seasons, days to grow, prices. */
+/** How each crop behaves in the world: seasons, days to grow, temperature needs, prices. */
 export interface WorldCrop {
   id: CropId;
+  /** Seasons it can be planted and grow outdoors (the "Planting seasons" feature). */
   seasons: Season[];
-  days: number;
-  /** Days to regrow after harvest, for crops that keep producing. */
-  regrow?: number;
+  /** Typical days from seed to harvest on seed packets and extension guides (at 30-day months). */
+  realDays: number;
+  /** Days between pickings, for crops that keep producing. */
+  regrowDays?: number;
+  /** Cool-season crops like it mild; warm-season crops need warm soil and air. */
+  type: "cool" | "warm";
+  /** The overnight low (°F) that kills it outdoors (the "Frost & snow" feature). */
+  killF: number;
   seedPrice: number;
   sellPrice: number;
-  /** Survives frost outdoors. */
-  hardy?: boolean;
   /** Cover crop: dug into the soil instead of sold. */
   cover?: boolean;
 }
 
 export const WORLD_CROPS: Record<CropId, WorldCrop> = {
-  clover: { id: "clover", seasons: ["Spring", "Summer", "Fall"], days: 4, seedPrice: 8, sellPrice: 0, hardy: true, cover: true },
-  beans: { id: "beans", seasons: ["Spring", "Summer"], days: 5, regrow: 3, seedPrice: 25, sellPrice: 20 },
-  buckwheat: { id: "buckwheat", seasons: ["Spring", "Summer", "Fall"], days: 3, seedPrice: 10, sellPrice: 14 },
-  carrot: { id: "carrot", seasons: ["Spring", "Fall"], days: 4, seedPrice: 15, sellPrice: 32, hardy: true },
-  wheat: { id: "wheat", seasons: ["Spring", "Fall"], days: 4, seedPrice: 10, sellPrice: 24, hardy: true },
-  potato: { id: "potato", seasons: ["Spring"], days: 5, seedPrice: 30, sellPrice: 62 },
-  sunflower: { id: "sunflower", seasons: ["Summer", "Fall"], days: 6, seedPrice: 20, sellPrice: 48 },
-  squash: { id: "squash", seasons: ["Summer", "Fall"], days: 6, seedPrice: 30, sellPrice: 72 },
-  corn: { id: "corn", seasons: ["Summer"], days: 7, regrow: 4, seedPrice: 35, sellPrice: 45 },
-  tomato: { id: "tomato", seasons: ["Summer"], days: 7, regrow: 3, seedPrice: 45, sellPrice: 38 },
+  clover: { id: "clover", seasons: ["Spring", "Summer", "Fall"], realDays: 60, type: "cool", killF: 20, seedPrice: 8, sellPrice: 0, cover: true },
+  beans: { id: "beans", seasons: ["Spring", "Summer", "Fall"], realDays: 55, regrowDays: 7, type: "warm", killF: 32, seedPrice: 25, sellPrice: 20 },
+  buckwheat: { id: "buckwheat", seasons: ["Spring", "Summer", "Fall"], realDays: 70, type: "warm", killF: 33, seedPrice: 10, sellPrice: 14 },
+  carrot: { id: "carrot", seasons: ["Spring", "Summer", "Fall"], realDays: 70, type: "cool", killF: 25, seedPrice: 15, sellPrice: 32 },
+  wheat: { id: "wheat", seasons: ["Spring", "Summer", "Fall"], realDays: 100, type: "cool", killF: 22, seedPrice: 10, sellPrice: 24 },
+  potato: { id: "potato", seasons: ["Spring", "Summer"], realDays: 90, type: "cool", killF: 30, seedPrice: 30, sellPrice: 62 },
+  sunflower: { id: "sunflower", seasons: ["Spring", "Summer", "Fall"], realDays: 80, type: "warm", killF: 32, seedPrice: 20, sellPrice: 48 },
+  squash: { id: "squash", seasons: ["Spring", "Summer", "Fall"], realDays: 100, type: "warm", killF: 32, seedPrice: 30, sellPrice: 72 },
+  corn: { id: "corn", seasons: ["Spring", "Summer"], realDays: 80, type: "warm", killF: 32, seedPrice: 35, sellPrice: 45 },
+  tomato: { id: "tomato", seasons: ["Spring", "Summer", "Fall"], realDays: 80, regrowDays: 7, type: "warm", killF: 32, seedPrice: 45, sellPrice: 38 },
 };
+
+/** Game days to grow, scaled so crops fit the calendar: real days at 30-day months, shorter for shorter months. */
+export function cropDays(id: CropId, daysPerMonth: number, regrow = false): number {
+  const w = WORLD_CROPS[id];
+  const real = regrow && w.regrowDays ? w.regrowDays : w.realDays;
+  return Math.max(regrow ? 1 : 2, Math.round((real * daysPerMonth) / 30));
+}
+
+/**
+ * How well a crop grows at a daily average temperature (°F), 0–1.
+ * Cool-season crops grow best around 55–75°F and stop below 40°F; warm-season crops grow best
+ * around 70–90°F and stop below 50°F. Both slow down in strong heat.
+ */
+export function tempFactor(type: WorldCrop["type"], meanF: number): number {
+  const [stop, bestLo, bestHi, hot] = type === "cool" ? [40, 55, 75, 90] : [50, 70, 90, 100];
+  if (meanF <= stop) return 0;
+  if (meanF < bestLo) return (meanF - stop) / (bestLo - stop);
+  if (meanF <= bestHi) return 1;
+  return Math.max(0.3, 1 - ((meanF - bestHi) / (hot - bestHi)) * 0.7);
+}
 
 export type ItemKind = "tool" | "seed" | "produce" | "amendment" | "material" | "kit";
 
@@ -100,7 +124,7 @@ const seeds: ItemDef[] = Object.values(WORLD_CROPS).map((w) => ({
   kind: "seed" as const,
   price: w.seedPrice,
   crop: w.id,
-  desc: `${w.seasons.join(", ")} · ${w.days} days${w.regrow ? `, regrows every ${w.regrow}` : ""}. Takes: ${CROPS[w.id].takes} Gives back: ${CROPS[w.id].givesText}`,
+  desc: `${w.type === "cool" ? "Cool" : "Warm"}-season crop, ${w.realDays} days on the seed packet${w.regrowDays ? `, keeps producing` : ""}. Takes: ${CROPS[w.id].takes} Gives back: ${CROPS[w.id].givesText}`,
 }));
 
 const produce: ItemDef[] = Object.values(WORLD_CROPS)

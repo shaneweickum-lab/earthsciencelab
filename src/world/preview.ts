@@ -1,6 +1,7 @@
 import { CROPS } from "@/game/crops";
 import { buildingAt, canPlantHere, facingTile, selectedItem, tileAt } from "./engine";
 import { ITEMS, WORLD_CROPS } from "./items";
+import { on } from "./settings";
 import type { WorldState } from "./types";
 
 export interface ActionPreview {
@@ -38,6 +39,7 @@ export function previewAction(state: WorldState): ActionPreview {
     }
     case "amendment":
       if (!isGarden) return { label: "Apply", text: "Use this on garden soil.", ok: false };
+      if (slot.item === "labKit" && !on(state, "soilTesting")) return { label: "Test", text: "Soil numbers are already visible (Hidden soil is off).", ok: false };
       if (slot.item === "labKit") return t.known.lab
         ? { label: "Test", text: "You already have lab results here.", ok: false }
         : { label: "Test", text: "Reveals organic matter, nutrients, and pH for this spot.", ok: true };
@@ -56,13 +58,14 @@ export function previewAction(state: WorldState): ActionPreview {
       if (t.obstacle) return { label: "Till", text: `Clear the ${t.obstacle} first.`, ok: false };
       if (t.weeds) return { label: "Till", text: "Cut the weeds with the scythe first.", ok: false };
       if (t.tilled) return { label: "Till", text: "Already tilled.", ok: false };
-      return { label: "Till", text: "Loosen the soil for seeds. Tilling breaks soil crumbs a little (structure −2).", ok: true };
+      return { label: "Till", text: on(state, "tillage") ? "Loosen the soil for seeds. Tilling breaks soil crumbs a little (structure −2)." : "Loosen the soil for seeds.", ok: true };
     case "can":
       if (t.ground === "water") return { label: "Refill", text: "Fill your watering can.", ok: true };
       if (b?.kind === "rainBarrel") return { label: "Refill", text: "Refill with rainwater.", ok: true };
       if (state.water <= 0) return { label: "Water", text: "Your can is empty. Refill at the pond.", ok: false };
       if (!t.tilled) return { label: "Water", text: "Water tilled soil or crops.", ok: false };
-      return { label: "Water", text: `Soak the soil (moisture ${Math.round(t.moisture)} → 100).`, ok: true };
+      if (on(state, "waterlogging") && t.moisture >= 70) return { label: "Water", text: `Careful: the soil is already wet (${Math.round(t.moisture)}). Too much water can drown roots.`, ok: true };
+      return { label: "Water", text: `Soak the soil (moisture ${Math.round(t.moisture)} → ${Math.min(100, Math.round(t.moisture + 45))}).`, ok: true };
     case "scythe":
       if (t.weeds) return { label: "Cut", text: "Cut the weeds and get plant fiber for compost.", ok: true };
       if (t.crop?.dead) return { label: "Clear", text: "Clear the dead plant.", ok: true };

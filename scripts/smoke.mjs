@@ -73,6 +73,23 @@ await page.waitForTimeout(1500);
 await shot("05-soil-profile");
 
 await page.goto(`${BASE}/soil/game`);
+// Main menu → New Game setup: choose a farmer, science features, time speed, and calendar.
+await page.getByRole("dialog", { name: "Main menu" }).waitFor();
+await shot("06-main-menu");
+await page.getByRole("button", { name: /New Game/ }).click();
+await page.getByRole("radio", { name: /Farmer male-c/ }).click();
+await page.getByRole("button", { name: /^Next/ }).click();
+await page.getByRole("radio", { name: /Real Science/ }).click();
+await page.getByText("17 of 17 science features on").waitFor();
+await shot("06-setup-science");
+await page.getByRole("button", { name: /^Next/ }).click();
+await page.getByRole("button", { name: "30×", exact: true }).click();
+await page.getByText("1 game hour = 2 real minutes").waitFor();
+await page.getByRole("button", { name: /^Next/ }).click();
+await page.getByLabel("Days per month").fill("10");
+await page.getByText(/each season lasts 30 days/).waitFor();
+await shot("06-setup-calendar");
+await page.getByRole("button", { name: /Begin/ }).click();
 await page.getByText("Congratulations! You inherited an organic garden!").waitFor();
 await shot("06a-garden-intro");
 await page.getByRole("button", { name: /Let's get gardening/ }).click();
@@ -90,6 +107,7 @@ async function teleport(x, y, facing, tiles = {}) {
     localStorage.setItem(SAVE, JSON.stringify(w));
   }, { SAVE, x, y, facing, tiles });
   await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /Continue/ }).click();
   await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
 }
 const inspector = page.getByLabel("Tile inspector");
@@ -103,9 +121,9 @@ await page.keyboard.press("1"); // hoe
 await inspector.getByText(/Till:/).waitFor();
 await page.keyboard.press(" ");
 await inspector.getByText("Tilled", { exact: true }).waitFor();
-await page.keyboard.press("8"); // bean seeds
+await page.keyboard.press("8"); // carrot seeds
 await page.keyboard.press(" ");
-await page.getByText(/^Planted Beans\./).waitFor();
+await page.getByText(/^Planted Carrots\./).waitFor();
 await page.keyboard.press("2"); // watering can
 await page.keyboard.press(" ");
 await page.keyboard.press("0"); // lab test kit
@@ -158,6 +176,21 @@ await page.keyboard.press(" ");
 await page.getByText("Built a Compost Bin!").waitFor();
 await page.waitForTimeout(800);
 await shot("07d-built");
+await page.getByLabel("Temperature").first().waitFor();
+
+// Pause: switch a science feature off mid-game, then save and quit to the main menu.
+await page.keyboard.press("Escape");
+await page.getByRole("dialog", { name: "Paused" }).waitFor();
+await page.getByRole("switch", { name: "Weeds" }).uncheck();
+await page.getByText("Custom mix").waitFor();
+await shot("07e-pause");
+await page.getByRole("button", { name: /Save & quit/ }).click();
+await page.getByRole("button", { name: /Continue/ }).waitFor();
+await shot("07f-menu-continue");
+await page.getByRole("button", { name: /Continue/ }).click();
+await page.keyboard.press("Escape");
+if (await page.getByRole("switch", { name: "Weeds" }).isChecked()) throw new Error("Weeds setting wasn't saved");
+await page.keyboard.press("Escape");
 
 await page.goto(`${BASE}/soil/globe`);
 await page.waitForTimeout(2000);
@@ -192,8 +225,8 @@ await page.getByRole("button", { name: "Atomic mass" }).click();
 await page.waitForTimeout(1500);
 await shot("15-mass-bars");
 await page.keyboard.press("Escape");
-await page.getByRole("dialog").waitFor({ state: "detached" });
-await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
+await page.getByRole("dialog", { name: /Periodic table/ }).waitFor({ state: "detached" });
+await page.getByRole("dialog", { name: "Main menu" }).waitFor();
 
 // Keyboard shortcut and lesson links.
 await page.goto(`${BASE}/soil/learn/healthy-soil`);
