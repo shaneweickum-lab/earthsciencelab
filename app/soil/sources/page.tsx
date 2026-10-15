@@ -17,6 +17,7 @@ const GAME_ART = [
   { name: "Nature Kit", url: "https://kenney.nl/assets/nature-kit" },
   { name: "Fantasy Town Kit", url: "https://kenney.nl/assets/fantasy-town-kit" },
   { name: "Survival Kit", url: "https://kenney.nl/assets/survival-kit" },
+  { name: "Food Kit", url: "https://kenney.nl/assets/food-kit" },
   { name: "Mini Characters", url: "https://kenney.nl/assets/mini-characters" },
 ];
 

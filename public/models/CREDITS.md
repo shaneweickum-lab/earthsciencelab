@@ -9,6 +9,7 @@ http://creativecommons.org/publicdomain/zero/1.0/
 | `nature/` | Nature Kit | https://kenney.nl/assets/nature-kit |
 | `town/` | Fantasy Town Kit | https://kenney.nl/assets/fantasy-town-kit |
 | `survival/` | Survival Kit | https://kenney.nl/assets/survival-kit |
+| `food/` | Food Kit | https://kenney.nl/assets/food-kit |
 | `characters/` | Mini Characters | https://kenney.nl/assets/mini-characters |
 
 Credit is not required by CC0, but we're grateful. Regenerate this folder with `npm run assets`.

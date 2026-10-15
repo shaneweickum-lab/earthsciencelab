@@ -25,11 +25,10 @@ const PACKS = {
       "flower_redA", "flower_yellowA", "flower_purpleA", "flower_yellowB",
       "mushroom_red", "mushroom_tan", "mushroom_redGroup", "mushroom_tanGroup", "lily_large", "lily_small",
       "crops_cornStageA", "crops_cornStageB", "crops_cornStageC", "crops_cornStageD", "crops_wheatStageA", "crops_wheatStageB",
-      "crops_leafsStageA", "crops_leafsStageB", "crop_carrot", "crop_pumpkin",
+      "crops_leafsStageA", "crops_leafsStageB", "crop_carrot", "crop_pumpkin", "plant_bushDetailed", "plant_bushLarge", "plant_flatTall",
       "fence_simple", "path_stone", "path_stoneCircle",
     ],
     icons: { previewDir: "Isometric", suffix: "_NE", map: {
-      crop_corn: "crops_cornStageD", crop_carrot: "crop_carrot", crop_squash: "crop_pumpkin",
       kit_fence: "fence_simple", kit_pathStone: "path_stone", kit_flowerBed: "flower_yellowA",
     } },
   },
@@ -47,6 +46,14 @@ const PACKS = {
     models: ["barrel", "chest", "box-large", "bucket", "signpost", "resource-wood", "tool-hoe", "tool-shovel", "tool-axe", "tool-pickaxe"],
     icons: { previewDir: "Previews", suffix: "", map: {
       pickaxe: "tool-pickaxe", shovel: "tool-shovel", wood: "resource-wood",
+    } },
+  },
+  food: {
+    title: "Food Kit", url: "https://kenney.nl/media/pages/assets/food-kit/83086fa91c-1719418518/kenney_food-kit.zip",
+    page: "https://kenney.nl/assets/food-kit", dir: "Models/GLB format", textures: true,
+    models: ["tomato", "carrot", "corn", "pumpkin-basic"],
+    icons: { previewDir: "Previews", suffix: "", map: {
+      crop_tomato: "tomato", crop_carrot: "carrot", crop_corn: "corn", crop_squash: "pumpkin-basic", honey: "honey",
     } },
   },
   characters: {
