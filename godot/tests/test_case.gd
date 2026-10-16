@@ -17,6 +17,16 @@ func expect_true(cond: bool, what := "") -> void:
 		_fail("%s: expected true" % what)
 
 
+## Deep comparison of JSON-shaped data. Numbers match within 1e-9 (Godot's JSON parser can be
+## off by an ulp), and a missing key counts as null, since JSON.stringify drops undefined.
+func expect_same(actual: Variant, expected: Variant, what := "") -> bool:
+	var diff := Compare.diff(actual, expected, what)
+	if diff != "":
+		_fail(diff)
+		return false
+	return true
+
+
 ## Loads a fixture written by the TS side (src/world/godot-golden.test.ts).
 func golden(name: String) -> Variant:
 	var text := FileAccess.get_file_as_string("res://tests/golden/%s.json" % name)

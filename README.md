@@ -71,7 +71,7 @@ Soil & Sprout is being ported to [Godot 4](https://godotengine.org) (GDScript) s
 | `npm run godot:test` | Runs the GDScript tests in `godot/tests` headless |
 | `npm run godot:export` | Copies `public/models` into the project, imports it, and exports the web build to `public/godot/` (gitignored) |
 
-The TypeScript engine in `src/world` is the reference while the port is under way: `src/world/godot-golden.test.ts` writes fixtures to `godot/tests/golden/`, and the GDScript tests must reproduce them exactly. Regenerate them with `GOLDEN=1 npx vitest run godot-golden`; `npm test` fails if they're stale. Site ↔ game messages are documented in `godot/autoload/Site.gd`.
+The game engine is ported to GDScript in `godot/engine` (one module per TS file, working on the same JSON-shaped world as the save). The TypeScript engine in `src/world` is the reference while the port is under way: `src/world/godot-golden.test.ts` writes fixtures to `godot/tests/golden/`, and the GDScript tests must reproduce them exactly. Besides unit fixtures (weather, maps, grades, critters, NPC routes, the notice board), four seeded playthroughs record every step of a bot playing the game (tools, planting, nights, shopping, quests, gifts) and Godot must match each step. The game's tables (crops, items, journal, NPCs, quests) are exported to `godot/data/` the same way. Regenerate with `GOLDEN=1 npx vitest run godot-golden`; `npm test` fails if they're stale. Saves written by the Godot tests are loaded back by `src/world/godot-roundtrip.test.ts`. Site ↔ game messages are documented in `godot/autoload/Site.gd`.
 
 ### Game art
 

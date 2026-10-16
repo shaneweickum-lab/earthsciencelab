@@ -955,7 +955,7 @@ function migrateV1(old: WorldState): WorldState {
   const d = dayOf(old.minute);
   return {
     ...old,
-    version: WORLD_VERSION,
+    version: 2,
     settings,
     weather: { [d]: weatherFor(old.seed, d, settings), [d + 1]: weatherFor(old.seed, d + 1, settings) },
   };

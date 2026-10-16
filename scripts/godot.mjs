@@ -6,7 +6,7 @@
 //
 // Downloads go to .godot-cache/. The export template archive is 1.2 GB, so only the web
 // templates are pulled out of it with HTTP range requests (about 10 MB).
-import { execFileSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
@@ -130,7 +130,13 @@ const cmd = process.argv[2];
 fetchGodot();
 if (cmd === "test") {
   godot("--import");
-  godot("-s", "res://tests/run_tests.gd");
+  // GDScript errors don't stop a test (the function just returns), so any error fails the run.
+  const r = spawnSync(editor, ["--headless", "--path", project, "-s", "res://tests/run_tests.gd"], { encoding: "utf8", maxBuffer: 1 << 28 });
+  const out = (r.stdout ?? "") + (r.stderr ?? "");
+  process.stdout.write(out.replace(/^Godot Engine.*\n\n?/m, ""));
+  const errors = out.split("\n").filter((l) => /SCRIPT ERROR|Parse Error|Compile Error/.test(l));
+  if (errors.length) console.error(`\n${errors.length} script error(s) — failing the run.`);
+  if (r.status !== 0 || errors.length) process.exit(1);
 }
 else if (cmd === "export") await exportWeb();
 else if (cmd === "editor") execFileSync(editor, ["--path", project, "-e"], { stdio: "inherit" });
