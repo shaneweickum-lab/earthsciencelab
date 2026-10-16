@@ -37,7 +37,7 @@ const PACKS = {
     page: "https://kenney.nl/assets/fantasy-town-kit", dir: "Models/GLB format", textures: true,
     models: [
       "wall-wood", "wall-wood-door", "wall-wood-window-shutters", "wall-wood-window-small", "wall-wood-corner",
-      "roof-high-gable", "roof-high-gable-end", "roof-gable", "roof-gable-end", "chimney", "stall-green", "stall-red", "lantern", "cart", "banner-green",
+      "roof-high-gable", "roof-high-gable-end", "roof-gable", "roof-gable-end", "chimney", "stall-green", "stall-red", "lantern", "cart", "banner-green", "fountain-round-detail", "hedge", "stall-bench", "banner-red", "wall-window-shutters", "wall-door", "wall",
     ],
   },
   survival: {

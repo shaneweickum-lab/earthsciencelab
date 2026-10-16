@@ -2,15 +2,15 @@ import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { cropDays, ITEMS, item, sellPrice, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
-import { BUILDING_SIZE, createMap, doorOf, FARM, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { BUILDING_SIZE, createMap, doorOf, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
-import type { Building, BuildingKind, Dir, Grade, Slot, Tile, WorldState } from "./types";
+import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, type Slot, type Tile, type WorldState } from "./types";
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 3;
+export const WORLD_VERSION = 4;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -694,7 +694,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -703,6 +703,7 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "house") return "house";
   if (b?.kind === "store") return "store";
   if (b?.kind === "shippingBin") return "shipping";
+  if (b?.kind === "noticeBoard") return "board";
   return null;
 }
 
@@ -780,7 +781,14 @@ function operateBuilding(state: WorldState, b: Building): WorldState {
     }
     case "rainBarrel":
       return refillFromBarrel(state, b);
+    case "extension":
+      return say(state, "The County Extension Office: free soil advice and testing. Dr. Okafor is usually out front.");
+    case "cottage":
+      return say(state, `You knock on the door. ${b.data.owner === "june" ? "A jar-shaped sign reads: \"Honey for sale. Ask June.\"" : "Nobody answers. They must be out working."}`);
+    case "fountain":
+      return say(state, "The fountain is cool and clear. A frog blinks at you from the edge.");
     case "beehive": {
+      if (b.data.owner) return discover(say(state, "This is June's hive. The bees pollinate the whole community garden."), "honeybee");
       if (b.data.ready) {
         const got = addItem(update({ ...b.data, ready: 0 }), "honey", 1);
         return got ? discover(say(got, "Collected honey! 🍯"), "honeybee") : state;
@@ -842,6 +850,7 @@ export function canPlace(state: WorldState, kind: BuildingKind, x: number, y: nu
   for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) {
     const t = tileAt(state, xx, yy);
     if (!t) return "Too close to the edge.";
+    if (xx >= FARM_W) return "Build on your own farm, not in town.";
     if (t.ground === "water" || t.ground === "forest") return "Can't build on water or in the forest.";
     if (t.obstacle) return `Clear the ${t.obstacle} first.`;
     if (t.crop) return "Something is planted there.";
@@ -883,7 +892,7 @@ export function placeBuilding(state: WorldState, slotIndex: number, x: number, y
 
 export function pickUpBuilding(state: WorldState, id: string): WorldState {
   const b = state.buildings.find((x) => x.id === id);
-  if (!b || b.kind === "house" || b.kind === "store" || b.kind === "shippingBin") return state;
+  if (!b || TOWN_KINDS.includes(b.kind) || b.data.owner) return state;
   if (b.kind === "greenhouse" && greenhouseInterior(b).some((p) => state.tiles[idx(p.x, p.y)].crop)) return say(state, "Harvest or clear the greenhouse beds first.");
   const kit = `kit_${b.kind}`;
   const got = addItem(state, kit, 1);
@@ -926,6 +935,20 @@ export function swapSlots(state: WorldState, a: number, b: number): WorldState {
   return { ...state, inventory: inv };
 }
 
+/** Saves from before the town: keep the farm, rebuild the map at the new size, and add the town. */
+function addTown(old: WorldState): WorldState {
+  const oldW = old.tiles.length / H;
+  const fresh = createMap(old.seed);
+  const tiles = fresh.tiles.map((t, i) => {
+    const x = i % W, y = Math.floor(i / W);
+    return x < FARM_W && x < oldW ? old.tiles[y * oldW + x] : t;
+  });
+  // The store moved into town; the farm keeps everything you built.
+  const farm = old.buildings.filter((b) => b.kind !== "store" && b.x < FARM_W);
+  const town = fresh.buildings.filter((b) => !farm.some((f) => f.id === b.id));
+  return { ...old, version: WORLD_VERSION, tiles, buildings: [...farm, ...town] };
+}
+
 /** Version 1 saves had no settings and stored weather as a plain label. */
 function migrateV1(old: WorldState): WorldState {
   const settings = normalizeSettings(undefined);
@@ -946,8 +969,11 @@ export function loadWorld(raw: string | null): WorldState | null {
   if (!raw) return null;
   try {
     const s = JSON.parse(raw) as WorldState;
-    if (!Array.isArray(s.tiles) || s.tiles.length !== W * H) return null;
-    const up = s.version === 1 ? migrateV1(s) : s.version === 2 ? { ...s, version: WORLD_VERSION } : s;
+    if (!Array.isArray(s.tiles) || !(s.version >= 1 && s.version <= WORLD_VERSION)) return null;
+    let up = s.version === 1 ? migrateV1(s) : s;
+    // Version 4 grew the map east to add the town.
+    if (up.version < 4) up = addTown(up);
+    if (up.tiles.length !== W * H) return null;
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

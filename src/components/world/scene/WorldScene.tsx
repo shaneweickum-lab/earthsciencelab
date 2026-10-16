@@ -9,6 +9,7 @@ import { canPlace, DIRS, facingTile, movePlayer, placementFor, tick, todayWeathe
 import { ITEMS } from "@/world/items";
 import { BUILDING_SIZE } from "@/world/map";
 import { critterIcon, expireCritters } from "@/world/nature";
+import { NPCS, npcPose, type Npc } from "@/world/town";
 import type { WeatherId, WorldState } from "@/world/types";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { DEFAULT_AVATAR } from "@/world/avatars";
@@ -74,8 +75,10 @@ function GameLoop() {
       acc.current += dt * 1000;
       const ms = msPerGameMinute(w.settings.speed);
       const minutes = Math.floor(acc.current / ms);
+      runtime.minuteFrac = Math.min(0.999, acc.current / ms);
       if (minutes > 0) {
         acc.current -= minutes * ms;
+        runtime.minuteFrac = acc.current / ms;
         const before = useWorld.getState().world!;
         store.update((s) => expireCritters(tick(s, minutes)));
         const after = useWorld.getState().world!;
@@ -155,6 +158,68 @@ function Farmer({ avatar }: { avatar: string }) {
     }
   });
   return <primitive ref={ref} object={clone} scale={1.35} />;
+}
+
+/** A townsperson: walks their daily route with walk and idle animations, and shows a name tag nearby. */
+function NpcFigure({ npc }: { npc: Npc }) {
+  const { scene, animations } = useGLTF(model("characters", `character-${npc.avatar}`));
+  const clone = useMemo(() => {
+    const c = cloneSkinned(scene);
+    c.traverse((o) => (o.castShadow = true));
+    return c;
+  }, [scene]);
+  const group = useRef<Group>(null);
+  const body = useRef<Group>(null);
+  const tag = useRef<HTMLDivElement>(null);
+  const { actions } = useAnimations(animations, body);
+  const current = useRef("");
+  const ROT = { down: 0, right: Math.PI / 2, up: Math.PI, left: -Math.PI / 2 };
+  useFrame((_, dt) => {
+    const w = useWorld.getState().world;
+    const g = group.current;
+    if (!w || !g) return;
+    const pose = npcPose(w, npc, w.minute + runtime.minuteFrac);
+    g.visible = pose.visible;
+    g.position.set(pose.x, 0, pose.y);
+    let diff = ROT[pose.facing] - g.rotation.y;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    g.rotation.y += diff * Math.min(1, dt * 10);
+    const next = pose.moving ? "walk" : "idle";
+    if (next !== current.current && actions[next]) {
+      actions[current.current]?.fadeOut(0.2);
+      actions[next]!.reset().fadeIn(0.2).play();
+      current.current = next;
+    }
+    if (tag.current) {
+      const near = Math.hypot(pose.x - runtime.player.x, pose.y - runtime.player.y) < 4.5;
+      tag.current.style.display = pose.visible && near ? "block" : "none";
+    }
+  });
+  return (
+    <group ref={group}>
+      <group ref={body}>
+        <primitive object={clone} scale={1.35 * (npc.scale ?? 1)} />
+      </group>
+      <Html position={[0, 1.55 * (npc.scale ?? 1), 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
+        <div ref={tag} className="whitespace-nowrap rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-black shadow" style={{ display: "none" }}>
+          {npc.short}
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+function Townsfolk() {
+  return (
+    <>
+      {NPCS.map((npc) => (
+        <Suspense key={npc.id} fallback={null}>
+          <NpcFigure npc={npc} />
+        </Suspense>
+      ))}
+    </>
+  );
 }
 
 function Player() {
@@ -336,6 +401,7 @@ function World() {
       <Buildings buildings={buildings} />
       <Critters critters={critters} />
       <Player />
+      <Townsfolk />
       <FacingMarker />
       <BuildGhost />
       <Precipitation weather={weather} />

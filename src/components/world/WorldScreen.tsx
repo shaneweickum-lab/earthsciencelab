@@ -3,11 +3,13 @@
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { act, buildingAt, facingTile, interact, interactTarget, pickUpBuilding, soilHealth } from "@/world/engine";
+import { npcInFront } from "@/world/town";
 import { useElementsPanel } from "@/store/elementsPanel";
 import { useProgress } from "@/store/progress";
 import { Hotbar, Messages, StatusBar, TileInspector } from "./Hud";
 import { JournalBook } from "./JournalBook";
 import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
+import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
 import { Bag, DaySummary, HouseMenu, IntroLetter, TvForecast } from "./Menus";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { labelLayer, runtime, useWorld } from "./useWorld";
@@ -34,8 +36,15 @@ export function doAction(mode: "use" | "interact" = "use") {
   const st = useWorld.getState();
   const w = st.world;
   if (!w || st.menu) return;
-  const target = interactTarget({ ...w, player: runtime.player });
+  const here = { ...w, player: runtime.player };
+  const npc = npcInFront(here);
+  if (npc) {
+    st.talkTo(npc.id);
+    return;
+  }
+  const target = interactTarget(here);
   if (target === "house") st.open("house");
+  else if (target === "board") st.open("board");
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
   else {
@@ -64,7 +73,8 @@ function useGameKeys() {
       // The game owns E (and other keys) while you play: mark them handled so site shortcuts skip them.
       if (st.menu) {
         if (k === "e" || k === "j" || k === "i") e.preventDefault();
-        const toggles = (k === "i" && st.menu === "bag") || (k === "j" && st.menu === "journal");
+        if (k === "q") e.preventDefault();
+        const toggles = (k === "i" && st.menu === "bag") || (k === "j" && st.menu === "journal") || (k === "q" && st.menu === "quests");
         if ((k === "escape" || toggles) && st.menu !== "intro" && st.menu !== "summary") st.close();
         return;
       }
@@ -94,6 +104,9 @@ function useGameKeys() {
       } else if (k === "j") {
         e.preventDefault();
         st.open("journal");
+      } else if (k === "q") {
+        e.preventDefault();
+        st.open("quests");
       } else if (k === "p") {
         pickUp();
       }
@@ -226,6 +239,7 @@ export function WorldScreen() {
           <div className="pointer-events-auto absolute bottom-24 left-3 z-10 hidden gap-1.5 md:flex">
             <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("bag")}>🎒 Bag <kbd className="text-xs text-muted">I</kbd></button>
             <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("journal")}>📓 Journal <kbd className="text-xs text-muted">J</kbd></button>
+            <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("quests")}>📜 Quests <kbd className="text-xs text-muted">Q</kbd></button>
           </div>
           <TouchControls />
           {menu === "intro" && <IntroLetter />}
@@ -237,6 +251,9 @@ export function WorldScreen() {
           {menu === "shipping" && <ShippingMenu />}
           {menu === "journal" && <JournalBook />}
           {menu === "pause" && <PauseMenu />}
+          {menu === "npc" && <NpcDialog />}
+          {menu === "board" && <NoticeBoard />}
+          {menu === "quests" && <QuestLog />}
         </>
       )}
     </div>

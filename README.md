@@ -29,7 +29,8 @@ Progress (XP, levels, 18 badges, lesson scores, visited regions, journal pages) 
 | --- | --- |
 | W A S D or arrows | Walk |
 | Space | Use the item in your hand on the tile in front of you (harvests ripe crops, observes critters) |
-| E | Interact whatever you're holding: harvest, observe critters, open buildings |
+| E | Interact whatever you're holding: talk to townsfolk, harvest, observe critters, open buildings and the notice board |
+| Q | Quest log |
 | 1–0 | Pick a hotbar slot |
 | I | Bag (click two slots to swap) |
 | J | Nature Journal |
@@ -51,6 +52,14 @@ The game opens on a main menu. **Start** begins a new farm with the recommended 
 **Crop grades** (`src/world/grades.ts`): every harvest gets a grade from E (lowest) through D, C, B, A, to S (highest). Higher grades sell for more (E ×0.5 up to S ×2.2) and yield more. With the "Crop grades from soil" feature on, the grade comes from soil health, minus a penalty for hours the crop spent thirsty, waterlogged, weedy, or with pests, plus a bonus from amendments. With it off, only amendments raise the grade: compost, biochar, and fertilizer +2, mulch +1, lime +1 (+2 on acidic soil), so one compost gives C and three give S. Amendment bonuses are used up at harvest. Harvest amounts are a seeded roll in each crop's per-tile range (beans 2–5, tomatoes and potatoes 3–8, carrots 3–6, corn, wheat, and buckwheat 2–4, squash and sunflowers 1–3), scaled by grade: about half at E, normal at C, and up to triple at S. Graded produce stacks by grade. **Space** uses the item in your hand; **E** always harvests, observes, or opens.
 
 **Adding a science feature:** add it to `SCIENCE_FEATURES`, wrap its code in `on(state, "yourId")`, and add a test in `src/world/settings.test.ts` showing it has no effect when off. A test fails if a feature is registered but never checked, or checked but not registered.
+
+### The town
+
+The map is two halves joined by a road through a forest strip: your farm on the west, and a town on the east (`src/world/map.ts`, `src/world/town.ts`). The town has Seed & Soil Co. (where you buy and sell), the County Extension Office, a square with a fountain and notice board, cottages, the Ortegas' cornfield, and an overgrown community garden. You can't build in town; buildings go on your own farm. Saves from before the town keep their farm and gain the town.
+
+- **Townsfolk**: Mei Tanaka (shopkeeper), Dr. Amara Okafor (soil scientist at the Extension Office), June Hale (beekeeper and naturalist), and Luis and Pip Ortega (the neighbor farmer and his kid). Each follows a daily schedule, walking between stops and going indoors at night. Face someone and press **E** to talk.
+- **Friendship**: one chat and one gift a day raise friendship, up to 10 hearts. Everyone has loved, liked, and disliked gifts. New heart levels unlock personal stories and new quests.
+- **Quests** (`src/world/quests.ts`): story quests from each person (deliveries, science requests like testing soil spots or raising pH, finding critters), and a three-step community project to restore the garden. The notice board posts two delivery requests a day that pay well and come down after 3 days. Deliveries take your lowest qualifying grade first. **Q** opens the quest log.
 
 ### Game art
 

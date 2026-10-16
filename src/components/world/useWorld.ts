@@ -3,11 +3,13 @@
 import { create } from "zustand";
 import { loadWorld, newWorld, saveWorld } from "@/world/engine";
 import { DEFAULT_SETTINGS, type GameSettings } from "@/world/settings";
+import { expireBoard } from "@/world/quests";
+import { talk } from "@/world/town";
 import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "bag" | "journal" | "summary" | "pause";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
 
 export type Screen = "menu" | "setup" | "playing";
 
@@ -32,6 +34,11 @@ interface WorldStore {
   /** Apply an engine function to the world. */
   update: (fn: (w: WorldState) => WorldState) => void;
   open: (menu: Menu) => void;
+  /** Which townsperson you're talking to. */
+  talkingTo: string | null;
+  /** What they said when you started talking. */
+  npcLine: string;
+  talkTo: (id: string) => void;
   close: () => void;
   save: () => void;
 }
@@ -54,6 +61,8 @@ export const runtime = {
   moving: false,
   /** When the player last pressed the action button (for the reach animation). */
   actionAt: 0,
+  /** Fraction of the current game minute that has passed, so townsfolk walk smoothly between ticks. */
+  minuteFrac: 0,
 };
 
 /**
@@ -106,7 +115,20 @@ export const useWorld = create<WorldStore>((set, get) => {
       syncRuntime(next);
       set({ world: next });
     },
-    open: (menu) => set({ menu }),
+    open: (menu) => {
+      // Each morning, notice-board requests past their date come down.
+      const w = get().world;
+      if (menu === "summary" && w) set({ world: expireBoard(w) });
+      set({ menu });
+    },
+    talkingTo: null,
+    npcLine: "",
+    talkTo: (id) => {
+      const w = get().world;
+      if (!w) return;
+      const r = talk(withRuntime(w), id);
+      set({ world: r.state, menu: "npc", talkingTo: id, npcLine: r.text });
+    },
     close: () => set({ menu: null }),
     save: () => {
       const w = get().world;
