@@ -29,7 +29,8 @@ Progress (XP, levels, 18 badges, lesson scores, visited regions, journal pages) 
 | --- | --- |
 | W A S D or arrows | Walk |
 | Space | Use the item in your hand on the tile in front of you (harvests ripe crops, observes critters) |
-| E | Interact whatever you're holding: harvest, observe critters, open buildings |
+| E | Interact whatever you're holding: talk to townsfolk, harvest, observe critters, open buildings and the notice board |
+| Q | Quest log |
 | 1–0 | Pick a hotbar slot |
 | I | Bag (click two slots to swap) |
 | J | Nature Journal |
@@ -52,9 +53,17 @@ The game opens on a main menu. **Start** begins a new farm with the recommended 
 
 **Adding a science feature:** add it to `SCIENCE_FEATURES`, wrap its code in `on(state, "yourId")`, and add a test in `src/world/settings.test.ts` showing it has no effect when off. A test fails if a feature is registered but never checked, or checked but not registered.
 
+### The town
+
+The map is two halves joined by a road through a forest strip: your farm on the west, and a town on the east (`src/world/map.ts`, `src/world/town.ts`). The town has Seed & Soil Co. (where you buy and sell), the County Extension Office, a square with a fountain and notice board, cottages, the Ortegas' cornfield, and an overgrown community garden. You can't build in town; buildings go on your own farm. Saves from before the town keep their farm and gain the town.
+
+- **Townsfolk**: Mei Tanaka (shopkeeper), Dr. Amara Okafor (soil scientist at the Extension Office), June Hale (beekeeper and naturalist), and Luis and Pip Ortega (the neighbor farmer and his kid). Each follows a daily schedule, walking between stops and going indoors at night. Face someone and press **E** to talk.
+- **Friendship**: one chat and one gift a day raise friendship, up to 10 hearts. Everyone has loved, liked, and disliked gifts. New heart levels unlock personal stories and new quests.
+- **Quests** (`src/world/quests.ts`): story quests from each person (deliveries, science requests like testing soil spots or raising pH, finding critters), and a three-step community project to restore the garden. The notice board posts two delivery requests a day that pay well and come down after 3 days. Deliveries take your lowest qualifying grade first. **Q** opens the quest log.
+
 ### Game art
 
-The farm's 3D models and item pictures are free CC0 packs by [Kenney](https://kenney.nl) (Nature Kit, Fantasy Town Kit, Survival Kit, Food Kit, Mini Characters), committed under `public/models` and `public/icons`. `npm run assets` re-downloads the packs, copies only the models the game uses, renders the item icons, and writes `public/models/CREDITS.md`. Each model has a hand-built fallback shape, so the game still works while models load. Crops are composed from these parts at four growth stages (sprout, young, mature, ripe) in `src/components/world/scene/cropLooks.ts`, including real flower colors before fruit sets.
+The farm's 3D models and item pictures are free CC0 packs by [Kenney](https://kenney.nl) (Nature Kit, Fantasy Town Kit, Survival Kit, Food Kit, Mini Characters) and [Quaternius](https://quaternius.com) (Ultimate Crops: carrots, corn, pumpkins, tomatoes, wheat), committed under `public/models` and `public/icons`. Quaternius's OBJ source files live in `assets-src/quaternius-crops`; `npm run assets` converts the ones the game uses to compressed GLB (rebuilding any missing `.mtl` colors from the pack's shared palette) and keeps only the three animations the farmers use. `npm run assets` re-downloads the packs, copies only the models the game uses, renders the item icons, and writes `public/models/CREDITS.md`. Each model has a hand-built fallback shape, so the game still works while models load. Crops are composed from these parts at four growth stages (sprout, young, mature, ripe) in `src/components/world/scene/cropLooks.ts`, including real flower colors before fruit sets.
 
 ## Stack
 

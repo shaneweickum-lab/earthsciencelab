@@ -5,7 +5,7 @@ import { memo, Suspense } from "react";
 import { BUILDING_SIZE } from "@/world/map";
 import type { Building } from "@/world/types";
 import { labelLayer } from "../useWorld";
-import { Model, model } from "./models";
+import { Model, model, type Pack } from "./models";
 
 const Mat = ({ color, ...rest }: { color: string; transparent?: boolean; opacity?: number; emissive?: string; emissiveIntensity?: number }) => (
   <meshStandardMaterial color={color} flatShading {...rest} />
@@ -172,6 +172,26 @@ const Procedural = memo(function Procedural({ b }: { b: Building }) {
       return (
         <mesh position={[0, 0.02, 0]} receiveShadow><cylinderGeometry args={[0.42, 0.45, 0.06, 8]} /><Mat color="#b9b2a4" /></mesh>
       );
+    case "noticeBoard":
+      return (
+        <group>
+          {[-0.35, 0.35].map((x) => (
+            <mesh key={x} position={[x, 0.6, 0]} castShadow><boxGeometry args={[0.08, 1.2, 0.08]} /><Mat color="#7a5636" /></mesh>
+          ))}
+          <mesh position={[0, 0.95, 0]} castShadow><boxGeometry args={[0.95, 0.6, 0.06]} /><Mat color="#b08458" /></mesh>
+          <mesh position={[0, 1.3, 0]}><boxGeometry args={[1.05, 0.08, 0.14]} /><Mat color="#6b4423" /></mesh>
+          {[[-0.25, 1.02, "#fbf6ef"], [0.12, 0.9, "#ffe7a8"], [0.3, 1.05, "#fbf6ef"], [-0.1, 0.82, "#dcebd6"]].map(([x, y, c], i) => (
+            <mesh key={i} position={[x as number, y as number, 0.035]} rotation-z={(i - 1.5) * 0.08}>
+              <boxGeometry args={[0.22, 0.2, 0.01]} /><Mat color={c as string} />
+            </mesh>
+          ))}
+        </group>
+      );
+    default:
+      // Simple stand-in while a model loads.
+      return (
+        <mesh position={[0, 0.6, 0]} castShadow><boxGeometry args={[w - 0.3, 1.2, h - 0.3]} /><Mat color="#c9b28f" /></mesh>
+      );
   }
 });
 
@@ -237,6 +257,52 @@ function Fancy({ b }: { b: Building }) {
       return <Model url={model("nature", "fence_simple")} position={[0, 0, 0.47]} scale={[1, 1.5, 1]} />;
     case "pathStone":
       return <Model url={model("nature", "path_stoneCircle")} position={[0, 0.01, 0]} />;
+    case "extension":
+      return (
+        <group>
+          <Walls w={w} d={h} floors={1} front={(i) => (i === mid ? "wall-wood-door" : "wall-wood-window-shutters")} />
+          <Roof w={w} d={h} y={1} />
+          <Model url={town("banner-green")} position={[1.6, 0, h / 2 + 0.15]} />
+          <Model url={town("stall-bench")} position={[-1.4, 0, h / 2 + 0.4]} />
+        </group>
+      );
+    case "cottage":
+      return (
+        <group>
+          <Walls w={w} d={h} floors={1} front={(i) => (i === 2 ? "wall-wood-door" : "wall-wood-window-small")} />
+          <Roof w={w} d={h} y={1} />
+          <Model url={town("chimney")} position={[0.9, 1.3, -0.5]} />
+        </group>
+      );
+    case "fountain":
+      return <Model url={town("fountain-round-detail")} scale={1.9} />;
+    case "lamp":
+      return (
+        <group>
+          <Model url={town("lantern")} />
+          <mesh position={[0, 1.4, 0]}>
+            <sphereGeometry args={[0.09, 8, 6]} />
+            <meshStandardMaterial color="#ffe7a8" emissive="#ffc861" emissiveIntensity={0.8} />
+          </mesh>
+        </group>
+      );
+    case "field":
+      return (
+        <group>
+          {[-1, 0, 1].map((r) => (
+            <mesh key={r} position={[0, 0.02, r]} receiveShadow>
+              <boxGeometry args={[w - 0.2, 0.06, 0.6]} />
+              <meshStandardMaterial color="#5a3a22" roughness={1} />
+            </mesh>
+          ))}
+          {[-2, -1, 0, 1, 2].flatMap((c) => [-1, 0, 1].map((r) => (
+            <Model key={`${c},${r}`} url={model("crops", "Corn_4")} position={[c, 0.03, r]} scale={0.5} rotation-y={(c * 3 + r) * 1.3} />
+          )))}
+        </group>
+      );
+    case "prop":
+      if (!b.data.model) return null;
+      return <Model url={model(b.data.model.split("/")[0] as Pack, b.data.model.split("/")[1])} />;
     default:
       return <Procedural b={b} />;
   }
@@ -252,9 +318,11 @@ export function Buildings({ buildings }: { buildings: Building[] }) {
             <Suspense fallback={<Procedural b={b} />}>
               <Fancy b={b} />
             </Suspense>
-            {b.kind === "store" && (
+            {b.data.sign && (
               <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
-                <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">🌱 Seed &amp; Soil Co.</div>
+                <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">
+                  {b.kind === "store" ? "🌱" : "🔬"} {b.data.sign}
+                </div>
               </Html>
             )}
           </group>

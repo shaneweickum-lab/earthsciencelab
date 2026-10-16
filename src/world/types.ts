@@ -54,7 +54,12 @@ export interface Tile {
 export type BuildingKind =
   | "house" | "store" | "shippingBin"
   | "composter" | "rainBarrel" | "beehive" | "birdHouse" | "bugHotel" | "scarecrow"
-  | "greenhouse" | "fence" | "flowerBed" | "pathStone";
+  | "greenhouse" | "fence" | "flowerBed" | "pathStone"
+  // Town buildings and props (not buildable by the player).
+  | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop";
+
+/** Town buildings the player can't build, pick up, or build over. */
+export const TOWN_KINDS: BuildingKind[] = ["house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop"];
 
 export interface Building {
   id: string;
@@ -62,7 +67,13 @@ export interface Building {
   x: number;
   y: number;
   /** Building-specific data: compost contents, water stored, honey ready, etc. */
-  data: { fiber?: number; startedDay?: number; ready?: number; water?: number; honeyDay?: number };
+  data: {
+    fiber?: number; startedDay?: number; ready?: number; water?: number; honeyDay?: number;
+    /** Town buildings: who lives or works here, and the sign over the door. */
+    owner?: string; sign?: string;
+    /** Props: which model to draw ("pack/name"). */
+    model?: string;
+  };
 }
 
 export type Grade = "E" | "D" | "C" | "B" | "A" | "S";
@@ -119,6 +130,10 @@ export interface WorldState {
   messages: { text: string; at: number }[];
   introSeen: boolean;
   settings: GameSettings;
+  /** Quests you've accepted and finished (see quests.ts). */
+  quests?: import("./quests").QuestState;
+  /** Friendship with townsfolk, by NPC id. */
+  friends?: Record<string, { points: number; talked?: number; gifted?: number; met?: boolean; stories?: number[] }>;
   /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */
   avatar?: string;
 }

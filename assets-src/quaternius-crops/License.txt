@@ -1,0 +1,6 @@
+Ultimate Crops Pack by Quaternius (https://quaternius.com)
+License: Creative Commons Zero (CC0 1.0) — http://creativecommons.org/publicdomain/zero/1.0/
+
+These OBJ/MTL files are source art. `npm run assets` converts the crops the game uses into
+public/models/crops/*.glb. A few .mtl files were missing from the upload; the script rebuilds
+their materials from the pack's shared color palette.

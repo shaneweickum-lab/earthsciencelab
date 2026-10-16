@@ -7,7 +7,8 @@ import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
 import { expectedGrade } from "@/world/grades";
 import { previewAction } from "@/world/preview";
-import type { Tile, WorldState } from "@/world/types";
+import { NPC_BY_ID } from "@/world/town";
+import { TOWN_KINDS, type Tile, type WorldState } from "@/world/types";
 import { tempAt, WEATHER } from "@/world/weather";
 import { GradeBadge, ItemIcon } from "./ItemIcon";
 import { useWorld } from "./useWorld";
@@ -145,11 +146,11 @@ export function TileInspector() {
   const garden = t.ground === "farm" || t.greenhouse;
   const known = knownSoil(w, t);
   const critter = w.critters.find((c) => c.x === x && c.y === y);
-  const pickable = b && !["house", "store", "shippingBin"].includes(b.kind);
+  const pickable = b && !TOWN_KINDS.includes(b.kind) && !b.data.owner;
   return (
     <div className="pointer-events-auto w-64 space-y-2 rounded-2xl border-2 border-soil-dark/20 bg-card/95 p-3 shadow-lg" aria-label="Tile inspector">
       <div className="flex items-baseline justify-between">
-        <h3 className="font-display font-black">{b ? ITEMS[`kit_${b.kind}`]?.name ?? labelFor(b.kind) : t.greenhouse ? "Greenhouse bed" : GROUND_NAME[t.ground]}</h3>
+        <h3 className="font-display font-black">{b ? b.data.sign ?? (b.data.owner ? `${NPC_BY_ID[b.data.owner]?.short ?? ""}'s ` : "") + (ITEMS[`kit_${b.kind}`]?.name ?? labelFor(b.kind)) : t.greenhouse ? "Greenhouse bed" : GROUND_NAME[t.ground]}</h3>
         {garden && t.tilled && <span className="text-[10px] font-black uppercase text-soil">Tilled</span>}
       </div>
       <Status w={w} t={t} x={x} y={y} critter={!!critter} />
@@ -186,7 +187,10 @@ export function TileInspector() {
 }
 
 function labelFor(kind: string) {
-  return { house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin" }[kind] ?? kind;
+  return {
+    house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", extension: "Extension Office", cottage: "Cottage",
+    fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
+  }[kind] ?? kind;
 }
 
 function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y: number; critter: boolean }) {

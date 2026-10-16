@@ -98,6 +98,7 @@ await shot("06b-farm");
 
 // Walking is slow in a software-rendered browser, so tests move the player by editing the save.
 const SAVE = "earthsciencelab-world";
+const MAP_W = 76; // tiles per row (src/world/map.ts W)
 async function teleport(x, y, facing, tiles = {}) {
   await page.goto(`${BASE}/soil/sources`); // leaving the game saves the farm
   await page.evaluate(({ SAVE, x, y, facing, tiles }) => {
@@ -113,7 +114,7 @@ async function teleport(x, y, facing, tiles = {}) {
 }
 const inspector = page.getByLabel("Tile inspector");
 const clean = { obstacle: null, weeds: false, crop: null, tilled: false, mulch: false };
-await teleport(10, 13, "down", { [13 * 40 + 10]: clean, [14 * 40 + 10]: { ...clean, weeds: true } });
+await teleport(10, 13, "down", { [13 * MAP_W + 10]: clean, [14 * MAP_W + 10]: { ...clean, weeds: true } });
 await inspector.getByText("Weeds are growing here.").waitFor();
 await page.keyboard.press("3"); // scythe
 await page.keyboard.press(" ");
@@ -150,7 +151,7 @@ await inspector.getByText(/\d+%/).waitFor();
 await inspector.getByText(/Expected grade [EDCBAS]/).waitFor();
 
 // Harvest a ripe crop: you get a random amount at a grade set by the soil.
-await teleport(10, 13, "down", { [14 * 40 + 10]: { crop: { id: "carrot", growth: 1, harvests: 0, dead: false, pests: false } } });
+await teleport(10, 13, "down", { [14 * MAP_W + 10]: { crop: { id: "carrot", growth: 1, harvests: 0, dead: false, pests: false } } });
 await page.keyboard.press("e");
 await page.getByText(/^Harvested \d+ Carrots · Grade [EDCBAS]!/).waitFor();
 await page.keyboard.press("i");
@@ -164,8 +165,19 @@ await page.getByRole("dialog", { name: /Nature Journal/ }).waitFor();
 await shot("07b-journal");
 await page.keyboard.press("Escape");
 
-// The store: buy seeds and a compost bin, then build it.
-await teleport(32, 9, "up");
+// Town: the notice board in the square and the quest log.
+await teleport(58, 14, "up");
+await page.keyboard.press("e");
+await page.getByRole("dialog", { name: "Town notice board" }).waitFor();
+await page.getByRole("button", { name: "Take this request" }).first().click();
+await shot("07b2-notice-board");
+await page.getByRole("button", { name: "Close" }).click();
+await page.keyboard.press("q");
+await page.getByRole("dialog", { name: "Quests" }).getByText(/Notice board/).first().waitFor();
+await page.keyboard.press("Escape");
+
+// The store in town: buy seeds and a compost bin, then build it back on the farm.
+await teleport(45, 10, "up");
 await page.keyboard.press("e");
 await page.getByRole("dialog", { name: "Seed & Soil Co." }).waitFor();
 await page.getByRole("button", { name: "Buy Carrot Seeds" }).click();
@@ -179,7 +191,7 @@ const bag = page.getByRole("dialog", { name: "Your bag" });
 await bag.getByRole("button", { name: /Compost Bin ×1/ }).click();
 await bag.getByRole("button", { name: /Lab Test Kit/ }).click();
 await page.keyboard.press("Escape");
-await teleport(12, 11, "down", { [12 * 40 + 12]: clean });
+await teleport(12, 11, "down", { [12 * MAP_W + 12]: clean });
 await page.keyboard.press("0");
 await page.keyboard.press(" ");
 await page.getByText("Built a Compost Bin!").waitFor();
