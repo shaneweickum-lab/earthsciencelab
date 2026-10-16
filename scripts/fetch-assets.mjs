@@ -2,7 +2,7 @@
 // into public/models, renders item icons into public/icons, and writes the credits file.
 // Usage: npm run assets   (needs network access to kenney.nl; results are committed, so the site never downloads)
 import { execFileSync } from "child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import path from "path";
 import sharp from "sharp";
 
@@ -60,11 +60,27 @@ const PACKS = {
     title: "Mini Characters", url: "https://kenney.nl/media/pages/assets/mini-characters/bfc7e272b4-1774770718/kenney_mini-characters.zip",
     page: "https://kenney.nl/assets/mini-characters", dir: "Models/GLB format", textures: true,
     models: ["a", "b", "c", "d", "e", "f"].flatMap((l) => [`character-female-${l}`, `character-male-${l}`]),
+    // Each character ships with 32 animations; the farm only plays these.
+    keepAnimations: ["idle", "walk", "interact-right"],
     icons: { previewDir: "Previews", suffix: "", map: Object.fromEntries(
       ["a", "b", "c", "d", "e", "f"].flatMap((l) => [[`avatar_female-${l}`, `character-female-${l}`], [`avatar_male-${l}`, `character-male-${l}`]]),
     ) },
   },
 };
+
+const { NodeIO } = await import("@gltf-transform/core");
+const { ALL_EXTENSIONS } = await import("@gltf-transform/extensions");
+const { dedup, prune, quantize, weld } = await import("@gltf-transform/functions");
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+
+/** Copy a model, dropping every animation not in `keep` (and the data only they used). */
+async function keepOnly(src, dest, keep) {
+  const doc = await io.read(src);
+  for (const anim of doc.getRoot().listAnimations()) if (!keep.includes(anim.getName())) anim.dispose();
+  await doc.transform(prune({ keepAttributes: true }), dedup());
+  // Texture paths stay relative (Textures/colormap.png), so write next to the original layout.
+  writeFileSync(dest, await io.writeBinary(doc));
+}
 
 mkdirSync(CACHE, { recursive: true });
 rmSync(MODELS, { recursive: true, force: true });
@@ -86,7 +102,8 @@ for (const [key, pack] of Object.entries(PACKS)) {
   for (const name of pack.models) {
     const src = path.join(unpacked, pack.dir, `${name}.glb`);
     if (!existsSync(src)) throw new Error(`${pack.title} has no model ${name}`);
-    copyFileSync(src, path.join(out, `${name}.glb`));
+    if (pack.keepAnimations) await keepOnly(src, path.join(out, `${name}.glb`), pack.keepAnimations);
+    else copyFileSync(src, path.join(out, `${name}.glb`));
   }
   if (pack.textures) {
     mkdirSync(path.join(out, "Textures"), { recursive: true });
@@ -101,6 +118,58 @@ for (const [key, pack] of Object.entries(PACKS)) {
   }
 }
 
+// ── Quaternius Ultimate Crops: OBJ source art in assets-src, converted to GLB ──
+const QUATERNIUS = path.join(ROOT, "assets-src/quaternius-crops");
+const QUATERNIUS_STAGES = ["1", "2", "3", "4", "Crop"];
+const QUATERNIUS_CROPS = ["Carrot", "Corn", "Pumpkin", "Tomato", "Wheat"];
+// Files that didn't make it into the upload: use the nearest stage instead.
+const QUATERNIUS_FALLBACK = { Pumpkin_2: "Pumpkin_1", Tomato_3: "Tomato_2" };
+
+/** Every material in the pack. Quaternius reuses the same plain colors, so missing .mtl files can be rebuilt. */
+function quaterniusPalette() {
+  const blocks = new Map();
+  for (const f of readdirSync(QUATERNIUS).filter((x) => x.endsWith(".mtl"))) {
+    for (const block of readFileSync(path.join(QUATERNIUS, f), "utf8").split(/^(?=newmtl )/m)) {
+      const name = block.match(/^newmtl (\S+)/)?.[1];
+      if (name && !blocks.has(name)) blocks.set(name, block.trim());
+    }
+  }
+  return blocks;
+}
+
+async function convertQuaternius() {
+  if (!existsSync(QUATERNIUS)) return;
+  const { default: obj2gltf } = await import("obj2gltf");
+  const palette = quaterniusPalette();
+  const out = path.join(MODELS, "crops");
+  const work = path.join(CACHE, "quaternius-work");
+  mkdirSync(out, { recursive: true });
+  rmSync(work, { recursive: true, force: true });
+  mkdirSync(work, { recursive: true });
+  for (const crop of QUATERNIUS_CROPS) {
+    for (const stage of QUATERNIUS_STAGES) {
+      const name = `${crop}_${stage}`;
+      const source = existsSync(path.join(QUATERNIUS, `${name}.obj`)) ? name : QUATERNIUS_FALLBACK[name];
+      if (!source || !existsSync(path.join(QUATERNIUS, `${source}.obj`))) throw new Error(`Quaternius crops: missing ${name}.obj`);
+      const obj = readFileSync(path.join(QUATERNIUS, `${source}.obj`), "utf8");
+      const used = [...new Set([...obj.matchAll(/^usemtl (\S+)/gm)].map((m) => m[1]))];
+      const mtlFile = path.join(QUATERNIUS, `${source}.mtl`);
+      const mtl = existsSync(mtlFile)
+        ? readFileSync(mtlFile, "utf8")
+        : used.map((m) => palette.get(m) ?? `newmtl ${m}\nKd 0.4 0.6 0.3`).join("\n\n");
+      writeFileSync(path.join(work, `${name}.obj`), obj.replace(/^mtllib .*$/m, `mtllib ${name}.mtl`));
+      writeFileSync(path.join(work, `${name}.mtl`), mtl);
+      const glb = await obj2gltf(path.join(work, `${name}.obj`), { binary: true });
+      // Shrink: merge duplicate vertices and data, then store positions and normals in fewer bits.
+      const doc = await io.readBinary(new Uint8Array(glb));
+      await doc.transform(dedup(), weld(), quantize());
+      writeFileSync(path.join(out, `${name}.glb`), await io.writeBinary(doc));
+    }
+  }
+  copyFileSync(path.join(QUATERNIUS, "License.txt"), path.join(out, "License.txt"));
+}
+await convertQuaternius();
+
 function sizeOf(dir) {
   return readdirSync(dir).reduce((n, f) => {
     const p = path.join(dir, f);
@@ -111,13 +180,13 @@ total = sizeOf(MODELS) + sizeOf(ICONS);
 
 writeFileSync(path.join(MODELS, "CREDITS.md"), `# 3D model and icon credits
 
-All models in this folder (and the item icons in \`public/icons\`, rendered from the packs' previews) are by
-**Kenney** (https://kenney.nl) and released under **Creative Commons Zero (CC0 1.0)**:
-http://creativecommons.org/publicdomain/zero/1.0/
+All models in this folder (and the item icons in \`public/icons\`, rendered from the packs' previews) are released under
+**Creative Commons Zero (CC0 1.0)**: http://creativecommons.org/publicdomain/zero/1.0/
 
-| Folder | Pack | Source |
-| --- | --- | --- |
-${Object.entries(PACKS).map(([k, p]) => `| \`${k}/\` | ${p.title} | ${p.page} |`).join("\n")}
+| Folder | Pack | Author | Source |
+| --- | --- | --- | --- |
+${Object.entries(PACKS).map(([k, p]) => `| \`${k}/\` | ${p.title} | Kenney | ${p.page} |`).join("\n")}
+| \`crops/\` | Ultimate Crops (converted from OBJ in \`assets-src/quaternius-crops\`) | Quaternius | https://quaternius.com/packs/ultimatecrops.html |
 
 Credit is not required by CC0, but we're grateful. Regenerate this folder with \`npm run assets\`.
 `);

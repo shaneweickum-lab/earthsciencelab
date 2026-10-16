@@ -46,35 +46,26 @@ const around = (spots: [number, number][], part: Omit<CropPart, "x" | "z">, n: n
     }),
   );
 
+/**
+ * A crop drawn with Quaternius's Ultimate Crops models: stages 1–4 are the growing plant
+ * (stage 4 is the full plant with fruit, our "ripe"). Their "_Crop" models are loose
+ * harvested produce, so they aren't used in the field.
+ */
+const quaternius = (name: string, spots: [number, number][], s: number): Record<Stage, CropPart[]> => ({
+  sprout: at(spots, `crops/${name}_1`, s),
+  young: at(spots, `crops/${name}_2`, s),
+  mature: at(spots, `crops/${name}_3`, s),
+  ripe: at(spots, `crops/${name}_4`, s),
+});
+
 const sprout = (spots: [number, number][], s = 1.1) => at(spots, "nature/crops_leafsStageA", s);
 
 export const CROP_LOOKS: Record<CropId, Record<Stage, CropPart[]>> = {
-  corn: {
-    sprout: at(FOUR, "nature/crops_cornStageA", 1.1),
-    young: at(FOUR, "nature/crops_cornStageB", 1.1),
-    mature: at(FOUR, "nature/crops_cornStageC", 1.1),
-    ripe: at(FOUR, "nature/crops_cornStageD", 1.1),
-  },
-  wheat: {
-    sprout: sprout(FOUR),
-    young: at(FOUR, "nature/crops_wheatStageA", 1.1),
-    mature: at(FOUR, "nature/crops_wheatStageA", 1.4),
-    ripe: at(FOUR, "nature/crops_wheatStageB", 1.3),
-  },
-  carrot: {
-    sprout: sprout(FOUR),
-    young: at(FOUR, "nature/plant_flatShort", 1.3),
-    mature: at(FOUR, "nature/plant_flatShort", 1.8),
-    // Ripe carrots show their orange shoulders at the soil line.
-    ripe: at(FOUR, "nature/crop_carrot", 1.2),
-  },
-  tomato: {
-    sprout: sprout(ONE, 1.6),
-    young: at(ONE, "nature/crops_leafsStageB", 1.6),
-    // Tomatoes flower yellow before fruit sets.
-    mature: [...at(ONE, "nature/plant_bushDetailed", 1.9), ...around(ONE, { m: "nature/flower_yellowA", s: 1.2 }, 4, 0.32, 0.25)],
-    ripe: [...at(ONE, "nature/plant_bushDetailed", 1.9), ...around(ONE, { m: "food/tomato", s: 1.3 }, 6, 0.3, 0.35)],
-  },
+  corn: quaternius("Corn", FOUR, 0.55),
+  wheat: quaternius("Wheat", FOUR, 1.1),
+  // Ripe carrots show their orange shoulders at the soil line; the root is underground.
+  carrot: quaternius("Carrot", FOUR, 0.75),
+  tomato: quaternius("Tomato", ONE, 0.62),
   beans: {
     sprout: sprout(TWO, 1.2),
     young: at(TWO, "nature/plant_bushSmall", 1.8),
@@ -89,13 +80,8 @@ export const CROP_LOOKS: Record<CropId, Record<Stage, CropPart[]>> = {
     mature: [...at(TWO, "nature/plant_bushDetailed", 1.4), ...around(TWO, { m: "nature/flower_purpleA", s: 1 }, 3, 0.18, 0.25)],
     ripe: [...at(TWO, "nature/plant_bushDetailed", 1.3), ...around(TWO, { shape: "tuber", s: 1 }, 3, 0.26, 0)],
   },
-  squash: {
-    sprout: sprout(ONE, 1.6),
-    young: at(ONE, "nature/plant_flatShort", 2.6),
-    // Big yellow squash blossoms come before the fruit.
-    mature: [...at(ONE, "nature/plant_bushLarge", 2.6), ...around(ONE, { m: "nature/flower_yellowA", s: 1.6 }, 3, 0.35, 0.05)],
-    ripe: [...at(ONE, "nature/plant_bushLarge", 2.4), { m: "food/pumpkin-basic", x: 0.12, z: 0.18, s: 1.6, ry: 0.4 }],
-  },
+  // A sprawling vine with one big pumpkin.
+  squash: quaternius("Pumpkin", ONE, 0.75),
   sunflower: {
     sprout: sprout(TWO, 1.2),
     young: at(TWO, "nature/crops_leafsStageB", 1.3),

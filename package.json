@@ -26,6 +26,9 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/d3-geo": "^3.1.1",
     "@types/geojson": "^7946.0.16",
@@ -36,6 +39,7 @@
     "@types/topojson-client": "^3.1.5",
     "eslint": "^9.39.5",
     "eslint-config-next": "15.5",
+    "obj2gltf": "^3.2.0",
     "playwright-core": "^1.64.0",
     "postcss": "^8.5.29",
     "tailwindcss": "^4.3.3",

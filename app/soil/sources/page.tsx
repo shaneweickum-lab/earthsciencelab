@@ -63,7 +63,9 @@ export default function SourcesPage() {
               <a href={p.url} target="_blank" rel="noreferrer" className="italic underline decoration-dotted">{p.name}</a>
             </span>
           ))}
-          , shared under the{" "}
+          , plus{" "}
+          <a href="https://quaternius.com/packs/ultimatecrops.html" target="_blank" rel="noreferrer" className="font-semibold underline">Quaternius</a>&apos;s
+          {" "}<span className="italic">Ultimate Crops</span> for carrots, corn, pumpkins, tomatoes, and wheat. All are shared under the{" "}
           <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noreferrer" className="underline">CC0 public domain dedication</a>.
         </p>
       </section>

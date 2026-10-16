@@ -54,7 +54,7 @@ The game opens on a main menu. **Start** begins a new farm with the recommended 
 
 ### Game art
 
-The farm's 3D models and item pictures are free CC0 packs by [Kenney](https://kenney.nl) (Nature Kit, Fantasy Town Kit, Survival Kit, Food Kit, Mini Characters), committed under `public/models` and `public/icons`. `npm run assets` re-downloads the packs, copies only the models the game uses, renders the item icons, and writes `public/models/CREDITS.md`. Each model has a hand-built fallback shape, so the game still works while models load. Crops are composed from these parts at four growth stages (sprout, young, mature, ripe) in `src/components/world/scene/cropLooks.ts`, including real flower colors before fruit sets.
+The farm's 3D models and item pictures are free CC0 packs by [Kenney](https://kenney.nl) (Nature Kit, Fantasy Town Kit, Survival Kit, Food Kit, Mini Characters) and [Quaternius](https://quaternius.com) (Ultimate Crops: carrots, corn, pumpkins, tomatoes, wheat), committed under `public/models` and `public/icons`. Quaternius's OBJ source files live in `assets-src/quaternius-crops`; `npm run assets` converts the ones the game uses to compressed GLB (rebuilding any missing `.mtl` colors from the pack's shared palette) and keeps only the three animations the farmers use. `npm run assets` re-downloads the packs, copies only the models the game uses, renders the item icons, and writes `public/models/CREDITS.md`. Each model has a hand-built fallback shape, so the game still works while models load. Crops are composed from these parts at four growth stages (sprout, young, mature, ripe) in `src/components/world/scene/cropLooks.ts`, including real flower colors before fruit sets.
 
 ## Stack
 

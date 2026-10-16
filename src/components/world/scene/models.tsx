@@ -6,8 +6,8 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { Matrix4, Object3D, type BufferGeometry, type InstancedMesh, type Material, type Mesh, type MeshStandardMaterial } from "three";
 import type { Inst } from "./Instanced";
 
-/** Kenney CC0 models copied into public/models by `npm run assets`. */
-export type Pack = "nature" | "town" | "survival" | "food" | "characters";
+/** CC0 models (Kenney, and Quaternius crops) prepared in public/models by `npm run assets`. */
+export type Pack = "nature" | "town" | "survival" | "food" | "crops" | "characters";
 
 export const model = (pack: Pack, name: string) => `/models/${pack}/${name}.glb`;
 
