@@ -4,8 +4,9 @@ extends Node
 ## Protocol (the page is app/soil/game/godot/page.tsx):
 ## - The page loads /godot/index.html?grade=elementary|middle|high.
 ## - It posts {type: "grade", level} when the reader changes their grade level.
-## - Godot posts {type: "soil:ready"} once it starts, and {type: "soil:recordFarm", ...}
-##   for badges. Godot never writes the site's progress key itself.
+## - Godot posts {type: "soil:ready"} once it starts, {type: "soil:recordFarm", ...} for badges,
+##   and {type: "soil:setGrade", level} when the player changes the level in the game.
+##   Godot never writes the site's progress key itself.
 ## Outside a browser (the editor, tests, desktop), the grade level is "middle".
 
 signal grade_changed(level: String)
@@ -14,12 +15,15 @@ const LEVELS := ["elementary", "middle", "high"]
 const PROGRESS_KEY := "earthsciencelab-progress"
 
 var grade_level := "middle"
+## Debug switches from ?debug=a,b (web only), for measuring performance.
+var debug := PackedStringArray()
 var _on_message: JavaScriptObject  # kept alive so the browser callback isn't freed
 
 
 func _ready() -> void:
 	if not is_web():
 		return
+	debug = _query_param("debug").split(",", false)
 	var from_url := _query_param("grade")
 	grade_level = from_url if from_url in LEVELS else _saved_grade()
 	_on_message = JavaScriptBridge.create_callback(_message)
@@ -29,6 +33,15 @@ func _ready() -> void:
 
 static func is_web() -> bool:
 	return OS.has_feature("web")
+
+
+## Change the grade level from inside the game; the site remembers it.
+func set_grade(level: String) -> void:
+	if not level in LEVELS:
+		return
+	grade_level = level
+	grade_changed.emit(level)
+	post({"type": "soil:setGrade", "level": level})
 
 
 ## Send a message to the page that embeds the game.

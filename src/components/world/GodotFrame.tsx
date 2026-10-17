@@ -5,8 +5,9 @@ import { useProgress } from "@/store/progress";
 
 /**
  * Embeds the Godot web build (public/godot, made by `npm run godot:export`).
- * Protocol (godot/autoload/Site.gd): the game posts soil:ready and soil:recordFarm; this
- * page answers with the reader's grade level and records farm badges.
+ * Protocol (godot/autoload/Site.gd): the game posts soil:ready, soil:recordFarm, and
+ * soil:setGrade; this page answers with the reader's grade level, records farm badges, and
+ * saves grade changes made in the game.
  */
 export function GodotFrame() {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -22,6 +23,9 @@ export function GodotFrame() {
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== location.origin || e.source !== frame.current?.contentWindow) return;
       if (e.data?.type === "soil:ready") sendGrade();
+      if (e.data?.type === "soil:setGrade" && ["elementary", "middle", "high"].includes(e.data.level)) {
+        useProgress.getState().setGradeLevel(e.data.level);
+      }
       if (e.data?.type === "soil:recordFarm") {
         const { journal, harvests, bestSoilHealth } = e.data;
         if (Array.isArray(journal) && typeof harvests === "number" && typeof bestSoilHealth === "number") {

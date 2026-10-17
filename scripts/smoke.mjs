@@ -291,18 +291,42 @@ await page.goto(`${BASE}/soil`);
 await page.waitForTimeout(500);
 await shot("10-soil-home-after");
 
-// The Godot port (only when it's been built with npm run godot:export).
+// The Godot port (only when it's been built with npm run godot:export): it shares the farm
+// save and the grade level, and its tools work. Software rendering runs it at a few frames
+// a second, so the player is placed through the save instead of walked there.
 if (existsSync("public/godot/index.html")) {
+  await page.evaluate(({ SAVE, MAP_W }) => {
+    const w = JSON.parse(localStorage.getItem(SAVE));
+    w.player = { x: 12, y: 13, facing: "down" };
+    w.selected = 2; // scythe
+    Object.assign(w.tiles[14 * MAP_W + 12], { obstacle: null, weeds: true, crop: null });
+    localStorage.setItem(SAVE, JSON.stringify(w));
+  }, { SAVE, MAP_W });
   await page.goto(`${BASE}/soil/game/godot`);
-  const game = page.frameLocator('iframe[title="Soil & Sprout"]');
-  await game.locator("canvas").waitFor();
+  const canvas = page.frameLocator('iframe[title="Soil & Sprout"]').locator("canvas");
+  await canvas.waitFor();
   const frame = page.frames().find((f) => f.url().includes("/godot/"));
-  await frame.waitForFunction(() => window.__soil?.ready, null, { timeout: 60000 });
+  await frame.waitForFunction(() => window.__soil?.ready, null, { timeout: 90000 });
   const grade = await page.evaluate(() => JSON.parse(localStorage.getItem("earthsciencelab-progress")).state.gradeLevel);
   await frame.waitForFunction((g) => window.__soil.grade === g, grade, { timeout: 10000 });
   if (!(await frame.evaluate(() => window.__soil.save))) throw new Error("The Godot build didn't find the farm save.");
+  // The main menu, then continue the farm and use the scythe with the keyboard.
+  await frame.waitForFunction(() => window.__soil.screen === "menu", null, { timeout: 10000 });
+  await shot("30-godot-menu");
+  await frame.evaluate(() => window.__soilCommand("continue"));
+  await frame.waitForFunction(() => window.__soil.day, null, { timeout: 60000 });
+  await canvas.click({ position: { x: 640, y: 300 } });
+  await page.keyboard.press(" ");
+  await frame.waitForFunction(() => window.__soil.message === "Cut weeds (+1 fiber).", null, { timeout: 30000 });
   await page.waitForTimeout(1000);
-  await shot("30-godot-preview");
+  await shot("30-godot-farm");
+  // Menus open from the keyboard and close with Escape.
+  await page.keyboard.press("i");
+  await frame.waitForFunction(() => window.__soil.menu === "bag", null, { timeout: 10000 });
+  await page.waitForTimeout(800);
+  await shot("31-godot-bag");
+  await page.keyboard.press("Escape");
+  await frame.waitForFunction(() => window.__soil.menu === "", null, { timeout: 10000 });
 }
 
 await page.setViewportSize({ width: 390, height: 844 });

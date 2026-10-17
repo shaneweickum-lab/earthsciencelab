@@ -4,6 +4,11 @@ extends SceneTree
 
 
 func _initialize() -> void:
+	# Compile every script first, so a parse error anywhere fails the run.
+	for dir in ["res://autoload", "res://engine", "res://scene", "res://ui"]:
+		for f in DirAccess.get_files_at(dir):
+			if f.ends_with(".gd"):
+				load(dir + "/" + f)
 	var passed := 0
 	var failed := 0
 	var files := Array(DirAccess.get_files_at("res://tests")).filter(func(f): return f.begins_with("t_") and f.ends_with(".gd"))
