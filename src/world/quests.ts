@@ -79,6 +79,14 @@ export const QUESTS: QuestDef[] = [
     reward: { coins: 100, items: [{ item: "seed_beans", qty: 4 }], everyone: 20 },
   },
   {
+    id: "reopen-mine", giver: "luis", title: "The old mine",
+    ask: "My grandfather dug copper and tin in the old mine past town. It's been boarded up for years. Bring me 20 wood for timbers and 10 stone, and we'll shore it up together.",
+    thanks: "There! The tunnel's safe again. Watch for ladders hidden under the rocks; the deeper you go, the better the ore. And bring a good pickaxe.",
+    steps: [{ goal: { kind: "deliver", items: [{ item: "wood", qty: 20 }, { item: "stone", qty: 10 }] }, label: "Bring Luis 20 wood and 10 stone" }],
+    reward: { coins: 50, friendship: 60 },
+    needs: { quests: ["dig-deeper"] },
+  },
+  {
     id: "first-carrots", giver: "luis", title: "A neighborly trade",
     ask: "My carrot patch got eaten by rabbits. Could you spare 5 carrots? I'll make it worth your while.",
     thanks: "Gracias! These look great. Take some seeds from my stash.",

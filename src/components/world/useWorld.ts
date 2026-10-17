@@ -9,7 +9,7 @@ import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
 
 export type Screen = "menu" | "setup" | "playing";
 

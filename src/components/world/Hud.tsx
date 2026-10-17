@@ -2,7 +2,7 @@
 
 import { CROPS } from "@/game/crops";
 import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf } from "@/world/clock";
-import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
+import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
 import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
 import { expectedGrade } from "@/world/grades";
@@ -111,7 +111,7 @@ export function Messages() {
 }
 
 const GROUND_NAME: Record<Tile["ground"], string> = {
-  grass: "Grass", farm: "Garden soil", path: "Path", water: "Pond", sand: "Sandy shore", forest: "Forest",
+  grass: "Grass", farm: "Garden soil", path: "Path", water: "Pond", sand: "Sandy shore", forest: "Forest", cave: "Cave floor", caveWall: "Rock wall",
 };
 
 function SoilRow({ label, value, known, unit = "", tip }: { label: string; value: number; known: boolean; unit?: string; tip: string }) {
@@ -191,13 +191,14 @@ function labelFor(kind: string) {
   return {
     house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", chest: "Tool Chest", extension: "Extension Office", cottage: "Cottage",
     fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
+    mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down",
   }[kind] ?? kind;
 }
 
 function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y: number; critter: boolean }) {
   const lines: string[] = [];
   if (critter) lines.push("Something is here! Press Space to take a closer look.");
-  if (t.obstacle) lines.push(`A ${t.obstacle} is in the way.`);
+  if (t.obstacle) lines.push(`A ${obstacleName(t.obstacle)} is in the way.${t.hits ? ` (${Math.round((t.hits / OBSTACLE_HP[t.obstacle]) * 100)}% broken)` : ""}`);
   if (t.weeds) lines.push("Weeds are growing here.");
   if (t.mulch) lines.push("Covered with straw mulch.");
   if ((t.boost ?? 0) > 0 && !t.crop) lines.push(`🏅 Amendments: grade bonus +${t.boost} for the next crop here.`);

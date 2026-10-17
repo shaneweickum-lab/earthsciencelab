@@ -134,6 +134,12 @@ const materials: ItemDef[] = [
   { id: "stone", name: "Stone", icon: "🪨", kind: "material", sell: 2, desc: "From rocks in the field." },
   { id: "honey", name: "Honey", icon: "🍯", kind: "produce", sell: 60, desc: "Made by bees from flower nectar." },
   { id: "egg", name: "Egg", icon: "🥚", kind: "produce", sell: 18, desc: "Fresh from your hens, who eat bugs and weed seeds all day." },
+  // Ores from the mine. Smelt them into bars at a furnace.
+  { id: "copperOre", name: "Copper Ore", icon: "🟠", kind: "material", sell: 5, desc: "Green-streaked rock with copper in it. Found near the top of the mine." },
+  { id: "tinOre", name: "Tin Ore", icon: "⚪", kind: "material", sell: 5, desc: "Heavy, dark rock with tin in it. Melt it with copper to make bronze." },
+  { id: "ironOre", name: "Iron Ore", icon: "🟤", kind: "material", sell: 10, desc: "Rusty red rock full of iron. Found from floor 5 down." },
+  { id: "goldOre", name: "Gold Ore", icon: "🟡", kind: "material", sell: 25, desc: "Quartz with flecks of real gold. Found from floor 10 down." },
+  { id: "mithrilOre", name: "Mithril Ore", icon: "🔷", kind: "material", sell: 60, desc: "A glowing blue ore from the deepest floors. (Mithril comes from stories, not real geology.)" },
 ];
 
 const kits: ItemDef[] = [

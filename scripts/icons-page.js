@@ -285,6 +285,22 @@ const ICONS = {
   kit_chickenCoop: () => building("ChickenCoop"),
   kit_smallBarn: () => building("SmallBarn"),
 };
+/** Ore: a rock from the world with crystals of the ore's color, as the mine draws it. */
+const ORE_COLORS = { copperOre: "#3fae7a", tinOre: "#3b3440", ironOre: "#b24a2c", goldOre: "#f2c230", mithrilOre: "#5fd8f0" };
+async function ore(color) {
+  const rock = await glb("/models/qnature/Rock_2.glb");
+  const r = new THREE.Box3().setFromObject(rock).getSize(new THREE.Vector3());
+  const k = 1 / Math.max(r.x, r.y, r.z);
+  rock.scale.setScalar(k);
+  const bits = [[0.25, 0.55, 0.3, 0.24], [-0.22, 0.45, 0.35, 0.19], [0.05, 0.72, 0.05, 0.21], [0.38, 0.3, -0.1, 0.16]].map(([x, y, z, r]) => {
+    const m = mesh(new THREE.OctahedronGeometry(r, 0), color, [x, y, z], [0.4, x * 3, 0.3]);
+    if (color === ORE_COLORS.mithrilOre) m.material.emissive = new THREE.Color(color).multiplyScalar(0.4);
+    return m;
+  });
+  return group(rock, bits);
+}
+for (const [id, color] of Object.entries(ORE_COLORS)) ICONS[id] = () => ore(color);
+
 for (const [tier, color] of Object.entries(TIER_COLORS)) {
   ICONS[`axe_${tier}`] = async () => metal(await survival("tool-axe-upgraded"), color);
   ICONS[`pickaxe_${tier}`] = async () => metal(await survival("tool-pickaxe-upgraded"), color);

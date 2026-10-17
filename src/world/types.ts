@@ -4,8 +4,10 @@ import type { DayWeather } from "./weather";
 
 export type Season = "Spring" | "Summer" | "Fall" | "Winter";
 export type WeatherId = "sunny" | "cloudy" | "rain" | "storm" | "heat" | "fog" | "frost" | "snow";
-export type Ground = "grass" | "farm" | "path" | "water" | "sand" | "forest";
-export type Obstacle = "stone" | "stick" | "stump" | "tree" | "log" | "sapling" | null;
+export type Ground = "grass" | "farm" | "path" | "water" | "sand" | "forest" | "cave" | "caveWall";
+/** Rocks with ore in them, found in the mine. */
+export type OreRock = "copperOre" | "tinOre" | "ironOre" | "goldOre" | "mithrilOre";
+export type Obstacle = "stone" | "stick" | "stump" | "tree" | "log" | "sapling" | OreRock | null;
 export type Dir = "up" | "down" | "left" | "right";
 
 export interface SoilState {
@@ -60,11 +62,14 @@ export type BuildingKind =
   | "composter" | "rainBarrel" | "beehive" | "birdHouse" | "bugHotel" | "scarecrow"
   | "greenhouse" | "fence" | "flowerBed" | "pathStone" | "well" | "chickenCoop" | "smallBarn" | "chest"
   // Town buildings, landmarks, and props (not buildable by the player).
-  | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower";
+  | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower"
+  // The mine: its entrance in town, and the ladders on each floor.
+  | "mineEntrance" | "ladderUp" | "ladderDown";
 
 /** Town buildings the player can't build, pick up, or build over. */
 export const TOWN_KINDS: BuildingKind[] = [
   "house", "store", "shippingBin", "chest", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+  "mineEntrance", "ladderUp", "ladderDown",
 ];
 
 export interface Building {
@@ -144,9 +149,22 @@ export interface WorldState {
   settings: GameSettings;
   /** Quests you've accepted and finished (see quests.ts). */
   quests?: import("./quests").QuestState;
+  /** While you're underground: the mine floor you're on. The farm keeps growing up above. */
+  mine?: MineFloor;
+  /** The deepest mine floor reached, for the mine cart at the entrance. */
+  deepest?: number;
   /** Friendship with townsfolk, by NPC id. */
   friends?: Record<string, { points: number; talked?: number; gifted?: number; met?: boolean; stories?: number[] }>;
   /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */
   avatar?: string;
 }
 
+/** One floor of the mine: a small cave (MINE_W × MINE_H tiles), made fresh each time you go down. */
+export interface MineFloor {
+  floor: number;
+  tiles: Tile[];
+  /** The ladders: up (back to town, or the floor above) and, once found, down. */
+  buildings: Building[];
+  /** The rock hiding the ladder down (an index into tiles). */
+  ladderAt: number;
+}

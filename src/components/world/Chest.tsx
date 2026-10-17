@@ -1,6 +1,6 @@
 "use client";
 
-import { HOTBAR_SIZE, putInChest, takeAllFromChest, takeFromChest } from "@/world/engine";
+import { cartFloors, enterMine, HOTBAR_SIZE, putInChest, takeAllFromChest, takeFromChest } from "@/world/engine";
 import { ITEMS } from "@/world/items";
 import { CHEST_SIZE } from "@/world/map";
 import type { Slot } from "@/world/types";
@@ -52,6 +52,30 @@ export function ChestMenu() {
       <Grid slots={items} label="Take" onPick={(i) => update((s) => takeFromChest(s, id, i))} />
       <p className="mt-4 mb-2 text-xs font-black uppercase tracking-wider text-muted">Your bag (the top row is your hotbar)</p>
       <Grid slots={w.inventory} hotbar={HOTBAR_SIZE} label="Store" onPick={(i) => update((s) => putInChest(s, id, i))} />
+    </Modal>
+  );
+}
+
+/** The mine cart at the entrance: ride down to the top or any fifth floor you've reached. */
+export function MineCart() {
+  const w = useWorld((s) => s.world!);
+  const update = useWorld((s) => s.update);
+  const close = useWorld((s) => s.close);
+  const go = (floor: number) => {
+    update((s) => enterMine(s, floor));
+    close();
+  };
+  return (
+    <Modal title="The old mine" icon="⛏️" onClose={close}>
+      <p className="mb-3 text-sm text-muted">Climb down the ladder, or ride the mine cart to a floor you&apos;ve already reached.</p>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {cartFloors(w).map((f) => (
+          <button key={f} className={`btn ${f === 1 ? "btn-ghost" : "btn-primary"}`} onClick={() => go(f)}>
+            {f === 1 ? "🪜 Floor 1" : `🛒 Floor ${f}`}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-muted">Deepest floor reached: {w.deepest ?? 0}</p>
     </Modal>
   );
 }

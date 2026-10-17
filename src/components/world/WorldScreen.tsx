@@ -12,7 +12,7 @@ import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
 import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
 import { Bag, DaySummary, HouseMenu, IntroLetter, TvForecast } from "./Menus";
 import { ShippingMenu, StoreMenu } from "./Shop";
-import { ChestMenu } from "./Chest";
+import { ChestMenu, MineCart } from "./Chest";
 import { labelLayer, runtime, useWorld } from "./useWorld";
 
 const WorldScene = dynamic(() => import("./scene/WorldScene"), {
@@ -48,6 +48,7 @@ export function doAction(mode: "use" | "interact" = "use") {
   else if (target === "board") st.open("board");
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
+  else if (target === "mine") st.open("mine");
   else if (target === "chest") {
     const { x, y } = facingTile(here);
     st.openChest(buildingAt(here, x, y)!.id);
@@ -254,6 +255,7 @@ export function WorldScreen() {
           {menu === "store" && <StoreMenu />}
           {menu === "shipping" && <ShippingMenu />}
           {menu === "chest" && <ChestMenu />}
+          {menu === "mine" && <MineCart />}
           {menu === "journal" && <JournalBook />}
           {menu === "pause" && <PauseMenu />}
           {menu === "npc" && <NpcDialog />}

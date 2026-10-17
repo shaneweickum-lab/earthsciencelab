@@ -17,6 +17,8 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": Js.with(s, {"weather": weather})}
 		"select":
 			return {"state": Js.with(s, {"selected": int(op.i)})}
+		"enterMine":
+			return {"state": World.enter_mine(s, int(op.floor))}
 		"selectItem":
 			var at := 0
 			for i in s.inventory.size():
@@ -91,6 +93,8 @@ static func summary(s: Dictionary, text: Variant) -> Dictionary:
 		"growth": World.growth_factor(s, f.x, f.y) if t != null else null,
 		"grade": Grades.expected_grade(s, t) if t != null else null,
 		"npc": npc.id if npc != null else null, "quests": s.get("quests"), "friends": s.get("friends"),
+		"mine": {"floor": s.mine.floor, "ladderAt": s.mine.ladderAt, "buildings": s.mine.buildings} if s.get("mine") != null else null,
+		"deepest": s.get("deepest"),
 	}
 
 

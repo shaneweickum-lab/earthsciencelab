@@ -13,6 +13,7 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"store": return store(game_ui)
 		"shipping": return shipping()
 		"chest": return chest()
+		"mine": return mine_cart()
 		"journal": return journal(game_ui)
 		"pause": return Screens.pause(game_ui)
 		"npc": return TownMenus.npc_dialog(game_ui)
@@ -297,6 +298,23 @@ static func _item_list(w: Dictionary, items: Array, buy: Callable, extra: Varian
 				row.add_child(Ui.button("×5", func(): buy.call(i.id, 5), "ghost", 13, w.coins < price * 5))
 		col.add_child(Ui.panel(row, Ui.CARD, 12, 8))
 	return col
+
+
+## The mine cart at the entrance: ride down to the top or any fifth floor you've reached.
+static func mine_cart() -> Dictionary:
+	var w := Game.world
+	var m := Ui.modal("The old mine", "⛏️", Game.close)
+	var body: VBoxContainer = m.body
+	body.add_child(Ui.text("Climb down the ladder, or ride the mine cart to a floor you've already reached.", 14, Ui.MUTED))
+	var g := Ui.grid(4, 8)
+	for f in World.cart_floors(w):
+		var label := "🪜 Floor 1" if f == 1 else "🛒 Floor %d" % f
+		g.add_child(Ui.button(label, func():
+			Game.update(func(s): return World.enter_mine(s, f))
+			Game.close(), "ghost" if f == 1 else "primary", 14))
+	body.add_child(g)
+	body.add_child(Ui.small("Deepest floor reached: %d" % int(w.get("deepest", 0))))
+	return m
 
 
 ## A storage chest: click something in the chest to take it, or in your bag to put it away.

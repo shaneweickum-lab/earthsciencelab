@@ -1,5 +1,5 @@
 import { CROPS } from "@/game/crops";
-import { buildingAt, canPlantHere, facingTile, OBSTACLE_HP, selectedItem, tileAt } from "./engine";
+import { buildingAt, canPlantHere, crittersHere, facingTile, mineOpen, OBSTACLE_HP, obstacleName, ROCKS, selectedItem, tileAt } from "./engine";
 import { ITEMS, TIERS, WORLD_CROPS, type ItemDef } from "./items";
 import { amendmentPoints, MAX_BOOST } from "./grades";
 import { on } from "./settings";
@@ -18,7 +18,7 @@ function swings(t: Tile, def: ItemDef, verb: string): string {
   const hp = OBSTACLE_HP[t.obstacle!] - (t.hits ?? 0);
   const n = Math.ceil(hp / TIERS[def.tool!.tier].power);
   const tree = t.obstacle === "tree" ? " Trees shelter wildlife; a felled one sprouts again from its stump." : "";
-  return `${verb} the ${t.obstacle}: ${n} more swing${n === 1 ? "" : "s"}.${tree}`;
+  return `${verb} the ${obstacleName(t.obstacle!)}: ${n} more swing${n === 1 ? "" : "s"}.${tree}`;
 }
 
 /** Tells the player what pressing Space will do on the tile in front of them, before they do it. */
@@ -28,10 +28,15 @@ export function previewAction(state: WorldState): ActionPreview {
   const t = tileAt(state, x, y);
   if (!t) return { label: "", text: "", ok: false };
   const b = buildingAt(state, x, y);
-  const critter = state.critters.find((c) => c.x === x && c.y === y);
+  const critter = crittersHere(state).find((c) => c.x === x && c.y === y);
   if (critter) return { label: "Observe", text: "Look closely and add it to your Nature Journal.", ok: true };
 
   if (b?.kind === "chest") return { label: "Open", text: "Open the chest to take things out or put them away.", ok: true };
+  if (b?.kind === "mineEntrance") return mineOpen(state)
+    ? { label: "Enter", text: "Climb down into the old mine.", ok: true }
+    : { label: "Enter", text: "The mine is boarded up. Luis might know about it.", ok: false };
+  if (b?.kind === "ladderDown") return { label: "Climb", text: `Climb down to floor ${(state.mine?.floor ?? 0) + 1}.`, ok: true };
+  if (b?.kind === "ladderUp") return { label: "Climb", text: "Climb back up to town.", ok: true };
   if (!slot) {
     if (t.crop && t.crop.growth >= 1) return { label: "Harvest", text: `Pick the ${CROPS[t.crop.id].name.toLowerCase()}.`, ok: true };
     return { label: "Hands", text: "Nothing to pick up here.", ok: false };
@@ -87,10 +92,11 @@ export function previewAction(state: WorldState): ActionPreview {
       if (t.crop?.dead) return { label: "Clear", text: "Clear the dead plant.", ok: true };
       return { label: "Cut", text: "Nothing to cut.", ok: false };
     case "axe":
-      if (t.obstacle && t.obstacle !== "stone") return { label: "Chop", text: swings(t, def, "Chop"), ok: true };
+      if (t.obstacle && !ROCKS.includes(t.obstacle)) return { label: "Chop", text: swings(t, def, "Chop"), ok: true };
+      if (t.obstacle) return { label: "Chop", text: "Use a pickaxe on rocks.", ok: false };
       return { label: "Chop", text: "Nothing to chop.", ok: false };
     case "pickaxe":
-      if (t.obstacle === "stone") return { label: "Break", text: swings(t, def, "Break"), ok: true };
+      if (t.obstacle && ROCKS.includes(t.obstacle)) return { label: "Break", text: swings(t, def, "Break"), ok: true };
       if (t.tilled && !t.crop) return { label: "Un-till", text: "Flatten this tilled spot.", ok: true };
       return { label: "Break", text: "Nothing to break.", ok: false };
     case "shovel":

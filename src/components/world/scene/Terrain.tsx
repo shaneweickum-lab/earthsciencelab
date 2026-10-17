@@ -22,6 +22,8 @@ function groundColor(t: Tile, i: number, season: Season): string {
     case "path": return hash(i) > 0.5 ? "#d9c49a" : "#d2bc90";
     case "sand": return "#e6d3a3";
     case "water": return "#3f7fae";
+    case "cave": return "#5a4e44";
+    case "caveWall": return "#3b342e";
     case "farm":
       if (t.tilled) return t.moisture > 45 ? "#4a2f1c" : "#7a5233";
       return t.greenhouse ? "#8a6a45" : season === "Winter" ? "#c9c3b4" : "#9c8458";

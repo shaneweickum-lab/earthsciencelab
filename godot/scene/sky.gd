@@ -61,6 +61,19 @@ func _particles(color: Color, size: Vector3, amount: int, speed: float) -> CPUPa
 
 
 func update(world: Dictionary, player: Dictionary) -> void:
+	if world.get("mine") != null:
+		# Underground: dark, a little warm glow, no sun or weather.
+		env.background_color = Color("#1d1611")
+		env.fog_light_color = env.background_color
+		env.fog_depth_begin = 30
+		env.fog_depth_end = 60
+		env.ambient_light_color = Color("#d9c4a6")
+		env.ambient_light_energy = 0.55
+		sun.light_energy = 0.15
+		_rain.emitting = false
+		_snow.emitting = false
+		_weather = ""
+		return
 	var minute: float = world.minute
 	var d := Clock.daylight(minute)
 	var h := fmod(Clock.time_of_day(minute), 1440.0) / 60.0

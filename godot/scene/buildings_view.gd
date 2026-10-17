@@ -4,12 +4,16 @@ extends Node3D
 ## shapes otherwise. Port of Buildings.tsx.
 
 var _buildings: Array = []
+var _mine_open := false
 
 
 func refresh(world: Dictionary) -> void:
-	if is_same(world.buildings, _buildings):
+	# The mine entrance loses its boards when Luis's quest is done.
+	var open := World.mine_open(world)
+	if is_same(world.buildings, _buildings) and open == _mine_open:
 		return
 	_buildings = world.buildings
+	_mine_open = open
 	for n in get_children():
 		n.queue_free()
 	for b in _buildings:
@@ -225,6 +229,29 @@ func _procedural(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 				var p := Vector3(cos(i * 1.25) * 0.28, 0, sin(i * 1.25) * 0.28)
 				_cyl(root, 0.015, 0.015, 0.25, p + Vector3(0, 0.2, 0), "#4f8a2e", 4)
 				_ball(root, 0.07, p + Vector3(0, 0.34, 0), colors[i])
+		"mineEntrance":
+			# A rocky hillside with a timber-framed opening, boarded up until the quest.
+			_box(root, Vector3(2.2, 1.8, 1.3), Vector3(0, 0.9, -0.35), "#7d756b")
+			var hill := MeshInstance3D.new()
+			var cone := CylinderMesh.new()
+			cone.top_radius = 0
+			cone.bottom_radius = 1
+			cone.height = 1
+			cone.radial_segments = 5
+			hill.mesh = cone
+			hill.position = Vector3(0, 1.9, -0.5)
+			hill.rotation.y = PI / 4
+			hill.scale = Vector3(1.5, 0.7, 1.2)
+			hill.material_override = Models.mat("#6d665d")
+			root.add_child(hill)
+			_box(root, Vector3(1, 1.3, 0.02), Vector3(0, 0.65, 0.31), "#0d0a08")
+			for x in [-0.55, 0.55]:
+				_box(root, Vector3(0.16, 1.4, 0.16), Vector3(x, 0.7, 0.35), "#7a5636")
+			_box(root, Vector3(1.35, 0.16, 0.18), Vector3(0, 1.42, 0.35), "#6b4423")
+			if not _mine_open:
+				var ys := [0.3, 0.7, 1.05]
+				for i in 3:
+					_box(root, Vector3(1.25, 0.14, 0.05), Vector3(0, ys[i], 0.42), "#a8774f", Vector3(0, 0, (i - 1) * 0.12))
 		"noticeBoard":
 			for x in [-0.35, 0.35]:
 				_box(root, Vector3(0.08, 1.2, 0.08), Vector3(x, 0.6, 0), "#7a5636")

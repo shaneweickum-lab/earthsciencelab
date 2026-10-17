@@ -23,7 +23,15 @@ function findChromium() {
 const browser = await chromium.launch({ executablePath: findChromium(), args: ["--use-gl=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist"] });
 const errors = [];
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-page.on("console", (m) => { if (m.type() === "error") errors.push(`${page.url()}: ${m.text()}`); });
+// Leaving a page cancels its downloads, and three.js reports a cancelled texture as an error.
+// Those come from the test moving on, not from the page, so they don't count.
+let lastAbort = 0;
+page.on("requestfailed", (r) => { if (r.failure()?.errorText === "net::ERR_ABORTED") lastAbort = Date.now(); });
+page.on("console", (m) => {
+  if (m.type() !== "error") return;
+  if (/Couldn't load texture/.test(m.text()) && Date.now() - lastAbort < 1000) return;
+  errors.push(`${page.url()}: ${m.text()}`);
+});
 page.on("pageerror", (e) => errors.push(`${page.url()}: ${e.message}`));
 
 async function shot(name) {
@@ -99,20 +107,7 @@ await shot("06b-farm");
 // Walking is slow in a software-rendered browser, so tests move the player by editing the save.
 const SAVE = "earthsciencelab-world";
 const MAP_W = 76; // tiles per row (src/world/map.ts W)
-// Requests still loading, so tests can wait for the models before leaving a page (leaving
-// mid-load makes three.js log a failed texture).
-let inflight = 0;
-page.on("request", () => inflight++);
-page.on("requestfinished", () => inflight--);
-page.on("requestfailed", () => inflight--);
-async function settle() {
-  for (let quiet = 0; quiet < 5; ) {
-    await page.waitForTimeout(100);
-    quiet = inflight > 0 ? 0 : quiet + 1;
-  }
-}
 async function teleport(x, y, facing, tiles = {}) {
-  await settle();
   await page.goto(`${BASE}/soil/sources`); // leaving the game saves the farm
   await page.evaluate(({ SAVE, x, y, facing, tiles }) => {
     const w = JSON.parse(localStorage.getItem(SAVE));
@@ -234,7 +229,6 @@ await page.keyboard.press("Escape");
 if (await page.getByRole("switch", { name: "Weeds" }).isChecked()) throw new Error("Weeds setting wasn't saved");
 await page.keyboard.press("Escape");
 
-await settle();
 await page.goto(`${BASE}/soil/globe`);
 await page.waitForTimeout(2000);
 await page.getByLabel("Jump to a region").selectOption("amazon");
@@ -272,7 +266,6 @@ await page.getByRole("dialog", { name: /Periodic table/ }).waitFor({ state: "det
 await page.getByRole("dialog", { name: "Main menu" }).waitFor();
 
 // Keyboard shortcut and lesson links.
-await settle();
 await page.goto(`${BASE}/soil/learn/healthy-soil`);
 await page.waitForLoadState("networkidle");
 await page.keyboard.press("e");
@@ -356,7 +349,6 @@ await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 await shot("11-mobile-game");
-await settle();
 await page.goto(`${BASE}/elements?z=8`);
 await page.getByRole("heading", { name: "Oxygen" }).waitFor();
 await page.waitForTimeout(1500);

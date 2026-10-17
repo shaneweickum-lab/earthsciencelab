@@ -1,6 +1,6 @@
 import type { Level } from "@/content/soil/curriculum/types";
 
-export type JournalCategory = "insect" | "fungus" | "bird" | "animal" | "soil" | "weather";
+export type JournalCategory = "insect" | "fungus" | "bird" | "animal" | "soil" | "weather" | "rock";
 
 export interface JournalEntry {
   id: string;
@@ -24,6 +24,7 @@ export const CATEGORY_INFO: Record<JournalCategory, { label: string; icon: strin
   animal: { label: "Pond life", icon: "🐸" },
   soil: { label: "Soil science", icon: "🪱" },
   weather: { label: "Weather & sky", icon: "🌦️" },
+  rock: { label: "Rocks & minerals", icon: "🪨" },
 };
 
 const UC_IPM = { org: "University of California Statewide IPM Program", url: "https://ipm.ucanr.edu" };
@@ -34,6 +35,7 @@ const CORNELL = { org: "Cornell Lab of Ornithology, All About Birds", url: "http
 const NOAA = { org: "NOAA National Weather Service, JetStream", url: "https://www.weather.gov/jetstream/" };
 const USGS = { org: "U.S. Geological Survey, Water Science School", url: "https://www.usgs.gov/special-topics/water-science-school" };
 const PSU = { org: "Penn State Extension, Manure and Composting", url: "https://extension.psu.edu" };
+const USGS_MINERALS = { org: "U.S. Geological Survey, National Minerals Information Center", url: "https://www.usgs.gov/centers/national-minerals-information-center" };
 const MUSHROOM = { org: "North American Mycological Association", url: "https://namyco.org" };
 
 export const MUSHROOM_SAFETY = "Never eat a wild mushroom unless an expert identifies it. Some deadly mushrooms look like safe ones.";
@@ -283,6 +285,53 @@ export const JOURNAL: JournalEntry[] = [
       elementary: "Snowflakes have six sides because of the way water molecules fit together when they freeze.",
       middle: "Snow forms when water vapor freezes straight into ice crystals in cold clouds. A snow blanket insulates the soil like a quilt.",
       high: "Ice's six-sided crystal lattice comes from hydrogen bonding. Whether a crystal grows as a plate, needle, or branching star depends on temperature and humidity. Fresh snow is mostly air, which makes it an excellent insulator for life in the soil below.",
+    },
+  },
+
+  // ── Rocks & minerals ──
+  {
+    id: "copperOre", name: "Copper Ore", icon: "🟠", category: "rock", source: USGS_MINERALS,
+    hint: "Mine an ore rock near the top of the mine.",
+    fact: {
+      elementary: "Copper is a reddish metal found inside some rocks. People have used it for more than 10,000 years, and today it carries electricity through the wires in your walls.",
+      middle: "Copper ores like malachite (green) and chalcopyrite (brassy yellow) are minerals that contain copper. Heating them in a furnace separates the metal from the rest of the rock, a process called smelting.",
+      high: "Most copper today comes from porphyry deposits, where hot fluids from cooling magma left copper sulfides spread through huge volumes of rock. Because ore is often under 1% copper, mines move enormous amounts of rock, so recycling copper saves a lot of energy.",
+    },
+  },
+  {
+    id: "tinOre", name: "Tin Ore", icon: "⚪", category: "rock", source: USGS_MINERALS,
+    hint: "Mine a dark, heavy ore rock.",
+    fact: {
+      elementary: "Tin is a soft, silvery metal. Mixed with copper it makes bronze, a metal so useful that a whole period of history is called the Bronze Age!",
+      middle: "The main tin ore is cassiterite, a very heavy, dark mineral. Melting about 9 parts copper with 1 part tin makes bronze, which is harder than either metal alone. A mix of metals is called an alloy.",
+      high: "Cassiterite (SnO₂) is dense and resists weathering, so it collects in stream gravels as placer deposits. Bronze is harder than copper because the larger tin atoms disrupt the copper crystal lattice and block the planes of atoms from sliding.",
+    },
+  },
+  {
+    id: "ironOre", name: "Iron Ore", icon: "🟤", category: "rock", source: USGS_MINERALS,
+    hint: "Mine deeper, from floor 5 down.",
+    fact: {
+      elementary: "Iron is the metal in steel, and it's also what makes some rocks and soils look red: rust! Your blood is red because of iron too.",
+      middle: "Iron ores like hematite and magnetite are iron oxides: iron joined with oxygen. A blast furnace uses carbon to pull the oxygen away, leaving iron. Red soils get their color from iron oxides.",
+      high: "Banded iron formations formed 2–3 billion years ago when oxygen made by early photosynthesizers reacted with iron dissolved in the oceans and settled out as layers of iron oxide. They're a record of Earth's atmosphere becoming oxygen-rich.",
+    },
+  },
+  {
+    id: "goldOre", name: "Gold", icon: "🟡", category: "rock", source: USGS_MINERALS,
+    hint: "Mine deep, from floor 10 down.",
+    fact: {
+      elementary: "Gold is a shiny yellow metal that never rusts. It's found as tiny flakes in rock or in stream gravel.",
+      middle: "Gold is often found as the pure element (native gold) in veins of quartz, where hot water deposited it in cracks. It's so unreactive that it doesn't rust or tarnish, which is why old gold coins still shine.",
+      high: "Gold is soft (2.5–3 on the Mohs scale) and very dense, so pure gold tools would bend and wear quickly. It conducts electricity well and never corrodes, so tiny amounts are used in electronics connectors.",
+    },
+  },
+  {
+    id: "mithrilOre", name: "Mithril", icon: "🔷", category: "rock", source: USGS_MINERALS,
+    hint: "Mine the deepest floors, from 20 down.",
+    fact: {
+      elementary: "Mithril is a metal from stories, not from the real Earth! In real life, the strongest, lightest metals, like titanium, come from minerals too.",
+      middle: "Mithril was invented for fantasy books. Real metals with similar magic, like titanium (strong and light) come from minerals such as ilmenite and rutile, often found in beach sands.",
+      high: "Titanium is the 9th most common element in Earth's crust, yet it's expensive because separating it from oxygen takes a lot of energy (the Kroll process). Its high strength-to-weight ratio makes it valuable for aircraft and medical implants.",
     },
   },
 ];

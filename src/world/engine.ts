@@ -2,7 +2,7 @@ import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { cropDays, ITEMS, item, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type ToolUse } from "./items";
-import { BUILDING_SIZE, CHEST_SIZE, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { BUILDING_SIZE, CHEST_SIZE, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
@@ -10,7 +10,7 @@ import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, typ
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 6;
+export const WORLD_VERSION = 7;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -100,11 +100,17 @@ export function meanTempF(state: WorldState, greenhouse = false) {
 }
 
 export function tileAt(state: WorldState, x: number, y: number): Tile | null {
+  if (state.mine) return x >= 0 && y >= 0 && x < MINE_W && y < MINE_H ? state.mine.tiles[y * MINE_W + x] : null;
   return inBounds(x, y) ? state.tiles[idx(x, y)] : null;
 }
 
+/** The buildings where the player is: the farm and town, or the ladders on a mine floor. */
+export const buildingsHere = (state: WorldState) => (state.mine ? state.mine.buildings : state.buildings);
+/** Critters live up on the farm; there are none underground. */
+export const crittersHere = (state: WorldState) => (state.mine ? [] : state.critters);
+
 export function buildingAt(state: WorldState, x: number, y: number): Building | null {
-  for (const b of state.buildings) {
+  for (const b of buildingsHere(state)) {
     const [w, h] = BUILDING_SIZE[b.kind];
     if (x >= b.x && x < b.x + w && y >= b.y && y < b.y + h) return b;
   }
@@ -114,7 +120,7 @@ export function buildingAt(state: WorldState, x: number, y: number): Building | 
 /** Can the player stand on this tile? */
 export function isWalkable(state: WorldState, x: number, y: number): boolean {
   const t = tileAt(state, x, y);
-  if (!t || t.ground === "water") return false;
+  if (!t || t.ground === "water" || t.ground === "caveWall") return false;
   if (t.obstacle) return false;
   const b = buildingAt(state, x, y);
   if (!b) return true;
@@ -189,6 +195,11 @@ export function removeItem(state: WorldState, id: string, qty: number, grade?: G
 }
 
 function setTile(state: WorldState, x: number, y: number, fn: (t: Tile) => Tile): WorldState {
+  if (state.mine) {
+    const tiles = [...state.mine.tiles];
+    tiles[y * MINE_W + x] = fn(tiles[y * MINE_W + x]);
+    return { ...state, mine: { ...state.mine, tiles } };
+  }
   const tiles = [...state.tiles];
   tiles[idx(x, y)] = fn(tiles[idx(x, y)]);
   return { ...state, tiles };
@@ -490,7 +501,7 @@ function runNight(state: WorldState): WorldState {
 export function sleep(state: WorldState): WorldState {
   const late = timeOfDay(state.minute) >= 24 * 60;
   const d = day(state) + 1;
-  const s = startDay(runNight(state), d);
+  const s = surface(startDay(runNight(state), d));
   return {
     ...s,
     energy: late ? Math.round(s.maxEnergy * 0.8) : s.maxEnergy,
@@ -501,7 +512,7 @@ export function sleep(state: WorldState): WorldState {
 function faint(state: WorldState): WorldState {
   const lost = Math.min(100, Math.round(state.coins * 0.1));
   const d = day({ ...state, minute: state.minute - 1 }) + 1;
-  const s = startDay({ ...state, minute: startOfDay(d) - 1 }, d);
+  const s = surface(startDay({ ...state, minute: startOfDay(d) - 1 }, d));
   return {
     ...s,
     coins: s.coins - lost,
@@ -516,7 +527,15 @@ function faint(state: WorldState): WorldState {
 const ENERGY: Record<ToolUse, number> = { hoe: 2, can: 1, scythe: 1, axe: 2, pickaxe: 2, shovel: 2, ring: 1 };
 
 /** How many swings' worth of power it takes to clear each obstacle (a basic tool does 1 a swing). */
-export const OBSTACLE_HP: Record<NonNullable<Obstacle>, number> = { stick: 1, sapling: 1, stone: 2, log: 4, stump: 5, tree: 8 };
+export const OBSTACLE_HP: Record<NonNullable<Obstacle>, number> = {
+  stick: 1, sapling: 1, stone: 2, log: 4, stump: 5, tree: 8,
+  copperOre: 3, tinOre: 3, ironOre: 5, goldOre: 6, mithrilOre: 9,
+};
+/** "stone", "log", or "copper ore rock". */
+export const obstacleName = (o: NonNullable<Obstacle>) => (o.endsWith("Ore") ? `${ITEMS[o].name.toLowerCase()} rock` : o);
+
+/** Rocks you break with a pickaxe (the rest are wood, for the axe). */
+export const ROCKS: NonNullable<Obstacle>[] = ["stone", "copperOre", "tinOre", "ironOre", "goldOre", "mithrilOre"];
 /** Wood from chopping each one. */
 const WOOD: Partial<Record<NonNullable<Obstacle>, number>> = { stick: 1, sapling: 1, log: 4, stump: 3, tree: 6 };
 /** Days for a felled tree's stump to sprout, and for the sapling to grow back into a tree. */
@@ -553,17 +572,30 @@ function unmarked(t: Tile): Tile {
 /** A tile whose obstacle is gone. */
 const cleared = (t: Tile): Tile => ({ ...unmarked(t), obstacle: null });
 
+/** A rock breaks: stone or ore, and maybe the ladder down that was hiding under it. */
+function breakRock(state: WorldState, x: number, y: number, o: NonNullable<Obstacle>): WorldState {
+  const qty = o === "stone" || o === "mithrilOre" ? 1 : 1 + ((x + y) % 2);
+  const got = addItem(setTile(state, x, y, cleared), o, qty);
+  if (!got) return say(state, "Your bag is full.");
+  let s = say(got, `+${qty} ${item(o).name.toLowerCase()}.`);
+  if (o !== "stone") s = discover(s, o);
+  const m = s.mine;
+  if (m && m.ladderAt === y * MINE_W + x) {
+    s = { ...s, mine: { ...m, buildings: [...m.buildings, { id: "ladder-down", kind: "ladderDown", x, y, data: {} }] } };
+    s = say(s, "You found a ladder going down!");
+  }
+  return s;
+}
+
 /** One swing of an axe or pickaxe at the obstacle in front of you. */
 function hitObstacle(state: WorldState, x: number, y: number, power: number, verb: string): WorldState {
-  const t = state.tiles[idx(x, y)];
+  const t = tileAt(state, x, y)!;
   const o = t.obstacle!;
   const hits = (t.hits ?? 0) + power;
   const hp = OBSTACLE_HP[o];
-  if (hits < hp) return say(setTile(state, x, y, (tt) => ({ ...tt, hits })), `${verb}! The ${o} is ${Math.round((hits / hp) * 100)}% broken.`);
-  if (o === "stone") {
-    const got = addItem(setTile(state, x, y, cleared), "stone", 1);
-    return got ? say(got, "+1 stone.") : say(state, "Your bag is full.");
-  }
+  const what = obstacleName(o);
+  if (hits < hp) return say(setTile(state, x, y, (tt) => ({ ...tt, hits })), `${verb}! The ${what} is ${Math.round((hits / hp) * 100)}% broken.`);
+  if (ROCKS.includes(o)) return breakRock(state, x, y, o);
   const wood = WOOD[o] ?? 1;
   if (o === "tree") {
     // A felled tree leaves a stump that sprouts again, unless it's in the garden field.
@@ -587,7 +619,10 @@ export function act(state: WorldState): WorldState {
   const { x, y } = facingTile(state);
   const t = tileAt(state, x, y);
   if (!t) return state;
-  if (state.critters.some((c) => c.x === x && c.y === y)) return interact(state);
+  if (crittersHere(state).some((c) => c.x === x && c.y === y)) return interact(state);
+  // Ladders and the mine entrance work with whatever you're holding.
+  const b = buildingAt(state, x, y);
+  if (b && (b.kind === "ladderUp" || b.kind === "ladderDown" || b.kind === "mineEntrance")) return interact(state);
   const slot = selectedItem(state);
   const def = slot ? ITEMS[slot.item] : null;
   if (t.crop && !t.crop.dead && t.crop.growth >= 1 && def?.kind !== "amendment") return harvest(state, x, y);
@@ -649,11 +684,11 @@ export function applyTool(state: WorldState): WorldState {
       return state;
     }
     case "axe": {
-      if (!t.obstacle || t.obstacle === "stone") return state;
+      if (!t.obstacle || ROCKS.includes(t.obstacle)) return state;
       return hitObstacle(paid, x, y, power, "Chop");
     }
     case "pickaxe": {
-      if (t.obstacle === "stone") return hitObstacle(paid, x, y, power, "Crack");
+      if (t.obstacle && ROCKS.includes(t.obstacle)) return hitObstacle(paid, x, y, power, "Crack");
       if (t.tilled && !t.crop) return setTile(paid, x, y, (tt) => ({ ...tt, tilled: false }));
       return state;
     }
@@ -777,7 +812,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -788,6 +823,8 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "shippingBin") return "shipping";
   if (b?.kind === "noticeBoard") return "board";
   if (b?.kind === "chest") return "chest";
+  // Once you've been deep enough, the mine cart at the entrance can take you down.
+  if (b?.kind === "mineEntrance" && mineOpen(state) && (state.deepest ?? 0) >= 5) return "mine";
   return null;
 }
 
@@ -795,7 +832,7 @@ export function interact(state: WorldState): WorldState {
   const { x, y } = facingTile(state);
   const t = tileAt(state, x, y);
   if (!t) return state;
-  const critter = state.critters.find((c) => c.x === x && c.y === y);
+  const critter = crittersHere(state).find((c) => c.x === x && c.y === y);
   if (critter) return discover({ ...state, critters: state.critters.filter((c) => c.id !== critter.id) }, critter.kind);
   const b = buildingAt(state, x, y);
   if (b) return operateBuilding(state, b);
@@ -887,6 +924,13 @@ function operateBuilding(state: WorldState, b: Building): WorldState {
       return say(state, b.data.owner ? "The Ortegas' barn smells like hay and corn." : "Grandma Rosa's old barn. Swallows nest in the rafters.");
     case "chest":
       return say(state, "Grandma Rosa's old chest. Open it to store things or take them out.");
+    case "mineEntrance":
+      if (!mineOpen(state)) return say(state, "Old boards cover the mine entrance. Luis might know something about it.");
+      return enterMine(state, 1);
+    case "ladderDown":
+      return enterMine(state, (state.mine?.floor ?? 0) + 1);
+    case "ladderUp":
+      return leaveMine(state);
     case "silo":
       return say(state, "A tall silo for storing grain through the winter.");
     case "windmill":
@@ -1001,6 +1045,7 @@ export function placementFor(state: WorldState, kind: BuildingKind, x: number, y
 export function placeBuilding(state: WorldState, slotIndex: number, x: number, y: number): WorldState {
   const s = state.inventory[slotIndex];
   if (!s) return state;
+  if (state.mine) return say(state, "Build up on your farm, not in the mine.");
   const def = item(s.item);
   if (!def.building) return state;
   const { x: ox, y: oy } = placementFor(state, def.building, x, y);
@@ -1061,6 +1106,41 @@ export function swapSlots(state: WorldState, a: number, b: number): WorldState {
   const inv = [...state.inventory];
   [inv[a], inv[b]] = [inv[b], inv[a]];
   return { ...state, inventory: inv };
+}
+
+// ───────────────────────── the mine ─────────────────────────
+
+/** Luis's quest boards up... unboards the old mine. */
+export const mineOpen = (state: WorldState) => (state.quests?.done ?? []).includes("reopen-mine");
+
+/** Floors the mine cart can take you to: the top, and every fifth floor you've reached. */
+export function cartFloors(state: WorldState): number[] {
+  const out = [1];
+  for (let f = 5; f <= (state.deepest ?? 0); f += 5) out.push(f);
+  return out;
+}
+
+/** Climb down to a floor: a fresh cave, with you standing by the ladder up. */
+export function enterMine(state: WorldState, floor: number): WorldState {
+  if (!mineOpen(state)) return state;
+  const mine = mineFloor(state.seed, floor, day(state));
+  const deepest = Math.max(state.deepest ?? 0, floor);
+  const s: WorldState = { ...state, mine, deepest, player: { x: MINE_START.x, y: MINE_START.y + 1, facing: "down" } };
+  const note = floor === 1 ? "The old mine. Break rocks with your pickaxe; a ladder down hides under one of them." : `Floor ${floor}.`;
+  return say(s, deepest > (state.deepest ?? 0) && floor % 5 === 0 ? `${note} The mine cart can bring you back to this floor.` : note);
+}
+
+/** Without the mine: you're back up top. */
+function surface(state: WorldState): WorldState {
+  const s = { ...state };
+  delete s.mine;
+  return s;
+}
+
+/** Climb out of the mine to the entrance in town. */
+export function leaveMine(state: WorldState): WorldState {
+  if (!state.mine) return state;
+  return say({ ...surface(state), player: { x: MINE_ENTRANCE.x + 1, y: MINE_ENTRANCE.y + 2, facing: "down" } }, "You climb back out into the daylight.");
 }
 
 // ───────────────────────── chests ─────────────────────────
@@ -1195,6 +1275,8 @@ export function loadWorld(raw: string | null): WorldState | null {
     if (up.tiles.length !== W * H) return null;
     if (up.version < 5) up = addLandmarks(up);
     if (up.version < 6) up = addChest(up);
+    // Version 7 added the mine entrance past the town.
+    if (up.version < 7) up = addLandmarks(up, 7);
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

@@ -3,9 +3,10 @@ class_name Hud
 ## the hotbar; and the tile inspector. Port of Hud.tsx.
 
 const SEASON_ICON := {"Spring": "🌸", "Summer": "☀️", "Fall": "🍂", "Winter": "❄️"}
-const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest"}
+const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest", "cave": "Cave floor", "caveWall": "Rock wall"}
 const LABELS := {
 	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "chest": "Tool Chest", "extension": "Extension Office", "cottage": "Cottage",
+	"mineEntrance": "Old Mine", "ladderUp": "Ladder up", "ladderDown": "Ladder down",
 	"fountain": "Fountain", "noticeBoard": "Notice board", "field": "Cornfield", "lamp": "Street lamp", "prop": "Market cart",
 }
 
@@ -177,7 +178,9 @@ static func _status(w: Dictionary, t: Dictionary, x: int, y: int) -> Array:
 	if World._crit_at(w, x, y) != null:
 		lines.append("Something is here! Press Space to take a closer look.")
 	if t.obstacle:
-		lines.append("A %s is in the way." % t.obstacle)
+		var o: String = t.obstacle
+		var broken := " (%s%% broken)" % Js.num(Js.round(float(t.hits) / World.OBSTACLE_HP[o] * 100)) if t.get("hits") else ""
+		lines.append("A %s is in the way.%s" % [World.obstacle_name(o), broken])
 	if t.weeds:
 		lines.append("Weeds are growing here.")
 	if t.mulch:

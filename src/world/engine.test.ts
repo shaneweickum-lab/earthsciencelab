@@ -5,9 +5,10 @@ import { DEFAULT_SETTINGS } from "./settings";
 import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
   sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding, lockedInShop, putInChest, takeAllFromChest, takeFromChest,
+  WORLD_VERSION, enterMine, leaveMine, isWalkable, buildingAt, cartFloors,
 } from "./engine";
 import { ITEMS, UPGRADES } from "./items";
-import { idx } from "./map";
+import { idx, MINE_ENTRANCE, MINE_START, MINE_W, mineFloor } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
 import type { Tile, WeatherId, WorldState } from "./types";
@@ -306,7 +307,7 @@ describe("saves from before the landmarks", () => {
     // The player built a fence where the farm silo goes.
     const fenced = { ...old, buildings: [...old.buildings, { id: "fence-1", kind: "fence" as const, x: 19, y: 5, data: {} }] };
     const up = loadWorld(JSON.stringify(fenced))!;
-    expect(up.version).toBe(6);
+    expect(up.version).toBe(WORLD_VERSION);
     for (const id of landmarks.filter((id) => id !== "farm-silo")) expect(up.buildings.some((b) => b.id === id), id).toBe(true);
     expect(up.buildings.some((b) => b.id === "farm-silo")).toBe(false);
     expect(up.buildings.some((b) => b.id === "fence-1")).toBe(true);
@@ -375,6 +376,74 @@ describe("tools", () => {
   });
 });
 
+describe("the mine", () => {
+  const open = (s: WorldState): WorldState => ({ ...s, quests: { active: [], done: ["reopen-mine"] } });
+  const atEntrance = (s: WorldState): WorldState => ({ ...s, player: { x: MINE_ENTRANCE.x + 1, y: MINE_ENTRANCE.y + 2, facing: "up" } });
+
+  it("is boarded up until Luis's quest is done", () => {
+    const s = atEntrance(newWorld(42));
+    const r = interact(s);
+    expect(r.mine).toBeUndefined();
+    expect(r.messages.at(-1)!.text).toMatch(/boards/);
+    const inside = interact(open(s));
+    expect(inside.mine?.floor).toBe(1);
+    expect(inside.deepest).toBe(1);
+    expect(isWalkable(inside, inside.player.x, inside.player.y)).toBe(true);
+  });
+
+  it("makes floors with deeper ores the deeper you go, the same for the same day", () => {
+    const ores = (floor: number) => new Set(mineFloor(42, floor, 1).tiles.map((t) => t.obstacle).filter((o) => o && o !== "stone"));
+    expect([...ores(1)].every((o) => o === "copperOre" || o === "tinOre")).toBe(true);
+    const deep = new Set([25, 26, 27, 28, 29].flatMap((f) => [...ores(f)]));
+    expect(deep.has("mithrilOre") || deep.has("goldOre")).toBe(true);
+    expect(mineFloor(42, 3, 1)).toEqual(mineFloor(42, 3, 1));
+    expect(mineFloor(42, 3, 1)).not.toEqual(mineFloor(42, 3, 2));
+    const f = mineFloor(42, 3, 1);
+    expect(f.tiles[f.ladderAt].obstacle).not.toBeNull();
+  });
+
+  it("hides the ladder down under a rock, and climbing out returns you to town", () => {
+    let s = interact(open(atEntrance(newWorld(42))));
+    const m = s.mine!;
+    const lx = m.ladderAt % MINE_W, ly = Math.floor(m.ladderAt / MINE_W);
+    // Stand above the ladder rock (clearing the spot) and break it with a mithril pickaxe.
+    const tiles = [...m.tiles];
+    tiles[(ly - 1) * MINE_W + lx] = { ...tiles[m.ladderAt], ground: "cave", obstacle: null };
+    s = select({ ...s, mine: { ...m, tiles }, player: { x: lx, y: ly - 1, facing: "down" } }, "pickaxe_mithril");
+    s = applyTool(s);
+    expect(buildingAt(s, lx, ly)?.kind).toBe("ladderDown");
+    s = interact(s);
+    expect(s.mine?.floor).toBe(2);
+    expect(s.deepest).toBe(2);
+    s = { ...s, player: { x: MINE_START.x, y: MINE_START.y + 1, facing: "up" } };
+    s = interact(s); // the ladder up
+    expect(s.mine).toBeUndefined();
+    expect(s.player).toMatchObject({ x: MINE_ENTRANCE.x + 1, y: MINE_ENTRANCE.y + 2 });
+    expect(leaveMine(s)).toBe(s);
+  });
+
+  it("gives ore and a journal page, and the farm keeps growing above", () => {
+    let s = enterMine(open(newWorld(42)), 12);
+    const m = s.mine!;
+    const tiles = [...m.tiles];
+    const at = (MINE_START.y + 2) * MINE_W + MINE_START.x;
+    tiles[at] = { ...tiles[at], ground: "cave", obstacle: "ironOre" };
+    s = select({ ...s, mine: { ...m, ladderAt: -1, tiles } }, "pickaxe_mithril");
+    s = applyTool(s);
+    expect(countItem(s, "ironOre")).toBeGreaterThan(0);
+    expect(s.journal).toContain("ironOre");
+    const before = s.tiles;
+    s = tick(s, 120);
+    expect(s.tiles).not.toBe(before); // hourly farm updates still run
+    expect(sleep(s).mine).toBeUndefined();
+  });
+
+  it("remembers every fifth floor for the mine cart", () => {
+    const s = enterMine(open(newWorld(42)), 11);
+    expect(cartFloors(s)).toEqual([1, 5, 10]);
+  });
+});
+
 describe("item icons", () => {
   it("exist for every item", () => {
     for (const i of [...Object.values(ITEMS), UPGRADES.bigCan]) expect(existsSync(`public${i.image}`), i.id).toBe(true);
@@ -414,7 +483,7 @@ describe("the starter chest", () => {
     const s = newWorld(42);
     const old = { ...s, version: 5, buildings: s.buildings.filter((b) => b.kind !== "chest") };
     const up = loadWorld(JSON.stringify(old))!;
-    expect(up.version).toBe(6);
+    expect(up.version).toBe(WORLD_VERSION);
     expect(chestOf(up).data.items!.every((x) => x === null)).toBe(true);
     for (const id of ["shovel", "ring", "labKit"]) expect(lockedInShop(up, id), id).toBe(false);
   });

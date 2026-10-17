@@ -12,7 +12,7 @@ static func _swings(t: Dictionary, def: Dictionary, verb: String) -> String:
 	var hp: int = World.OBSTACLE_HP[t.obstacle] - int(t.get("hits", 0))
 	var n := int(ceil(float(hp) / Data.tiers()[def.tool.tier].power))
 	var tree := " Trees shelter wildlife; a felled one sprouts again from its stump." if t.obstacle == "tree" else ""
-	return "%s the %s: %d more swing%s.%s" % [verb, t.obstacle, n, "" if n == 1 else "s", tree]
+	return "%s the %s: %d more swing%s.%s" % [verb, World.obstacle_name(t.obstacle), n, "" if n == 1 else "s", tree]
 
 
 static func preview_action(state: Dictionary) -> Dictionary:
@@ -26,6 +26,14 @@ static func preview_action(state: Dictionary) -> Dictionary:
 	var b = World.building_at(state, x, y)
 	if b != null and b.kind == "chest":
 		return _r("Open", "Open the chest to take things out or put them away.", true)
+	if b != null and b.kind == "mineEntrance":
+		if World.mine_open(state):
+			return _r("Enter", "Climb down into the old mine.", true)
+		return _r("Enter", "The mine is boarded up. Luis might know about it.", false)
+	if b != null and b.kind == "ladderDown":
+		return _r("Climb", "Climb down to floor %d." % (int(state.mine.floor) + 1), true)
+	if b != null and b.kind == "ladderUp":
+		return _r("Climb", "Climb back up to town.", true)
 	if World._crit_at(state, x, y) != null:
 		return _r("Observe", "Look closely and add it to your Nature Journal.", true)
 	var c = t.crop
@@ -103,11 +111,13 @@ static func preview_action(state: Dictionary) -> Dictionary:
 				return _r("Clear", "Clear the dead plant.", true)
 			return _r("Cut", "Nothing to cut.", false)
 		"axe":
-			if t.obstacle and t.obstacle != "stone":
+			if t.obstacle and not t.obstacle in World.ROCKS:
 				return _r("Chop", _swings(t, def, "Chop"), true)
+			if t.obstacle:
+				return _r("Chop", "Use a pickaxe on rocks.", false)
 			return _r("Chop", "Nothing to chop.", false)
 		"pickaxe":
-			if t.obstacle == "stone":
+			if t.obstacle and t.obstacle in World.ROCKS:
 				return _r("Break", _swings(t, def, "Break"), true)
 			if t.tilled and not c:
 				return _r("Un-till", "Flatten this tilled spot.", true)
