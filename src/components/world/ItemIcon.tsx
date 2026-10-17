@@ -1,6 +1,7 @@
+import { durability } from "@/world/engine";
 import { GRADE_INFO } from "@/world/grades";
 import { ITEMS } from "@/world/items";
-import type { Grade } from "@/world/types";
+import type { Grade, Slot } from "@/world/types";
 
 /** An item's picture icon (or its emoji when it has none), with a grade badge for graded produce. */
 export function ItemIcon({ id, grade, className = "" }: { id: string; grade?: Grade; className?: string }) {
@@ -30,6 +31,18 @@ export function GradeBadge({ grade, className = "" }: { grade: Grade; className?
       aria-label={`Grade ${grade}`}
     >
       {grade}
+    </span>
+  );
+}
+
+/** A worn tool's uses left, as a little bar along the bottom of its slot (hidden while it's like new). */
+export function WearBar({ slot }: { slot: Slot | null }) {
+  const d = slot && durability(slot);
+  if (!d || d.left >= d.max) return null;
+  const f = d.left / d.max;
+  return (
+    <span className="absolute inset-x-1 bottom-0.5 h-1 overflow-hidden rounded-full bg-black/20" aria-hidden>
+      <span className="block h-full rounded-full" style={{ width: `${Math.max(4, f * 100)}%`, background: f > 0.5 ? "#4f9a45" : f > 0.2 ? "#e0a030" : "#b8432f" }} />
     </span>
   );
 }

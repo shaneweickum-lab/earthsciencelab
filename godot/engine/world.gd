@@ -9,7 +9,13 @@ const MAX_ENERGY := 100
 const ORGANIC_BONUS := 1.25
 
 const DIRS := {"up": [0, -1], "down": [0, 1], "left": [-1, 0], "right": [1, 0]}
-const ENERGY := {"hoe": 2, "can": 1, "scythe": 1, "axe": 2, "pickaxe": 3, "shovel": 2, "ring": 1}
+const ENERGY := {"hoe": 2, "can": 1, "scythe": 1, "axe": 2, "pickaxe": 2, "shovel": 2, "ring": 1}
+## How many swings' worth of power it takes to clear each obstacle (a basic tool does 1 a swing).
+const OBSTACLE_HP := {"stick": 1, "sapling": 1, "stone": 2, "log": 4, "stump": 5, "tree": 8}
+## Wood from chopping each one.
+const WOOD := {"stick": 1, "sapling": 1, "log": 4, "stump": 3, "tree": 6}
+## Days for a felled tree's stump to sprout, and for the sapling to grow back into a tree.
+const REGROW_DAYS := 7
 const DRY := {"sunny": 1.2, "cloudy": 0.6, "fog": 0.4, "heat": 2.4, "frost": 0.5, "snow": 0.2, "rain": 0.0, "storm": 0.0}
 
 static func _clamp(v: float) -> float:
@@ -402,6 +408,17 @@ static func _start_day(prev: Dictionary, new_day: int) -> Dictionary:
 			elif Settings.on(state, "frost") and climate.low <= wc.killF:
 				next = Js.with(next, {"crop": Js.with(c, {"dead": true})})
 				killed_frost += 1
+		# Felled trees sprout from their stumps, then grow back.
+		if next.get("regrow") != null and new_day >= next.regrow:
+			var was = next.obstacle
+			next = next.duplicate()
+			next.erase("regrow")
+			next.erase("hits")
+			if was == "stump":
+				next.obstacle = "sapling"
+				next.regrow = new_day + REGROW_DAYS
+			elif was == "sapling":
+				next.obstacle = "tree"
 		# Weeds sprout on uncovered farm soil.
 		if Settings.on(state, "weeds") and next.ground == "farm" and not next.greenhouse and not next.weeds and not next.obstacle and not next.mulch and building_at(state, x, y) == null:
 			var nc = next.crop
@@ -586,6 +603,70 @@ static func act(state: Dictionary) -> Dictionary:
 
 
 ## Use the selected item on the tile in front of the player.
+## A tool's uses left (full when the slot doesn't say), or null for things that don't wear.
+static func durability(slot: Dictionary) -> Variant:
+	var def = Data.items().get(slot.item)
+	if def == null or not def.get("tool"):
+		return null
+	var mx := int(def.tool.durability)
+	return {"left": int(slot.get("dur", mx)), "max": mx}
+
+
+## Use up one use of the selected tool; it breaks when it runs out.
+static func _wear(state: Dictionary, i: int) -> Dictionary:
+	var slot = state.inventory[i]
+	if slot == null:
+		return state
+	var d = durability(slot)
+	if d == null:
+		return state
+	var inv: Array = state.inventory.duplicate()
+	if d.left > 1:
+		inv[i] = Js.with(slot, {"dur": d.left - 1})
+		return Js.with(state, {"inventory": inv})
+	inv[i] = null
+	return say(Js.with(state, {"inventory": inv}), "Your %s wore out! Buy or craft a new one." % Items.get_def(slot.item).name.to_lower())
+
+
+## Without the hits and regrow marks: a tile whose obstacle is gone.
+static func _cleared(t: Dictionary) -> Dictionary:
+	var out := Js.with(t, {"obstacle": null})
+	out.erase("hits")
+	out.erase("regrow")
+	return out
+
+
+## One swing of an axe or pickaxe at the obstacle in front of you.
+static func _hit_obstacle(state: Dictionary, x: int, y: int, power: int, verb: String) -> Dictionary:
+	var t: Dictionary = state.tiles[WorldMap.idx(x, y)]
+	var o: String = t.obstacle
+	var hits: int = int(t.get("hits", 0)) + power
+	var hp: int = OBSTACLE_HP[o]
+	if hits < hp:
+		return say(_set_tile(state, x, y, func(tt): return Js.with(tt, {"hits": hits})), "%s! The %s is %s%% broken." % [verb, o, Js.num(Js.round(float(hits) / hp * 100))])
+	if o == "stone":
+		var got = add_item(_set_tile(state, x, y, _cleared), "stone", 1)
+		return say(got, "+1 stone.") if got else say(state, "Your bag is full.")
+	var wood: int = WOOD.get(o, 1)
+	if o == "tree":
+		# A felled tree leaves a stump that sprouts again, unless it's in the garden field.
+		var f: Dictionary = WorldMap.FARM
+		var in_field: bool = x >= f.x0 and x <= f.x1 and y >= f.y0 and y <= f.y1
+		var regrow := day(state) + REGROW_DAYS
+		var got = add_item(_set_tile(state, x, y, func(tt):
+			var out := Js.with(tt, {"obstacle": "stump"})
+			out.erase("hits")
+			out.erase("regrow")
+			if not in_field:
+				out.regrow = regrow
+			return out), "wood", wood)
+		if got == null:
+			return say(state, "Your bag is full.")
+		return discover(say(got, "Timber! +%d wood.%s" % [wood, "" if in_field else " The stump will sprout again unless you chop it out."]), "forest-regrowth")
+	var got = add_item(_set_tile(state, x, y, _cleared), "wood", wood)
+	return say(got, "+%d wood." % wood) if got else say(state, "Your bag is full.")
+
+
 static func apply_tool(state: Dictionary) -> Dictionary:
 	var slot = selected_item(state)
 	if not slot:
@@ -607,14 +688,17 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 	if def.kind != "tool":
 		return interact(state)
 
-	var cost: int = ENERGY.get(slot.item, 1)
+	var use: String = def.tool.use
+	var power: int = int(Data.tiers()[def.tool.tier].power)
 	var b = building_at(state, x, y)
-	var paid = _spend(state, cost)
-	if paid == null:
+	var spent = _spend(state, ENERGY[use])
+	if spent == null:
 		return say(state, "You're too tired. Go home and sleep.")
+	# Every use that does something wears the tool a little.
+	var paid := _wear(spent, int(state.selected))
 	var tillage := Settings.on(state, "tillage")
 
-	match slot.item:
+	match use:
 		"hoe":
 			if t.ground != "farm" and not t.greenhouse:
 				return say(state, "You can only till the garden field or greenhouse beds.")
@@ -654,15 +738,12 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 				return say(got, "Cleared a dead plant (+1 fiber).") if got else state
 			return state
 		"axe":
-			if t.obstacle != "stick" and t.obstacle != "stump" and t.obstacle != "log":
+			if not t.obstacle or t.obstacle == "stone":
 				return state
-			var n := 1 if t.obstacle == "stick" else 4
-			var got = add_item(_set_tile(paid, x, y, func(tt): return Js.with(tt, {"obstacle": null})), "wood", n)
-			return say(got, "+%d wood." % n) if got else say(state, "Your bag is full.")
+			return _hit_obstacle(paid, x, y, power, "Chop")
 		"pickaxe":
 			if t.obstacle == "stone":
-				var got = add_item(_set_tile(paid, x, y, func(tt): return Js.with(tt, {"obstacle": null})), "stone", 1)
-				return say(got, "+1 stone.") if got else say(state, "Your bag is full.")
+				return _hit_obstacle(paid, x, y, power, "Crack")
 			if t.tilled and not t.crop:
 				return _set_tile(paid, x, y, func(tt): return Js.with(tt, {"tilled": false}))
 			return state
@@ -1185,11 +1266,23 @@ static func take_from_chest(state: Dictionary, id: String, slot: int) -> Diction
 	if items == null or items[slot] == null:
 		return state
 	var s: Dictionary = items[slot]
-	var got = add_item(state, s.item, int(s.qty), s.get("grade"))
+	var got = _add_slot(state, s)
 	if got == null:
 		return say(state, "Your bag is full.")
 	items[slot] = null
 	return _set_chest(got, id, items)
+
+
+## Put a whole stack in the bag, keeping a tool's wear.
+static func _add_slot(state: Dictionary, s: Dictionary) -> Variant:
+	if s.get("dur") == null:
+		return add_item(state, s.item, int(s.qty), s.get("grade"))
+	var i: int = state.inventory.find(null)
+	if i < 0:
+		return null
+	var inv: Array = state.inventory.duplicate()
+	inv[i] = s.duplicate()
+	return Js.with(state, {"inventory": inv})
 
 
 ## Move everything that fits from a chest into your bag.

@@ -17,6 +17,13 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": Js.with(s, {"weather": weather})}
 		"select":
 			return {"state": Js.with(s, {"selected": int(op.i)})}
+		"selectItem":
+			var at := 0
+			for i in s.inventory.size():
+				if s.inventory[i] != null and s.inventory[i].item == op.item:
+					at = i
+					break
+			return {"state": Js.with(s, {"selected": at})}
 		"give":
 			var got = World.add_item(s, op.item, int(op.qty), op.get("grade"))
 			return {"state": got if got != null else s}

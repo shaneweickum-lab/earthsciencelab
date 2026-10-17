@@ -57,6 +57,24 @@ export function tempFactor(type: WorldCrop["type"], meanF: number): number {
 
 export type ItemKind = "tool" | "seed" | "produce" | "amendment" | "material" | "kit";
 
+/** What a tool does when you use it. Axes and pickaxes come in tiers; the rest have one kind. */
+export type ToolUse = "hoe" | "can" | "scythe" | "axe" | "pickaxe" | "shovel" | "ring";
+export type Tier = "base" | "copper" | "bronze" | "iron" | "gold" | "mithril";
+
+/**
+ * Tool tiers: power is how much each swing breaks (so how fast you clear land), durability how
+ * many uses before it wears out. Gold is soft: fast but quick to wear out.
+ */
+export const TIERS: Record<Tier, { name: string; power: number; durability: number; color: string }> = {
+  base: { name: "", power: 1, durability: 80, color: "#9aa0a6" },
+  copper: { name: "Copper", power: 2, durability: 120, color: "#c8753d" },
+  bronze: { name: "Bronze", power: 3, durability: 180, color: "#b8893a" },
+  iron: { name: "Iron", power: 4, durability: 260, color: "#d4d8dc" },
+  gold: { name: "Gold", power: 6, durability: 90, color: "#f2c230" },
+  mithril: { name: "Mithril", power: 8, durability: 500, color: "#7fd6e8" },
+};
+export const TIER_ORDER: Tier[] = ["base", "copper", "bronze", "iron", "gold", "mithril"];
+
 export interface ItemDef {
   id: string;
   name: string;
@@ -73,16 +91,32 @@ export interface ItemDef {
   image?: string;
   /** Breaks organic certification when used. */
   notOrganic?: boolean;
+  /** Tools: what it does, its tier, and how many uses it lasts. */
+  tool?: { use: ToolUse; tier: Tier; durability: number };
+}
+
+const tool = (use: ToolUse, durability: number, tier: Tier = "base") => ({ use, tier, durability });
+
+/** A tiered axe or pickaxe, made at the grinder from metal bars. */
+function tiered(use: "axe" | "pickaxe", tier: Tier): ItemDef {
+  const t = TIERS[tier];
+  const base = use === "axe" ? "Axe" : "Pickaxe";
+  const what = use === "axe" ? "trees, logs, and stumps" : "stones and ore";
+  return {
+    id: `${use}_${tier}`, name: `${t.name} ${base}`, icon: use === "axe" ? "🪓" : "⛏️", kind: "tool", tool: tool(use, t.durability, tier),
+    desc: `Breaks ${what} ${t.power}× as fast as a basic ${base.toLowerCase()}. Lasts about ${t.durability} uses.${tier === "gold" ? " Gold is soft, so it wears out fast." : ""}`,
+  };
 }
 
 const tools: ItemDef[] = [
-  { id: "hoe", name: "Hoe", icon: "⛏️", kind: "tool", desc: "Till soil so seeds can be planted. Tilling breaks up soil crumbs, so till only where you'll plant." },
-  { id: "can", name: "Watering Can", icon: "🚿", kind: "tool", desc: "Water tilled soil. Refill at the pond or a rain barrel." },
-  { id: "scythe", name: "Scythe", icon: "🌾", kind: "tool", desc: "Cut weeds. You get plant fiber for the compost bin." },
-  { id: "axe", name: "Axe", icon: "🪓", kind: "tool", desc: "Chop sticks and stumps into wood." },
-  { id: "pickaxe", name: "Pickaxe", icon: "🔨", kind: "tool", desc: "Break stones. Also un-tills a tile." },
-  { id: "shovel", name: "Shovel", icon: "🕳️", kind: "tool", price: 60, desc: "Dig a test hole: reveals soil life and structure (the shovel test)." },
-  { id: "ring", name: "Infiltration Ring", icon: "💧", kind: "tool", price: 45, desc: "Time how fast water soaks in: reveals water holding." },
+  { id: "hoe", name: "Hoe", icon: "⛏️", kind: "tool", price: 40, tool: tool("hoe", 150), desc: "Till soil so seeds can be planted. Tilling breaks up soil crumbs, so till only where you'll plant." },
+  { id: "can", name: "Watering Can", icon: "🚿", kind: "tool", price: 40, tool: tool("can", 200), desc: "Water tilled soil. Refill at the pond or a rain barrel." },
+  { id: "scythe", name: "Scythe", icon: "🌾", kind: "tool", price: 30, tool: tool("scythe", 150), desc: "Cut weeds. You get plant fiber for the compost bin." },
+  { id: "axe", name: "Axe", icon: "🪓", kind: "tool", price: 50, tool: tool("axe", TIERS.base.durability), desc: "Chop sticks, logs, stumps, and trees into wood. Bigger things take more swings." },
+  { id: "pickaxe", name: "Pickaxe", icon: "🔨", kind: "tool", price: 50, tool: tool("pickaxe", TIERS.base.durability), desc: "Break stones. Also un-tills a tile." },
+  { id: "shovel", name: "Shovel", icon: "🕳️", kind: "tool", price: 60, tool: tool("shovel", 100), desc: "Dig a test hole: reveals soil life and structure (the shovel test)." },
+  { id: "ring", name: "Infiltration Ring", icon: "💧", kind: "tool", price: 45, tool: tool("ring", 100), desc: "Time how fast water soaks in: reveals water holding." },
+  ...TIER_ORDER.slice(1).flatMap((t) => [tiered("axe", t), tiered("pickaxe", t)]),
 ];
 
 const amendments: ItemDef[] = [

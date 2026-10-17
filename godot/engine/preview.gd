@@ -7,6 +7,14 @@ static func _r(label: String, text: String, ok: bool) -> Dictionary:
 	return {"label": label, "text": text, "ok": ok}
 
 
+## How many more swings an obstacle needs with this tool.
+static func _swings(t: Dictionary, def: Dictionary, verb: String) -> String:
+	var hp: int = World.OBSTACLE_HP[t.obstacle] - int(t.get("hits", 0))
+	var n := int(ceil(float(hp) / Data.tiers()[def.tool.tier].power))
+	var tree := " Trees shelter wildlife; a felled one sprouts again from its stump." if t.obstacle == "tree" else ""
+	return "%s the %s: %d more swing%s.%s" % [verb, t.obstacle, n, "" if n == 1 else "s", tree]
+
+
 static func preview_action(state: Dictionary) -> Dictionary:
 	var slot = World.selected_item(state)
 	var f := World.facing_tile(state)
@@ -61,7 +69,7 @@ static func preview_action(state: Dictionary) -> Dictionary:
 		_:
 			return _r("", "", false)
 
-	match slot.item:
+	match def.tool.use:
 		"hoe":
 			if not is_garden:
 				return _r("Till", "Only the garden field can be tilled.", false)
@@ -95,14 +103,12 @@ static func preview_action(state: Dictionary) -> Dictionary:
 				return _r("Clear", "Clear the dead plant.", true)
 			return _r("Cut", "Nothing to cut.", false)
 		"axe":
-			if t.obstacle in ["stick", "stump", "log"]:
-				return _r("Chop", "Chop the %s into wood." % t.obstacle, true)
-			if t.obstacle == "tree":
-				return _r("Chop", "Trees shade the farm and shelter wildlife. Let them grow!", false)
+			if t.obstacle and t.obstacle != "stone":
+				return _r("Chop", _swings(t, def, "Chop"), true)
 			return _r("Chop", "Nothing to chop.", false)
 		"pickaxe":
 			if t.obstacle == "stone":
-				return _r("Break", "Break the stone.", true)
+				return _r("Break", _swings(t, def, "Break"), true)
 			if t.tilled and not c:
 				return _r("Un-till", "Flatten this tilled spot.", true)
 			return _r("Break", "Nothing to break.", false)

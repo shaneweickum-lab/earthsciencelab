@@ -5,7 +5,7 @@ import type { DayWeather } from "./weather";
 export type Season = "Spring" | "Summer" | "Fall" | "Winter";
 export type WeatherId = "sunny" | "cloudy" | "rain" | "storm" | "heat" | "fog" | "frost" | "snow";
 export type Ground = "grass" | "farm" | "path" | "water" | "sand" | "forest";
-export type Obstacle = "stone" | "stick" | "stump" | "tree" | "log" | null;
+export type Obstacle = "stone" | "stick" | "stump" | "tree" | "log" | "sapling" | null;
 export type Dir = "up" | "down" | "left" | "right";
 
 export interface SoilState {
@@ -49,6 +49,10 @@ export interface Tile {
   greenhouse: boolean;
   /** Amendment points (compost, mulch, lime…) that raise the next harvest's grade. Used up at harvest. */
   boost?: number;
+  /** Damage done so far to the obstacle here (see OBSTACLE_HP). */
+  hits?: number;
+  /** The day a felled tree's stump sprouts (or its sapling grows back into a tree). */
+  regrow?: number;
 }
 
 export type BuildingKind =
@@ -89,6 +93,8 @@ export interface Slot {
   qty: number;
   /** Quality grade of harvested produce. */
   grade?: Grade;
+  /** Tools: uses left before it wears out (full when missing). */
+  dur?: number;
 }
 
 export interface Critter {
@@ -143,3 +149,4 @@ export interface WorldState {
   /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */
   avatar?: string;
 }
+

@@ -52,6 +52,43 @@ const nature = (n) => kenney("nature-kit", n);
 const crop = (n) => glb(`/models/crops/${n}.glb`);
 const building = (n) => glb(`/models/qbuildings/${n}.glb`);
 
+/** The same model with its grey metal recolored, for copper, bronze, iron, gold, and mithril tools. */
+function metal(root, color) {
+  // sRGB 0–255, as the texture's pixels are.
+  const tint = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material.map) return;
+    const img = o.material.map.image;
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const px = g.getImageData(0, 0, c.width, c.height);
+    const d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const max = Math.max(d[i], d[i + 1], d[i + 2]), min = Math.min(d[i], d[i + 1], d[i + 2]);
+      // Grey, not too dark: the metal parts. Keep their shading, take the tier's color.
+      if (max > 90 && (max - min) / max < 0.3) {
+        const k = max / 175;
+        d[i] = Math.min(255, tint[0] * k);
+        d[i + 1] = Math.min(255, tint[1] * k);
+        d[i + 2] = Math.min(255, tint[2] * k);
+      }
+    }
+    g.putImageData(px, 0, 0);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = o.material.map.flipY;
+    tex.magFilter = THREE.NearestFilter;
+    o.material = o.material.clone();
+    o.material.map = tex;
+  });
+  return root;
+}
+
+const TIER_COLORS = { copper: "#c8753d", bronze: "#b8893a", iron: "#d4d8dc", gold: "#f2c230", mithril: "#7fd6e8" };
+
 // ───────────────────────── simple shapes ─────────────────────────
 
 const mat = (color) => new THREE.MeshStandardMaterial({ color, metalness: 0, roughness: 0.85, flatShading: true });
@@ -248,6 +285,10 @@ const ICONS = {
   kit_chickenCoop: () => building("ChickenCoop"),
   kit_smallBarn: () => building("SmallBarn"),
 };
+for (const [tier, color] of Object.entries(TIER_COLORS)) {
+  ICONS[`axe_${tier}`] = async () => metal(await survival("tool-axe-upgraded"), color);
+  ICONS[`pickaxe_${tier}`] = async () => metal(await survival("tool-pickaxe-upgraded"), color);
+}
 for (const [id, color] of Object.entries(SEED_COLORS)) {
   ICONS[`seed_${id}`] = () => packet(color, PRODUCE[id]());
   ICONS[`crop_${id}`] = PRODUCE[id];

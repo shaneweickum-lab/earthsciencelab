@@ -110,6 +110,10 @@ function ProceduralObstacles({ tiles, season }: { tiles: Tile[]; season: Season 
         case "stick": sticks.push({ x, y: 0.05, z, ry: r * 6, rz: 0.1 }); break;
         case "stump": stumps.push({ x, y: 0.15, z, s: 0.9 + r * 0.3 }); break;
         case "log": logs.push({ x, y: 0.18, z, ry: r * 3, rz: Math.PI / 2 }); break;
+        case "sapling":
+          trunks.push({ x, y: 0.15, z, s: 0.35 });
+          canopy.push({ x, y: 0.42, z, s: 0.35, ry: r * 6, color: leaf[0] });
+          break;
       }
       if (t.weeds) {
         for (let k = 0; k < 9; k++) {
@@ -201,6 +205,7 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
         case "stump": lowE.push([n(r2 > 0.5 ? "stump_round" : "stump_old"), { x, z, s: 2, ry }]); break;
         case "log": lowE.push([n(r2 > 0.5 ? "log" : "log_large"), { x, z, s: 1.4, ry }]); break;
         case "stick": sticksL.push({ x, y: 0.05, z, ry, rz: 0.1 }); break;
+        case "sapling": lowE.push([n(pick(LEAFY, r2) + LEAF_SUFFIX[season]), { x, z, s: 0.45, ry }]); break;
       }
       if (t.weeds) {
         for (let k = 0; k < 3; k++) {

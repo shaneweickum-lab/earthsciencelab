@@ -1,9 +1,9 @@
 import { CROPS } from "@/game/crops";
-import { buildingAt, canPlantHere, facingTile, selectedItem, tileAt } from "./engine";
-import { ITEMS, WORLD_CROPS } from "./items";
+import { buildingAt, canPlantHere, facingTile, OBSTACLE_HP, selectedItem, tileAt } from "./engine";
+import { ITEMS, TIERS, WORLD_CROPS, type ItemDef } from "./items";
 import { amendmentPoints, MAX_BOOST } from "./grades";
 import { on } from "./settings";
-import type { WorldState } from "./types";
+import type { Tile, WorldState } from "./types";
 
 export interface ActionPreview {
   /** Short label for the action button, e.g. "Till". */
@@ -11,6 +11,14 @@ export interface ActionPreview {
   /** What will happen, in kid-friendly words. Empty when nothing useful will happen. */
   text: string;
   ok: boolean;
+}
+
+/** How many more swings an obstacle needs with this tool. */
+function swings(t: Tile, def: ItemDef, verb: string): string {
+  const hp = OBSTACLE_HP[t.obstacle!] - (t.hits ?? 0);
+  const n = Math.ceil(hp / TIERS[def.tool!.tier].power);
+  const tree = t.obstacle === "tree" ? " Trees shelter wildlife; a felled one sprouts again from its stump." : "";
+  return `${verb} the ${t.obstacle}: ${n} more swing${n === 1 ? "" : "s"}.${tree}`;
 }
 
 /** Tells the player what pressing Space will do on the tile in front of them, before they do it. */
@@ -59,7 +67,7 @@ export function previewAction(state: WorldState): ActionPreview {
       return { label: "", text: "", ok: false };
   }
 
-  switch (slot.item) {
+  switch (def.tool!.use) {
     case "hoe":
       if (!isGarden) return { label: "Till", text: "Only the garden field can be tilled.", ok: false };
       if (t.obstacle) return { label: "Till", text: `Clear the ${t.obstacle} first.`, ok: false };
@@ -79,11 +87,10 @@ export function previewAction(state: WorldState): ActionPreview {
       if (t.crop?.dead) return { label: "Clear", text: "Clear the dead plant.", ok: true };
       return { label: "Cut", text: "Nothing to cut.", ok: false };
     case "axe":
-      if (t.obstacle === "stick" || t.obstacle === "stump" || t.obstacle === "log") return { label: "Chop", text: `Chop the ${t.obstacle} into wood.`, ok: true };
-      if (t.obstacle === "tree") return { label: "Chop", text: "Trees shade the farm and shelter wildlife. Let them grow!", ok: false };
+      if (t.obstacle && t.obstacle !== "stone") return { label: "Chop", text: swings(t, def, "Chop"), ok: true };
       return { label: "Chop", text: "Nothing to chop.", ok: false };
     case "pickaxe":
-      if (t.obstacle === "stone") return { label: "Break", text: "Break the stone.", ok: true };
+      if (t.obstacle === "stone") return { label: "Break", text: swings(t, def, "Break"), ok: true };
       if (t.tilled && !t.crop) return { label: "Un-till", text: "Flatten this tilled spot.", ok: true };
       return { label: "Break", text: "Nothing to break.", ok: false };
     case "shovel":

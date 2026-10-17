@@ -148,6 +148,9 @@ static func bag(game_ui: GameUi) -> Dictionary:
 				var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
 				q.position = Vector2(40, 40)
 				b.add_child(q)
+			var wear := Ui.wear_bar(s, 62, 55)
+			if wear:
+				b.add_child(wear)
 			b.tooltip_text = Items.get_def(s.item).name
 		b.pressed.connect(func():
 			ui.look_slot = i
@@ -176,6 +179,9 @@ static func bag(game_ui: GameUi) -> Dictionary:
 		if shown.get("grade"):
 			info.add_child(Ui.text("Grade %s: sells for ×%s the normal price. Healthier soil and good care grow higher grades." % [shown.grade, Js.num(Grades.info(shown.grade).price)], 13, Ui.INK, 800))
 		info.add_child(Ui.text(def.desc, 14, Ui.MUTED))
+		var d = World.durability(shown)
+		if d != null:
+			info.add_child(Ui.text("Uses left: %d of %d" % [d.left, d.max], 12, Ui.INK, 800))
 	else:
 		info.add_child(Ui.text("Click an item to read about it.", 14, Ui.MUTED))
 	body.add_child(Ui.panel(info, Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
@@ -191,7 +197,7 @@ static func store(game_ui: GameUi) -> Dictionary:
 	var m := Ui.modal("Seed & Soil Co.", "🌱", Game.close, true)
 	var body: VBoxContainer = m.body
 	var tabs := Ui.hbox(6)
-	for t in [["seeds", "🌱 Seeds"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]]:
+	for t in [["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]]:
 		tabs.add_child(Ui.button(t[1], func():
 			ui.tab = t[0]
 			game_ui.refresh(), "soil" if tab == t[0] else "ghost", 14))
@@ -222,12 +228,15 @@ static func store(game_ui: GameUi) -> Dictionary:
 				col.add_child(Ui.text(bits, 12, Ui.MUTED, 800))
 				col.add_child(Ui.text("[b]Takes:[/b] %s [b]Gives back:[/b] %s" % [crop.takes, crop.givesText], 12))
 				return col))
-		"soil":
-			var science := func(i): return (i.kind == "tool" and i.get("price")) or Data.shop_unlocks().has(i.id)
+		"tools":
+			var science := func(i): return Data.shop_unlocks().has(i.id)
+			body.add_child(Ui.text("Tools wear out with use. Buy a new one here, or craft a better one at a workbench.", 14, Ui.MUTED))
+			body.add_child(Ui.heading("Farm tools"))
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "tool" and i.get("price") and not science.call(i)), buy))
 			body.add_child(Ui.heading("Science tools"))
 			body.add_child(_item_list(w, items.filter(science), buy))
-			body.add_child(Ui.heading("For the soil"))
-			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment" and not science.call(i)), buy))
+		"soil":
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment" and not Data.shop_unlocks().has(i.id)), buy))
 			var up: Dictionary = Data.upgrades().bigCan
 			var row := Ui.hbox(10)
 			row.add_child(Ui.item_icon("bigCan", 32))
@@ -339,6 +348,9 @@ static func _slot_grid(slots: Array, hotbar: int, pick: Callable) -> Control:
 				var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
 				q.position = Vector2(40, 40)
 				b.add_child(q)
+			var wear := Ui.wear_bar(s, 62, 55)
+			if wear:
+				b.add_child(wear)
 			b.tooltip_text = Items.get_def(s.item).name
 			b.pressed.connect(func(): pick.call(i))
 		g.add_child(b)

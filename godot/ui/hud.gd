@@ -97,6 +97,9 @@ static func _slot(w: Dictionary, i: int) -> Control:
 			var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
 			q.position = Vector2(30, 32)
 			b.add_child(q)
+		var wear := Ui.wear_bar(s, 52, 45)
+		if wear:
+			b.add_child(wear)
 	var n := Ui.text(str((i + 1) % 10), 10, Ui.MUTED, 900, false)
 	n.position = Vector2(4, 0)
 	b.add_child(n)

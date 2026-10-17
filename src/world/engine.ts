@@ -1,12 +1,12 @@
 import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
-import { cropDays, ITEMS, item, sellPrice, SHOP_UNLOCKS, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, item, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type ToolUse } from "./items";
 import { BUILDING_SIZE, CHEST_SIZE, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
-import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, type Slot, type Tile, type WorldState } from "./types";
+import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, type Obstacle, type Slot, type Tile, type WorldState } from "./types";
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
@@ -369,6 +369,12 @@ function startDay(prev: WorldState, newDay: number): WorldState {
         killedFrost++;
       }
     }
+    // Felled trees sprout from their stumps, then grow back.
+    if (next.regrow !== undefined && newDay >= next.regrow) {
+      const rest = unmarked(next);
+      if (next.obstacle === "stump") next = { ...rest, obstacle: "sapling", regrow: newDay + REGROW_DAYS };
+      else next = next.obstacle === "sapling" ? { ...rest, obstacle: "tree" } : rest;
+    }
     // Weeds sprout on uncovered farm soil.
     if (on(state, "weeds") && next.ground === "farm" && !next.greenhouse && !next.weeds && !next.obstacle && !next.mulch && !buildingAt(state, x, y)) {
       const covered = next.crop && !next.crop.dead && CROPS[next.crop.id].coversSoil;
@@ -507,7 +513,70 @@ function faint(state: WorldState): WorldState {
 
 // ───────────────────────── tools ─────────────────────────
 
-const ENERGY: Record<string, number> = { hoe: 2, can: 1, scythe: 1, axe: 2, pickaxe: 3, shovel: 2, ring: 1 };
+const ENERGY: Record<ToolUse, number> = { hoe: 2, can: 1, scythe: 1, axe: 2, pickaxe: 2, shovel: 2, ring: 1 };
+
+/** How many swings' worth of power it takes to clear each obstacle (a basic tool does 1 a swing). */
+export const OBSTACLE_HP: Record<NonNullable<Obstacle>, number> = { stick: 1, sapling: 1, stone: 2, log: 4, stump: 5, tree: 8 };
+/** Wood from chopping each one. */
+const WOOD: Partial<Record<NonNullable<Obstacle>, number>> = { stick: 1, sapling: 1, log: 4, stump: 3, tree: 6 };
+/** Days for a felled tree's stump to sprout, and for the sapling to grow back into a tree. */
+export const REGROW_DAYS = 7;
+
+/** A tool's uses left (full when the slot doesn't say). */
+export function durability(slot: Slot): { left: number; max: number } | null {
+  const max = ITEMS[slot.item]?.tool?.durability;
+  return max ? { left: slot.dur ?? max, max } : null;
+}
+
+/** Use up one use of the selected tool; it breaks when it runs out. */
+function wear(state: WorldState, i: number): WorldState {
+  const slot = state.inventory[i];
+  const d = slot && durability(slot);
+  if (!slot || !d) return state;
+  const inv = [...state.inventory];
+  if (d.left > 1) {
+    inv[i] = { ...slot, dur: d.left - 1 };
+    return { ...state, inventory: inv };
+  }
+  inv[i] = null;
+  return say({ ...state, inventory: inv }, `Your ${ITEMS[slot.item].name.toLowerCase()} wore out! Buy or craft a new one.`);
+}
+
+/** A tile without its damage and regrowth marks (for when its obstacle changes). */
+function unmarked(t: Tile): Tile {
+  const out = { ...t };
+  delete out.hits;
+  delete out.regrow;
+  return out;
+}
+
+/** A tile whose obstacle is gone. */
+const cleared = (t: Tile): Tile => ({ ...unmarked(t), obstacle: null });
+
+/** One swing of an axe or pickaxe at the obstacle in front of you. */
+function hitObstacle(state: WorldState, x: number, y: number, power: number, verb: string): WorldState {
+  const t = state.tiles[idx(x, y)];
+  const o = t.obstacle!;
+  const hits = (t.hits ?? 0) + power;
+  const hp = OBSTACLE_HP[o];
+  if (hits < hp) return say(setTile(state, x, y, (tt) => ({ ...tt, hits })), `${verb}! The ${o} is ${Math.round((hits / hp) * 100)}% broken.`);
+  if (o === "stone") {
+    const got = addItem(setTile(state, x, y, cleared), "stone", 1);
+    return got ? say(got, "+1 stone.") : say(state, "Your bag is full.");
+  }
+  const wood = WOOD[o] ?? 1;
+  if (o === "tree") {
+    // A felled tree leaves a stump that sprouts again, unless it's in the garden field.
+    const inField = x >= FARM.x0 && x <= FARM.x1 && y >= FARM.y0 && y <= FARM.y1;
+    const got = addItem(setTile(state, x, y, (tt) => (
+      inField ? { ...unmarked(tt), obstacle: "stump" } : { ...unmarked(tt), obstacle: "stump", regrow: day(state) + REGROW_DAYS }
+    )), "wood", wood);
+    if (!got) return say(state, "Your bag is full.");
+    return discover(say(got, `Timber! +${wood} wood.${inField ? "" : " The stump will sprout again unless you chop it out."}`), "forest-regrowth");
+  }
+  const got = addItem(setTile(state, x, y, cleared), "wood", wood);
+  return got ? say(got, `+${wood} wood.`) : say(state, "Your bag is full.");
+}
 
 export function selectedItem(state: WorldState) {
   return state.inventory[state.selected];
@@ -539,12 +608,15 @@ export function applyTool(state: WorldState): WorldState {
   if (def.kind === "amendment") return applyAmendment(state, x, y, slot.item);
   if (def.kind !== "tool") return interact(state);
 
-  const cost = ENERGY[slot.item] ?? 1;
+  const use = def.tool!.use;
+  const power = TIERS[def.tool!.tier].power;
   const b = buildingAt(state, x, y);
-  const paid = spend(state, cost);
-  if (!paid) return say(state, "You're too tired. Go home and sleep.");
+  const spent = spend(state, ENERGY[use]);
+  if (!spent) return say(state, "You're too tired. Go home and sleep.");
+  // Every use that does something wears the tool a little.
+  const paid = wear(spent, state.selected);
 
-  switch (slot.item) {
+  switch (use) {
     case "hoe": {
       if (t.ground !== "farm" && !t.greenhouse) return say(state, "You can only till the garden field or greenhouse beds.");
       if (b && b.kind !== "greenhouse") return say(state, "Something is built here.");
@@ -577,16 +649,11 @@ export function applyTool(state: WorldState): WorldState {
       return state;
     }
     case "axe": {
-      if (t.obstacle !== "stick" && t.obstacle !== "stump" && t.obstacle !== "log") return state;
-      const n = t.obstacle === "stick" ? 1 : 4;
-      const got = addItem(setTile(paid, x, y, (tt) => ({ ...tt, obstacle: null })), "wood", n);
-      return got ? say(got, `+${n} wood.`) : say(state, "Your bag is full.");
+      if (!t.obstacle || t.obstacle === "stone") return state;
+      return hitObstacle(paid, x, y, power, "Chop");
     }
     case "pickaxe": {
-      if (t.obstacle === "stone") {
-        const got = addItem(setTile(paid, x, y, (tt) => ({ ...tt, obstacle: null })), "stone", 1);
-        return got ? say(got, "+1 stone.") : say(state, "Your bag is full.");
-      }
+      if (t.obstacle === "stone") return hitObstacle(paid, x, y, power, "Crack");
       if (t.tilled && !t.crop) return setTile(paid, x, y, (tt) => ({ ...tt, tilled: false }));
       return state;
     }
@@ -1015,10 +1082,20 @@ export function takeFromChest(state: WorldState, id: string, slot: number): Worl
   const items = chestItems(state, id);
   const s = items?.[slot];
   if (!items || !s) return state;
-  const got = addItem(state, s.item, s.qty, s.grade);
+  const got = addSlot(state, s);
   if (!got) return say(state, "Your bag is full.");
   items[slot] = null;
   return setChest(got, id, items);
+}
+
+/** Put a whole stack in the bag, keeping a tool's wear. */
+function addSlot(state: WorldState, s: Slot): WorldState | null {
+  if (s.dur === undefined) return addItem(state, s.item, s.qty, s.grade);
+  const i = state.inventory.findIndex((x) => !x);
+  if (i < 0) return null;
+  const inv = [...state.inventory];
+  inv[i] = { ...s };
+  return { ...state, inventory: inv };
 }
 
 /** Move everything that fits from a chest into your bag. */

@@ -172,6 +172,15 @@ export const JOURNAL: JournalEntry[] = [
     },
   },
   {
+    id: "forest-regrowth", name: "Forest Regrowth", icon: "🌳", category: "soil", source: { org: "USDA Forest Service", url: "https://www.fs.usda.gov/managing-land/natural-resources" },
+    hint: "Chop down a tree.",
+    fact: {
+      elementary: "Many trees can grow back from their stumps! New shoots sprout from the roots that are still alive underground. Leaving some trees standing keeps homes for birds and shade for the soil.",
+      middle: "Hardwoods like oak and maple can resprout from a stump (called coppicing). A forest that's cut grows back in stages: grasses and shrubs first, then fast-growing trees, then slow, long-lived ones. This is called succession.",
+      high: "Tree roots hold soil against erosion and feed soil fungi with sugars; a mature tree also stores tons of carbon. Sustainable forestry cuts only part of a stand at a time and lets succession and stump sprouting regrow the rest.",
+    },
+  },
+  {
     id: "earthworm", name: "Earthworm", icon: "🪱", category: "soil", lesson: "soil-food-web", source: NRCS,
     hint: "Do a shovel test in living soil.",
     fact: {

@@ -10,7 +10,7 @@ import { previewAction } from "@/world/preview";
 import { NPC_BY_ID } from "@/world/town";
 import { TOWN_KINDS, type Tile, type WorldState } from "@/world/types";
 import { tempAt, WEATHER } from "@/world/weather";
-import { GradeBadge, ItemIcon } from "./ItemIcon";
+import { GradeBadge, ItemIcon, WearBar } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 const SEASON_ICON = { Spring: "🌸", Summer: "☀️", Fall: "🍂", Winter: "❄️" };
@@ -85,6 +85,7 @@ export function Hotbar() {
             }`}
           >
             {s && <ItemIcon id={s.item} grade={s.grade} />}
+            <WearBar slot={s} />
             <span className="absolute left-1 top-0 text-[10px] font-black text-muted">{(i + 1) % 10}</span>
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black text-ink">{s.qty}</span>}
           </button>

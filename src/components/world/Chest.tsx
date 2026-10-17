@@ -4,7 +4,7 @@ import { HOTBAR_SIZE, putInChest, takeAllFromChest, takeFromChest } from "@/worl
 import { ITEMS } from "@/world/items";
 import { CHEST_SIZE } from "@/world/map";
 import type { Slot } from "@/world/types";
-import { ItemIcon } from "./ItemIcon";
+import { ItemIcon, WearBar } from "./ItemIcon";
 import { Modal } from "./Menus";
 import { useWorld } from "./useWorld";
 
@@ -23,6 +23,7 @@ function Grid({ slots, onPick, hotbar = 0, label }: { slots: (Slot | null)[]; on
           } ${s ? "hover:bg-white hover:ring-2 hover:ring-soil" : ""}`}
         >
           {s && <ItemIcon id={s.item} grade={s.grade} />}
+          <WearBar slot={s} />
           {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black">{s.qty}</span>}
         </button>
       ))}

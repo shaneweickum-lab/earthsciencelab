@@ -17,7 +17,7 @@ import {
   swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
-import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
 import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
 import { BUILDING_SIZE, FARM, H, TOWN, W } from "./map";
 import { SPAWNS } from "./nature";
@@ -64,7 +64,7 @@ const CALENDARS: Calendar[] = [
 describe("Godot data tables", () => {
   it("are exported", () => {
     emit("data/crops.json", { crops: CROPS, order: CROP_ORDER, familyLabel: FAMILY_LABEL, world: WORLD_CROPS });
-    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST });
+    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST, tiers: TIERS });
     emit("data/settings.json", { features: SCIENCE_FEATURES, presets: PRESETS, defaults: DEFAULT_SETTINGS });
     emit("data/weather.json", WEATHER);
     emit("data/journal.json", { entries: JOURNAL, categories: CATEGORY_INFO, mushroomSafety: MUSHROOM_SAFETY });
@@ -207,6 +207,7 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     }
     case "weather": return { state: { ...s, weather: { ...s.weather, [op.day as number]: op.w as WorldState["weather"][number] } } };
     case "select": return { state: { ...s, selected: op.i as number } };
+    case "selectItem": return { state: { ...s, selected: Math.max(0, s.inventory.findIndex((x) => x?.item === op.item)) } };
     case "give": return { state: addItem(s, op.item as string, op.qty as number, (op.grade as Grade) ?? undefined) ?? s };
     case "act": return { state: act(s) };
     case "applyTool": return { state: applyTool(s) };
@@ -260,7 +261,7 @@ function finalState(s: WorldState) {
 
 const GIVE = ["seed_carrot", "seed_beans", "seed_tomato", "seed_corn", "seed_clover", "seed_squash", "seed_sunflower", "seed_potato", "seed_wheat", "seed_buckwheat",
   "compost", "mulch", "lime", "biochar", "synthFert", "labKit", "fiber", "kit_composter", "kit_rainBarrel", "kit_beehive", "kit_bugHotel", "kit_flowerBed", "kit_greenhouse", "kit_fence",
-  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato"];
+  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato", "axe_copper", "pickaxe_gold"];
 const BUY = ["seed_carrot", "seed_beans", "compost", "labKit", "kit_fence", "bigCan", "kit_scarecrow", "honey", "shovel", "ring"];
 const DIRS: Dir[] = ["up", "down", "left", "right"];
 const WEATHERS = [
@@ -281,6 +282,15 @@ function farmstead(): Op[] {
   ops.push({ op: "select", i: 13 });
   ops.push({ op: "player", x: 22, y: 6, facing: "down" }, { op: "interact" }, { op: "player", x: 23, y: 8, facing: "down" }, { op: "interact" });
   ops.push({ op: "select", i: 1 }, { op: "player", x: 25, y: 6, facing: "down" }, { op: "act" }, { op: "interact" });
+  // Fell a tree outside the field with a mithril axe, then watch the stump sprout and grow back.
+  ops.push({ op: "give", item: "axe_mithril", qty: 1, grade: null }, { op: "selectItem", item: "axe_mithril" });
+  ops.push({ op: "tile", i: 7 * W + 30, patch: { obstacle: "tree", weeds: false, crop: null } }, { op: "tile", i: 6 * W + 30, patch: { obstacle: null, weeds: false } });
+  ops.push({ op: "player", x: 30, y: 6, facing: "down" }, { op: "applyTool" });
+  // And chop a log with the basic axe, swing by swing.
+  ops.push({ op: "tile", i: 7 * W + 29, patch: { obstacle: "log", weeds: false, crop: null } }, { op: "player", x: 29, y: 6, facing: "down" }, { op: "selectItem", item: "axe" });
+  for (let k = 0; k < 4; k++) ops.push({ op: "applyTool" });
+  // Look at the stump after each night, so its sprouting is in the summaries.
+  for (let d = 0; d < 14; d++) ops.push({ op: "sleep" }, { op: "player", x: 30, y: 6, facing: "down" });
   return ops;
 }
 

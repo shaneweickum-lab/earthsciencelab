@@ -37,6 +37,11 @@ static func shop_unlocks() -> Dictionary:
 	return load_json("items").shopUnlocks
 
 
+## Tool tiers: power per swing, durability, and color.
+static func tiers() -> Dictionary:
+	return load_json("items").tiers
+
+
 ## What's in the chest by the house on day one.
 static func starter_chest() -> Array:
 	return load_json("items").starterChest

@@ -313,6 +313,68 @@ describe("saves from before the landmarks", () => {
   });
 });
 
+describe("tools", () => {
+  const swing = (s: WorldState, n: number) => {
+    for (let i = 0; i < n; i++) s = applyTool(s);
+    return s;
+  };
+
+  it("take more swings for bigger obstacles, and fewer with a better tier", () => {
+    let s = setup({ obstacle: "log" }, "axe");
+    s = swing(s, 3);
+    expect(tileAt(s, X, Y)!.obstacle).toBe("log");
+    expect(tileAt(s, X, Y)!.hits).toBe(3);
+    s = applyTool(s);
+    expect(tileAt(s, X, Y)!.obstacle).toBeNull();
+    expect(tileAt(s, X, Y)!.hits).toBeUndefined();
+    expect(countItem(s, "wood")).toBe(4);
+    const iron = applyTool(setup({ obstacle: "log" }, "axe_iron"));
+    expect(tileAt(iron, X, Y)!.obstacle).toBeNull();
+  });
+
+  it("wear out and break", () => {
+    let s = setup({ obstacle: "stone" }, "pickaxe");
+    const i = s.selected;
+    s = { ...s, inventory: s.inventory.map((x, k) => (k === i ? { ...x!, dur: 2 } : x)) };
+    s = applyTool(s);
+    expect(s.inventory[i]?.dur).toBe(1);
+    s = applyTool(s); // the stone breaks, and so does the pickaxe
+    expect(countItem(s, "stone")).toBe(1);
+    expect(countItem(s, "pickaxe")).toBe(4); // select() handed out 5
+    expect(s.messages.some((m) => /wore out/.test(m.text))).toBe(true);
+    // Using a tool on nothing doesn't wear it.
+    let t = setup({ obstacle: null }, "axe");
+    t = applyTool(t);
+    expect(t.inventory[t.selected]?.dur).toBeUndefined();
+  });
+
+  it("fell trees, which sprout again from the stump outside the garden field", () => {
+    const x = 33, y = 4; // north of the field, near the forest
+    let s = newWorld(42);
+    s = withTile(s, x, y, { obstacle: "tree", ground: "grass", weeds: false });
+    s = withTile(s, x, y - 1, { obstacle: null, weeds: false });
+    s = select({ ...s, player: { x, y: y - 1, facing: "down" } }, "axe_mithril");
+    s = applyTool(s);
+    expect(tileAt(s, x, y)!.obstacle).toBe("stump");
+    expect(countItem(s, "wood")).toBe(6);
+    expect(s.journal).toContain("forest-regrowth");
+    for (let d = 0; d < 7; d++) s = sleep(s);
+    expect(tileAt(s, x, y)!.obstacle).toBe("sapling");
+    for (let d = 0; d < 7; d++) s = sleep(s);
+    expect(tileAt(s, x, y)!.obstacle).toBe("tree");
+    expect(tileAt(s, x, y)!.regrow).toBeUndefined();
+  });
+
+  it("keep their wear in a chest", () => {
+    let s = takeAllFromChest(newWorld(42), "chest");
+    const i = s.inventory.findIndex((x) => x?.item === "axe");
+    s = { ...s, inventory: s.inventory.map((x, k) => (k === i ? { ...x!, dur: 7 } : x)) };
+    s = putInChest(s, "chest", i);
+    s = takeAllFromChest(s, "chest");
+    expect(s.inventory.find((x) => x?.item === "axe")?.dur).toBe(7);
+  });
+});
+
 describe("item icons", () => {
   it("exist for every item", () => {
     for (const i of [...Object.values(ITEMS), UPGRADES.bigCan]) expect(existsSync(`public${i.image}`), i.id).toBe(true);

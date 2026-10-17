@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { dayOf, formatDate, seasonLabel, timeOfDay } from "@/world/clock";
-import { HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
+import { durability, HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
 import { formatTemp } from "@/world/settings";
 import { ITEMS } from "@/world/items";
 import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
 import { GRADE_INFO } from "@/world/grades";
 import { WEATHER } from "@/world/weather";
-import { ItemIcon } from "./ItemIcon";
+import { ItemIcon, WearBar } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 export function Modal({ title, icon, children, onClose, wide = false }: {
@@ -233,6 +233,7 @@ export function Bag() {
             }`}
           >
             {s && <ItemIcon id={s.item} grade={s.grade} />}
+            <WearBar slot={s} />
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black">{s.qty}</span>}
           </button>
         ))}
@@ -247,6 +248,7 @@ export function Bag() {
               </p>
             )}
             <p className="mt-1 text-muted">{ITEMS[shown.item].desc}</p>
+            {durability(shown) && <p className="mt-1 text-xs font-bold">Uses left: {durability(shown)!.left} of {durability(shown)!.max}</p>}
           </>
         ) : (
           <p className="text-muted">Click an item to read about it.</p>
