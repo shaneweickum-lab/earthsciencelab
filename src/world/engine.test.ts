@@ -1,10 +1,12 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { dayOf, formatTime, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { DEFAULT_SETTINGS } from "./settings";
 import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
-  sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding,
+  sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding, lockedInShop, putInChest, takeAllFromChest, takeFromChest,
 } from "./engine";
+import { ITEMS, UPGRADES } from "./items";
 import { idx } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
@@ -304,10 +306,70 @@ describe("saves from before the landmarks", () => {
     // The player built a fence where the farm silo goes.
     const fenced = { ...old, buildings: [...old.buildings, { id: "fence-1", kind: "fence" as const, x: 19, y: 5, data: {} }] };
     const up = loadWorld(JSON.stringify(fenced))!;
-    expect(up.version).toBe(5);
+    expect(up.version).toBe(6);
     for (const id of landmarks.filter((id) => id !== "farm-silo")) expect(up.buildings.some((b) => b.id === id), id).toBe(true);
     expect(up.buildings.some((b) => b.id === "farm-silo")).toBe(false);
     expect(up.buildings.some((b) => b.id === "fence-1")).toBe(true);
+  });
+});
+
+describe("item icons", () => {
+  it("exist for every item", () => {
+    for (const i of [...Object.values(ITEMS), UPGRADES.bigCan]) expect(existsSync(`public${i.image}`), i.id).toBe(true);
+  });
+});
+
+describe("the starter chest", () => {
+  const chestOf = (s: WorldState) => s.buildings.find((b) => b.kind === "chest")!;
+
+  it("holds the starting tools while the bag starts empty", () => {
+    const s = newWorld(42);
+    expect(s.inventory.every((x) => x === null)).toBe(true);
+    const inside = chestOf(s).data.items!.filter(Boolean).map((x) => x!.item);
+    expect(inside).toEqual(["hoe", "can", "scythe", "axe", "pickaxe", "seed_carrot", "compost", "lime"]);
+    expect(inside).not.toContain("shovel");
+  });
+
+  it("moves stacks between the chest and the bag", () => {
+    let s = takeAllFromChest(newWorld(42), "chest");
+    expect(countItem(s, "hoe")).toBe(1);
+    expect(countItem(s, "seed_carrot")).toBe(6);
+    expect(chestOf(s).data.items!.every((x) => x === null)).toBe(true);
+    const slot = s.inventory.findIndex((x) => x?.item === "lime");
+    s = putInChest(s, "chest", slot);
+    expect(countItem(s, "lime")).toBe(0);
+    expect(chestOf(s).data.items!.find((x) => x?.item === "lime")?.qty).toBe(2);
+    s = takeFromChest(s, "chest", chestOf(s).data.items!.findIndex((x) => x?.item === "lime"));
+    expect(countItem(s, "lime")).toBe(2);
+  });
+
+  it("can't be picked up", () => {
+    const s = newWorld(42);
+    expect(pickUpBuilding(s, "chest")).toBe(s);
+  });
+
+  it("is added, empty, to older saves, which keep their science tools unlocked", () => {
+    const s = newWorld(42);
+    const old = { ...s, version: 5, buildings: s.buildings.filter((b) => b.kind !== "chest") };
+    const up = loadWorld(JSON.stringify(old))!;
+    expect(up.version).toBe(6);
+    expect(chestOf(up).data.items!.every((x) => x === null)).toBe(true);
+    for (const id of ["shovel", "ring", "labKit"]) expect(lockedInShop(up, id), id).toBe(false);
+  });
+});
+
+describe("science tools in the store", () => {
+  it("stay locked until their quest is done, which pays for them", () => {
+    let s = { ...newWorld(42), coins: 1000 };
+    expect(lockedInShop(s, "shovel")).toBe(true);
+    expect(buy(s, "shovel")).toMatchObject({ coins: 1000 });
+    s = { ...s, quests: { active: [], done: ["dig-deeper"] } };
+    s = buy(s, "shovel", 3);
+    expect(countItem(s, "shovel")).toBe(1);
+    expect(s.coins).toBe(940);
+    expect(buy(s, "shovel").coins).toBe(940); // one is enough
+    expect(lockedInShop(s, "ring")).toBe(true);
+    expect(lockedInShop(s, "labKit")).toBe(true);
   });
 });
 

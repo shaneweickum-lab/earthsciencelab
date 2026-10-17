@@ -32,6 +32,16 @@ static func upgrades() -> Dictionary:
 	return load_json("items").upgrades
 
 
+## Science tools the store only sells after the quest that introduces them.
+static func shop_unlocks() -> Dictionary:
+	return load_json("items").shopUnlocks
+
+
+## What's in the chest by the house on day one.
+static func starter_chest() -> Array:
+	return load_json("items").starterChest
+
+
 static func grade_info() -> Dictionary:
 	return load_json("items").gradeInfo
 

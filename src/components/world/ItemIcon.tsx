@@ -7,7 +7,7 @@ export function ItemIcon({ id, grade, className = "" }: { id: string; grade?: Gr
   const def = ITEMS[id];
   const icon = def.image ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={def.image} alt="" aria-hidden className={`h-[1.3em] w-[1.3em] object-contain ${className}`} draggable={false} />
+    <img src={def.image} alt="" aria-hidden className={`h-[1.6em] w-[1.6em] object-contain ${className}`} draggable={false} />
   ) : (
     <span aria-hidden className={className}>{def.icon}</span>
   );

@@ -54,13 +54,13 @@ export interface Tile {
 export type BuildingKind =
   | "house" | "store" | "shippingBin"
   | "composter" | "rainBarrel" | "beehive" | "birdHouse" | "bugHotel" | "scarecrow"
-  | "greenhouse" | "fence" | "flowerBed" | "pathStone" | "well" | "chickenCoop" | "smallBarn"
+  | "greenhouse" | "fence" | "flowerBed" | "pathStone" | "well" | "chickenCoop" | "smallBarn" | "chest"
   // Town buildings, landmarks, and props (not buildable by the player).
   | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower";
 
 /** Town buildings the player can't build, pick up, or build over. */
 export const TOWN_KINDS: BuildingKind[] = [
-  "house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+  "house", "store", "shippingBin", "chest", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
 ];
 
 export interface Building {
@@ -77,6 +77,8 @@ export interface Building {
     owner?: string; sign?: string;
     /** Props: which model to draw ("pack/name"). */
     model?: string;
+    /** Storage chest: what's inside. */
+    items?: (Slot | null)[];
   };
 }
 

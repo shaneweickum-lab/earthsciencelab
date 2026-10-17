@@ -2,7 +2,7 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 5
+const WORLD_VERSION := 6
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
@@ -21,14 +21,14 @@ static func _clamp(v: float) -> float:
 static func new_world(seed: int, settings: Variant = null) -> Dictionary:
 	var cfg := Settings.normalize(settings)
 	var m := WorldMap.create_map(seed)
+	# You start empty-handed: Grandma Rosa's tools wait in the chest by the house.
 	var inventory := []
 	inventory.resize(INVENTORY_SIZE)
-	var start := [
-		["hoe", 1], ["can", 1], ["scythe", 1], ["axe", 1], ["pickaxe", 1], ["shovel", 1], ["ring", 1],
-		["seed_carrot", 6], ["seed_clover", 6], ["labKit", 3],
-	]
-	for i in start.size():
-		inventory[i] = {"item": start[i][0], "qty": start[i][1]}
+	var start := Data.starter_chest()
+	for b in m.buildings:
+		if b.kind == "chest":
+			for i in start.size():
+				b.data.items[i] = {"item": start[i].item, "qty": int(start[i].qty)}
 	return {
 		"version": WORLD_VERSION,
 		"seed": seed,
@@ -812,6 +812,8 @@ static func interact_target(state: Dictionary) -> String:
 			return "shipping"
 		"noticeBoard":
 			return "board"
+		"chest":
+			return "chest"
 	return ""
 
 
@@ -926,6 +928,8 @@ static func _operate_building(state: Dictionary, b: Dictionary) -> Dictionary:
 			return say(got, "Collected %d straw mulch from the barn." % hay) if got != null else say(state, "Your bag is full.")
 		"barn":
 			return say(state, "The Ortegas' barn smells like hay and corn." if data.get("owner") else "Grandma Rosa's old barn. Swallows nest in the rafters.")
+		"chest":
+			return say(state, "Grandma Rosa's old chest. Open it to store things or take them out.")
 		"silo":
 			return say(state, "A tall silo for storing grain through the winter.")
 		"windmill":
@@ -955,6 +959,12 @@ static func buy(state: Dictionary, id: String, qty := 1) -> Dictionary:
 	var price = Data.upgrades().bigCan.price if id == "bigCan" else Items.get_def(id).get("price")
 	if price == null:
 		return say(state, "The store doesn't sell that.")
+	if locked_in_shop(state, id):
+		return say(state, "That's not in stock yet.")
+	if id != "bigCan" and Items.get_def(id).kind == "tool":
+		if owns(state, id):
+			return say(state, "You already have a %s." % Items.get_def(id).name.to_lower())
+		qty = 1
 	var total: float = price * qty
 	if state.coins < total:
 		return say(state, "Not enough coins.")
@@ -966,6 +976,23 @@ static func buy(state: Dictionary, id: String, qty := 1) -> Dictionary:
 	if got == null:
 		return say(state, "Your bag is full.")
 	return say(Js.with(got, {"coins": state.coins - total}), "Bought %d %s." % [qty, Items.get_def(id).name])
+
+
+## True until the quest that introduces this item is done.
+static func locked_in_shop(state: Dictionary, id: String) -> bool:
+	var quest = Data.shop_unlocks().get(id)
+	return quest != null and not quest in Quests.quest_state(state).done
+
+
+## Whether you have this item in your bag or in a chest.
+static func owns(state: Dictionary, id: String) -> bool:
+	if count_item(state, id) > 0:
+		return true
+	for b in state.buildings:
+		for x in b.data.get("items", []):
+			if x != null and x.item == id:
+				return true
+	return false
 
 
 static func sell_now(state: Dictionary, slot_index: int, qty: int) -> Dictionary:
@@ -1136,6 +1163,67 @@ static func swap_slots(state: Dictionary, a: int, b: int) -> Dictionary:
 	return Js.with(state, {"inventory": inv})
 
 
+# ───────────────────────── chests ─────────────────────────
+
+static func _set_chest(state: Dictionary, id: String, items: Array) -> Dictionary:
+	return Js.with(state, {"buildings": state.buildings.map(func(b): return Js.with(b, {"data": Js.with(b.data, {"items": items})}) if b.id == id else b)})
+
+
+static func _chest_items(state: Dictionary, id: String) -> Variant:
+	for b in state.buildings:
+		if b.id == id and b.kind == "chest":
+			var items: Array = b.data.get("items", []).duplicate()
+			while items.size() < WorldMap.CHEST_SIZE:
+				items.append(null)
+			return items
+	return null
+
+
+## Move a stack from a chest into your bag.
+static func take_from_chest(state: Dictionary, id: String, slot: int) -> Dictionary:
+	var items = _chest_items(state, id)
+	if items == null or items[slot] == null:
+		return state
+	var s: Dictionary = items[slot]
+	var got = add_item(state, s.item, int(s.qty), s.get("grade"))
+	if got == null:
+		return say(state, "Your bag is full.")
+	items[slot] = null
+	return _set_chest(got, id, items)
+
+
+## Move everything that fits from a chest into your bag.
+static func take_all_from_chest(state: Dictionary, id: String) -> Dictionary:
+	var s := state
+	for i in WorldMap.CHEST_SIZE:
+		s = take_from_chest(s, id, i)
+	return s
+
+
+## Move a stack from your bag into a chest, stacking with the same item.
+static func put_in_chest(state: Dictionary, id: String, inv_slot: int) -> Dictionary:
+	var items = _chest_items(state, id)
+	var s = state.inventory[inv_slot]
+	if items == null or s == null:
+		return state
+	var same := -1
+	var empty := -1
+	for i in items.size():
+		var x = items[i]
+		if x == null:
+			if empty < 0:
+				empty = i
+		elif same < 0 and x.item == s.item and x.get("grade") == s.get("grade") and Items.get_def(s.item).kind != "tool":
+			same = i
+	var at := same if same >= 0 else empty
+	if at < 0:
+		return say(state, "The chest is full.")
+	items[at] = Js.with(items[at], {"qty": items[at].qty + s.qty}) if same >= 0 else s.duplicate()
+	var inv: Array = state.inventory.duplicate()
+	inv[inv_slot] = null
+	return _set_chest(Js.with(state, {"inventory": inv}), id, items)
+
+
 # ───────────────────────── saves ─────────────────────────
 
 ## Saves from before the town: keep the farm, rebuild the map at the new size, and add the town.
@@ -1156,8 +1244,8 @@ static func _add_town(old: Dictionary) -> Dictionary:
 ## Version 5 added landmarks (barns, silos, the windmill, the water tower). Older saves get each
 ## one whose ground is still free; one that would land on something the player built or planted
 ## is left out.
-static func _add_landmarks(old: Dictionary) -> Dictionary:
-	var s := Js.with(old, {"version": 5})
+static func _add_landmarks(old: Dictionary, version := 5) -> Dictionary:
+	var s := Js.with(old, {"version": version})
 	for b in WorldMap.farm_buildings() + WorldMap.town_buildings():
 		if s.buildings.any(func(x): return x.id == b.id):
 			continue
@@ -1176,6 +1264,18 @@ static func _add_landmarks(old: Dictionary) -> Dictionary:
 				tiles[WorldMap.idx(x, y)] = Js.with(t, {"obstacle": null, "weeds": false, "tilled": false, "ground": "grass" if t.ground == "forest" else t.ground})
 		s = Js.with(s, {"tiles": tiles, "buildings": s.buildings + [b]})
 	return s
+
+
+## Version 6 moved the starting tools into a chest and locked the science tools behind quests.
+## Older farms already have their tools, so they get an empty chest and the tools stay unlocked.
+static func _add_chest(old: Dictionary) -> Dictionary:
+	var s := _add_landmarks(old, 6)
+	var qs := Quests.quest_state(s)
+	var done: Array = qs.done.duplicate()
+	for q in Data.shop_unlocks().values():
+		if not q in done:
+			done.append(q)
+	return Js.with(s, {"quests": Js.with(qs, {"done": done})})
 
 
 ## Version 1 saves had no settings and stored weather as a plain label.
@@ -1215,6 +1315,8 @@ static func load_world(raw: String) -> Variant:
 		return null
 	if up.version < 5:
 		up = _add_landmarks(up)
+	if up.version < 6:
+		up = _add_chest(up)
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null

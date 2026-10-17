@@ -9,7 +9,7 @@ import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
 
 export type Screen = "menu" | "setup" | "playing";
 
@@ -36,6 +36,9 @@ interface WorldStore {
   open: (menu: Menu) => void;
   /** Which townsperson you're talking to. */
   talkingTo: string | null;
+  /** The chest that's open. */
+  chestId: string | null;
+  openChest: (id: string) => void;
   /** What they said when you started talking. */
   npcLine: string;
   talkTo: (id: string) => void;
@@ -122,6 +125,8 @@ export const useWorld = create<WorldStore>((set, get) => {
       set({ menu });
     },
     talkingTo: null,
+    chestId: null,
+    openChest: (id) => set({ menu: "chest", chestId: id }),
     npcLine: "",
     talkTo: (id) => {
       const w = get().world;

@@ -79,8 +79,8 @@ export function IntroLetter() {
           you&apos;d think. Keep an eye out for the little creatures. Most of them are friends.
         </p>
         <p>
-          I left you carrot and clover seeds. They don&apos;t mind a chilly spring night. Save the beans and tomatoes for when the
-          nights stay above freezing.
+          My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime. Carrots don&apos;t mind a
+          chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.
         </p>
         <p>The folks at Seed &amp; Soil Co. will buy what you grow. Remember, organic produce sells for more.</p>
         <p className="text-right italic">Love, Grandma Rosa 🌻</p>

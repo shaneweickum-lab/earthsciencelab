@@ -21,17 +21,20 @@ const BUILDING_SIZE := {
 	"house": [5, 4], "store": [5, 4], "shippingBin": [1, 1],
 	"composter": [1, 1], "rainBarrel": [1, 1], "beehive": [1, 1], "birdHouse": [1, 1], "bugHotel": [1, 1], "scarecrow": [1, 1],
 	"greenhouse": [5, 5], "fence": [1, 1], "flowerBed": [1, 1], "pathStone": [1, 1],
-	"well": [1, 1], "chickenCoop": [2, 2], "smallBarn": [3, 3],
+	"well": [1, 1], "chickenCoop": [2, 2], "smallBarn": [3, 3], "chest": [1, 1],
 	"extension": [5, 4], "cottage": [4, 4], "fountain": [2, 2], "noticeBoard": [1, 1], "field": [5, 3], "lamp": [1, 1], "prop": [1, 1],
 	"barn": [4, 4], "silo": [2, 2], "windmill": [3, 2], "waterTower": [2, 2],
 }
+
+## Slots in a storage chest.
+const CHEST_SIZE := 20
 
 ## Buildings you can walk over.
 const WALKABLE_BUILDINGS := ["pathStone", "flowerBed"]
 
 ## Town buildings the player can't build, pick up, or build over.
 const TOWN_KINDS := [
-	"house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+	"house", "store", "shippingBin", "chest", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
 ]
 
 
@@ -82,10 +85,18 @@ static func _tile(ground: String, soil: Dictionary, obstacle: Variant = null, we
 	}
 
 
+static func _empty(n: int) -> Array:
+	var a := []
+	a.resize(n)
+	return a
+
+
 static func farm_buildings() -> Array:
 	return [
 		{"id": "house", "kind": "house", "x": 8, "y": 5, "data": {}},
 		{"id": "bin", "kind": "shippingBin", "x": 13, "y": 9, "data": {}},
+		# Grandma Rosa's tool chest, on the other side of the front door from the shipping bin.
+		{"id": "chest", "kind": "chest", "x": 7, "y": 9, "data": {"items": _empty(CHEST_SIZE)}},
 		# Grandma Rosa's old barn and silo, east of the house.
 		{"id": "farm-barn", "kind": "barn", "x": 15, "y": 4, "data": {}},
 		{"id": "farm-silo", "kind": "silo", "x": 19, "y": 5, "data": {}},

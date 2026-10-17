@@ -114,6 +114,8 @@ func _fancy(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 			_m(root, "town/stall-red", Vector3(1.5, 0, h / 2.0 - 0.5))
 			_m(root, "town/banner-green", Vector3(-0.9, 0, h / 2.0 - 1))
 		"shippingBin":
+			_m(root, "survival/box-large", Vector3.ZERO, 0, 1.6)
+		"chest":
 			_m(root, "survival/chest", Vector3(0, 0.12, -0.15), 0, 3)
 		"fence":
 			_m(root, "nature/fence_simple", Vector3(0, 0, 0.47), 0, Vector3(1, 1.5, 1))

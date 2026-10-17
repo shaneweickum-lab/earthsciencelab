@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { startOfDay } from "./clock";
 import { addItem, buildingAt, countItem, isWalkable, loadWorld, newWorld, saveWorld, sleep, WORLD_VERSION } from "./engine";
 import { FARM_W, H, idx, TOWN, W } from "./map";
-import { accept, boardRequests, expireBoard, goalProgress, offers, questState, questStatus, turnIn } from "./quests";
+import { accept, boardRequests, expireBoard, goalProgress, offers, QUEST_BY_ID, questState, questStatus, turnIn } from "./quests";
+import { ITEMS } from "./items";
 import { friendship, giveGift, hearts, NPC_BY_ID, NPCS, npcInFront, npcPose, route, talk } from "./town";
 import type { WorldState } from "./types";
 
@@ -84,10 +85,30 @@ describe("townsfolk", () => {
 describe("quests", () => {
   it("are offered when their needs are met", () => {
     const s = newWorld(3);
-    expect(offers(s, "amara").map((q) => q.id)).toEqual(["soil-check"]);
-    const done = { ...s, quests: { active: [], done: ["soil-check"] } };
+    expect(offers(s, "amara").map((q) => q.id)).toEqual(["feed-the-soil"]);
+    expect(offers(s, "luis").map((q) => q.id)).toEqual(["dig-deeper", "first-carrots"]);
+    expect(offers(s, "pip").map((q) => q.id)).toEqual([]); // worms need a shovel; the rainbow needs 2 hearts
+    const tools = { ...s, quests: { active: [], done: ["dig-deeper", "feed-the-soil", "soak-it-up"] } };
+    expect(offers(tools, "amara").map((q) => q.id)).toEqual(["soil-check"]);
+    expect(offers(tools, "pip").map((q) => q.id)).toEqual(["pip-worms"]);
+    const done = { ...s, quests: { active: [], done: ["dig-deeper", "feed-the-soil", "soak-it-up", "soil-check"] } };
     expect(offers(done, "amara").map((q) => q.id)).toEqual(["sour-soil", "community-garden"]);
-    expect(offers(s, "pip").map((q) => q.id)).toEqual(["pip-worms"]); // the rainbow quest needs 2 hearts
+  });
+
+  it("the science-tool quests read progress from your own garden", () => {
+    let s = newWorld(3);
+    const garden = s.tiles.map((t, i) => ({ t, i })).filter(({ t, i }) => t.ground === "farm" && i % W < FARM_W).slice(0, 6);
+    const tiles = [...s.tiles];
+    for (const { i } of garden) tiles[i] = { ...tiles[i], tilled: true, crop: { id: "carrot", growth: 0, harvests: 0, dead: false, pests: false }, moisture: 70, boost: 2 };
+    s = { ...s, tiles };
+    const goal = (id: string) => goalProgress(s, QUEST_BY_ID[id].steps[0].goal);
+    expect(goal("dig-deeper")).toMatchObject({ have: 6, done: true });
+    expect(goal("feed-the-soil")).toMatchObject({ have: 3, done: true });
+    expect(goal("soak-it-up")).toMatchObject({ have: 6, done: true });
+    s = accept(s, "dig-deeper");
+    const r = turnIn(s, "dig-deeper");
+    expect(r.finished).toBe(true);
+    expect(r.state.coins - s.coins).toBe(ITEMS.shovel.price);
   });
 
   it("deliveries take the lowest qualifying grade and pay the reward", () => {

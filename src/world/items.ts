@@ -69,7 +69,7 @@ export interface ItemDef {
   desc: string;
   crop?: CropId;
   building?: BuildingKind;
-  /** A picture icon in public/icons (rendered from the Kenney models), used instead of the emoji when present. */
+  /** A picture icon in public/icons (rendered from the game's models), used instead of the emoji when present. */
   image?: string;
   /** Breaks organic certification when used. */
   notOrganic?: boolean;
@@ -81,8 +81,8 @@ const tools: ItemDef[] = [
   { id: "scythe", name: "Scythe", icon: "🌾", kind: "tool", desc: "Cut weeds. You get plant fiber for the compost bin." },
   { id: "axe", name: "Axe", icon: "🪓", kind: "tool", desc: "Chop sticks and stumps into wood." },
   { id: "pickaxe", name: "Pickaxe", icon: "🔨", kind: "tool", desc: "Break stones. Also un-tills a tile." },
-  { id: "shovel", name: "Shovel", icon: "🕳️", kind: "tool", desc: "Dig a test hole: reveals soil life and structure (the shovel test)." },
-  { id: "ring", name: "Infiltration Ring", icon: "💧", kind: "tool", desc: "Time how fast water soaks in: reveals water holding." },
+  { id: "shovel", name: "Shovel", icon: "🕳️", kind: "tool", price: 60, desc: "Dig a test hole: reveals soil life and structure (the shovel test)." },
+  { id: "ring", name: "Infiltration Ring", icon: "💧", kind: "tool", price: 45, desc: "Time how fast water soaks in: reveals water holding." },
 ];
 
 const amendments: ItemDef[] = [
@@ -145,13 +145,9 @@ const produce: ItemDef[] = Object.values(WORLD_CROPS)
     desc: `Fresh ${CROPS[w.id].name.toLowerCase()} from your garden.`,
   }));
 
-/** Items with a picture icon made by `npm run assets`. */
-const IMAGE_ICONS = new Set([
-  "pickaxe", "shovel", "wood", "crop_carrot", "crop_corn", "crop_squash", "crop_tomato", "honey", "kit_fence", "kit_flowerBed", "kit_pathStone",
-]);
-
+/** Every item has a picture icon in public/icons, rendered from the game's models by `npm run icons`. */
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, IMAGE_ICONS.has(i.id) ? { ...i, image: `/icons/${i.id}.png` } : i]),
+  [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, { ...i, image: `/icons/${i.id}.png` }]),
 );
 
 /** What the store or shipping bin pays for one item of a given grade, with the organic bonus. */
@@ -169,6 +165,9 @@ export function item(id: string): ItemDef {
   return i;
 }
 
+/** Science tools the store only sells after the quest that introduces them (quests.ts). */
+export const SHOP_UNLOCKS: Record<string, string> = { shovel: "dig-deeper", labKit: "feed-the-soil", ring: "soak-it-up" };
+
 export const UPGRADES = {
-  bigCan: { id: "bigCan", name: "Copper Watering Can", icon: "🚿", price: 250, desc: "Holds 40 waterings instead of 20." },
+  bigCan: { id: "bigCan", name: "Copper Watering Can", icon: "🚿", image: "/icons/bigCan.png", price: 250, desc: "Holds 40 waterings instead of 20." },
 };

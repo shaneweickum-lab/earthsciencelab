@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
+    "icons": "node scripts/render-icons.mjs",
     "assets": "node scripts/fetch-assets.mjs",
     "godot:fetch": "node scripts/godot.mjs fetch",
     "godot:test": "node scripts/godot.mjs test",

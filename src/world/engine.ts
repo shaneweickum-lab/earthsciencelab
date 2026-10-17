@@ -1,8 +1,8 @@
 import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
-import { cropDays, ITEMS, item, sellPrice, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
-import { BUILDING_SIZE, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { cropDays, ITEMS, item, sellPrice, SHOP_UNLOCKS, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
+import { BUILDING_SIZE, CHEST_SIZE, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
@@ -10,7 +10,7 @@ import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, typ
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 5;
+export const WORLD_VERSION = 6;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -21,16 +21,19 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 
 // ───────────────────────── setup ─────────────────────────
 
+/** What's in the chest by the house on day one. The science tools come later, from quests. */
+export const STARTER_CHEST: Slot[] = [
+  { item: "hoe", qty: 1 }, { item: "can", qty: 1 }, { item: "scythe", qty: 1 }, { item: "axe", qty: 1 }, { item: "pickaxe", qty: 1 },
+  { item: "seed_carrot", qty: 6 }, { item: "compost", qty: 3 }, { item: "lime", qty: 2 },
+];
+
 export function newWorld(seed = Date.now() % 2147483647, settings?: Partial<GameSettings>): WorldState {
   const cfg = normalizeSettings(settings);
   const { tiles, buildings } = createMap(seed);
+  // You start empty-handed: Grandma Rosa's tools wait in the chest by the house.
   const inventory: (Slot | null)[] = Array(INVENTORY_SIZE).fill(null);
-  const start: Slot[] = [
-    { item: "hoe", qty: 1 }, { item: "can", qty: 1 }, { item: "scythe", qty: 1 }, { item: "axe", qty: 1 },
-    { item: "pickaxe", qty: 1 }, { item: "shovel", qty: 1 }, { item: "ring", qty: 1 },
-    { item: "seed_carrot", qty: 6 }, { item: "seed_clover", qty: 6 }, { item: "labKit", qty: 3 },
-  ];
-  start.forEach((s, i) => (inventory[i] = s));
+  const chest = buildings.find((b) => b.kind === "chest")!;
+  STARTER_CHEST.forEach((s, i) => (chest.data.items![i] = { ...s }));
   return {
     version: WORLD_VERSION,
     seed,
@@ -707,7 +710,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -717,6 +720,7 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "store") return "store";
   if (b?.kind === "shippingBin") return "shipping";
   if (b?.kind === "noticeBoard") return "board";
+  if (b?.kind === "chest") return "chest";
   return null;
 }
 
@@ -814,6 +818,8 @@ function operateBuilding(state: WorldState, b: Building): WorldState {
     }
     case "barn":
       return say(state, b.data.owner ? "The Ortegas' barn smells like hay and corn." : "Grandma Rosa's old barn. Swallows nest in the rafters.");
+    case "chest":
+      return say(state, "Grandma Rosa's old chest. Open it to store things or take them out.");
     case "silo":
       return say(state, "A tall silo for storing grain through the winter.");
     case "windmill":
@@ -844,6 +850,11 @@ function operateBuilding(state: WorldState, b: Building): WorldState {
 export function buy(state: WorldState, id: string, qty = 1): WorldState {
   const price = id === "bigCan" ? UPGRADES.bigCan.price : item(id).price;
   if (price === undefined) return say(state, "The store doesn't sell that.");
+  if (lockedInShop(state, id)) return say(state, "That's not in stock yet.");
+  if (ITEMS[id]?.kind === "tool") {
+    if (owns(state, id)) return say(state, `You already have a ${item(id).name.toLowerCase()}.`);
+    qty = 1;
+  }
   const total = price * qty;
   if (state.coins < total) return say(state, "Not enough coins.");
   if (id === "bigCan") {
@@ -853,6 +864,17 @@ export function buy(state: WorldState, id: string, qty = 1): WorldState {
   const got = addItem(state, id, qty);
   if (!got) return say(state, "Your bag is full.");
   return say({ ...got, coins: state.coins - total }, `Bought ${qty} ${item(id).name}.`);
+}
+
+/** True until the quest that introduces this item is done (see SHOP_UNLOCKS). */
+export function lockedInShop(state: WorldState, id: string): boolean {
+  const quest = SHOP_UNLOCKS[id];
+  return !!quest && !(state.quests?.done ?? []).includes(quest);
+}
+
+/** Whether you have this item in your bag or in a chest. */
+export function owns(state: WorldState, id: string): boolean {
+  return countItem(state, id) > 0 || state.buildings.some((b) => b.data.items?.some((x) => x?.item === id));
 }
 
 export function sellNow(state: WorldState, slotIndex: number, qty: number): WorldState {
@@ -974,6 +996,52 @@ export function swapSlots(state: WorldState, a: number, b: number): WorldState {
   return { ...state, inventory: inv };
 }
 
+// ───────────────────────── chests ─────────────────────────
+
+function setChest(state: WorldState, id: string, items: (Slot | null)[]): WorldState {
+  return { ...state, buildings: state.buildings.map((b) => (b.id === id ? { ...b, data: { ...b.data, items } } : b)) };
+}
+
+function chestItems(state: WorldState, id: string): (Slot | null)[] | null {
+  const b = state.buildings.find((x) => x.id === id && x.kind === "chest");
+  if (!b) return null;
+  const items = [...(b.data.items ?? [])];
+  while (items.length < CHEST_SIZE) items.push(null);
+  return items;
+}
+
+/** Move a stack from a chest into your bag. */
+export function takeFromChest(state: WorldState, id: string, slot: number): WorldState {
+  const items = chestItems(state, id);
+  const s = items?.[slot];
+  if (!items || !s) return state;
+  const got = addItem(state, s.item, s.qty, s.grade);
+  if (!got) return say(state, "Your bag is full.");
+  items[slot] = null;
+  return setChest(got, id, items);
+}
+
+/** Move everything that fits from a chest into your bag. */
+export function takeAllFromChest(state: WorldState, id: string): WorldState {
+  let s = state;
+  for (let i = 0; i < CHEST_SIZE; i++) s = takeFromChest(s, id, i);
+  return s;
+}
+
+/** Move a stack from your bag into a chest, stacking with the same item. */
+export function putInChest(state: WorldState, id: string, invSlot: number): WorldState {
+  const items = chestItems(state, id);
+  const s = state.inventory[invSlot];
+  if (!items || !s) return state;
+  const same = items.findIndex((x) => x && x.item === s.item && x.grade === s.grade && ITEMS[s.item].kind !== "tool");
+  const at = same >= 0 ? same : items.findIndex((x) => !x);
+  if (at < 0) return say(state, "The chest is full.");
+  items[at] = same >= 0 ? { ...items[at]!, qty: items[at]!.qty + s.qty } : { ...s };
+  const inv = [...state.inventory];
+  inv[invSlot] = null;
+  return setChest({ ...state, inventory: inv }, id, items);
+}
+
 /** Saves from before the town: keep the farm, rebuild the map at the new size, and add the town. */
 function addTown(old: WorldState): WorldState {
   const oldW = old.tiles.length / H;
@@ -993,8 +1061,8 @@ function addTown(old: WorldState): WorldState {
  * one whose ground is still free; one that would land on something the player built or planted
  * is left out.
  */
-function addLandmarks(old: WorldState): WorldState {
-  let s: WorldState = { ...old, version: 5 };
+function addLandmarks(old: WorldState, version = 5): WorldState {
+  let s: WorldState = { ...old, version };
   const all = [...farmBuildings(), ...townBuildings()];
   for (const b of all) {
     if (s.buildings.some((x) => x.id === b.id)) continue;
@@ -1010,6 +1078,17 @@ function addLandmarks(old: WorldState): WorldState {
     s = { ...s, tiles, buildings: [...s.buildings, b] };
   }
   return s;
+}
+
+/**
+ * Version 6 moved the starting tools into a chest and locked the science tools behind quests.
+ * Older farms already have their tools, so they get an empty chest and the tools stay unlocked.
+ */
+function addChest(old: WorldState): WorldState {
+  const s = addLandmarks(old, 6);
+  const qs = s.quests ?? { active: [], done: [] };
+  const unlocks = Object.values(SHOP_UNLOCKS).filter((q) => !qs.done.includes(q));
+  return { ...s, quests: { ...qs, done: [...qs.done, ...unlocks] } };
 }
 
 /** Version 1 saves had no settings and stored weather as a plain label. */
@@ -1038,6 +1117,7 @@ export function loadWorld(raw: string | null): WorldState | null {
     if (up.version < 4) up = addTown(up);
     if (up.tiles.length !== W * H) return null;
     if (up.version < 5) up = addLandmarks(up);
+    if (up.version < 6) up = addChest(up);
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

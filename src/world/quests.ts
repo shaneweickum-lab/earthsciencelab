@@ -4,7 +4,7 @@ import { dayOf, seasonOf } from "./clock";
 import { addItem } from "./engine";
 import { GRADES } from "./grades";
 import { ITEMS, sellPrice, WORLD_CROPS } from "./items";
-import { TOWN, W } from "./map";
+import { FARM_W, TOWN, W } from "./map";
 import { friendship, hearts, NPC_BY_ID, NPCS, POINTS_PER_HEART } from "./town";
 import type { Grade, WorldState } from "./types";
 
@@ -16,7 +16,10 @@ export type Goal =
   | { kind: "raisePh"; to: number }
   | { kind: "discover"; entry: string }
   | { kind: "gardenCleared"; percent: number }
-  | { kind: "gardenPlanted"; crop: CropId; count: number };
+  | { kind: "gardenPlanted"; crop: CropId; count: number }
+  | { kind: "farmPlanted"; count: number }
+  | { kind: "fedSpots"; count: number }
+  | { kind: "wetSpots"; count: number };
 
 export interface Reward {
   coins?: number;
@@ -45,6 +48,29 @@ export interface QuestDef {
 }
 
 export const QUESTS: QuestDef[] = [
+  // The science tools: each quest unlocks one in the store and pays for it.
+  {
+    id: "dig-deeper", giver: "luis", title: "Dig a little deeper",
+    ask: "Grandma Rosa's tools still work? Good. Get some seeds in the ground: plant 6 crops on your farm, then come tell me.",
+    thanks: "Nice rows! But the real action is under the plants. Mei just got shovels in. Dig a test hole and look for worms and soil crumbs. This should cover one.",
+    steps: [{ goal: { kind: "farmPlanted", count: 6 }, label: "Plant 6 crops on your farm" }],
+    reward: { coins: 60, friendship: 40 },
+  },
+  {
+    id: "feed-the-soil", giver: "amara", title: "Feed the soil",
+    ask: "Healthy soil grows healthy food. Spread compost or lime on 3 garden spots. You'll find some in your grandmother's chest.",
+    thanks: "Good. Now, what did that actually change? A lab test tells you. Mei stocks the kits now, and this will pay for three.",
+    steps: [{ goal: { kind: "fedSpots", count: 3 }, label: "Spread compost or lime on 3 garden spots" }],
+    reward: { coins: 36, friendship: 40 },
+  },
+  {
+    id: "soak-it-up", giver: "june", title: "Soak it up",
+    ask: "Some days my garden drowns and some days it's dust. Water 6 of your crops until the soil is good and damp. Rain counts too!",
+    thanks: "Some soil drinks water fast, and some lets it run right off. An infiltration ring shows you which kind you have. Mei sells them now. Here, my treat.",
+    steps: [{ goal: { kind: "wetSpots", count: 6 }, label: "Get 6 of your crops' soil damp (moisture 60+)" }],
+    reward: { coins: 45, friendship: 40 },
+    needs: { quests: ["dig-deeper"] },
+  },
   {
     id: "welcome", giver: "mei", title: "Meet the neighbors",
     ask: "Have you met everyone yet? Say hi to all five of us. Small town, big hearts!",
@@ -65,6 +91,7 @@ export const QUESTS: QuestDef[] = [
     thanks: "Excellent data! Now you can see what your soil needs instead of guessing. That's science.",
     steps: [{ goal: { kind: "testSpots", count: 3 }, label: "Fully test 3 garden spots" }],
     reward: { coins: 100, items: [{ item: "labKit", qty: 3 }], friendship: 60 },
+    needs: { quests: ["dig-deeper", "feed-the-soil", "soak-it-up"] },
   },
   {
     id: "sour-soil", giver: "amara", title: "Sweeten sour soil",
@@ -87,6 +114,7 @@ export const QUESTS: QuestDef[] = [
     thanks: "A WORM! You found a worm! Okay this rock is for you. It's my second-best rock.",
     steps: [{ goal: { kind: "discover", entry: "earthworm" }, label: "Find an earthworm with a shovel test" }],
     reward: { coins: 50, items: [{ item: "stone", qty: 1 }], friendship: 80 },
+    needs: { quests: ["dig-deeper"] },
   },
   {
     id: "pip-rainbow", giver: "pip", title: "Chasing rainbows",
@@ -165,6 +193,9 @@ function countAtGrade(s: WorldState, item: string, min?: Grade) {
   return s.inventory.reduce((n, x) => n + (x && x.item === item && gradeAtLeast(x.grade, min) ? x.qty : 0), 0);
 }
 
+/** Your own garden soil: the farm field and greenhouse beds. */
+const ownGarden = (s: WorldState) => s.tiles.filter((t, i) => i % W < FARM_W && (t.ground === "farm" || t.greenhouse));
+
 function gardenTiles(s: WorldState) {
   const g = TOWN.garden;
   const out = [];
@@ -201,6 +232,12 @@ export function goalProgress(s: WorldState, goal: Goal): Progress {
     }
     case "gardenPlanted":
       return p(gardenTiles(s).filter((t) => t.crop?.id === goal.crop && !t.crop.dead).length, goal.count);
+    case "farmPlanted":
+      return p(ownGarden(s).filter((t) => t.crop && !t.crop.dead).length, goal.count);
+    case "fedSpots":
+      return p(ownGarden(s).filter((t) => (t.boost ?? 0) > 0).length, goal.count);
+    case "wetSpots":
+      return p(ownGarden(s).filter((t) => t.crop && !t.crop.dead && t.moisture >= 60).length, goal.count);
   }
 }
 
@@ -214,6 +251,9 @@ export function goalLabel(goal: Goal): string {
     case "discover": return `Find: ${goal.entry}`;
     case "gardenCleared": return `Clear ${goal.percent}% of the community garden`;
     case "gardenPlanted": return `Plant ${goal.crop} on ${goal.count} community garden spots`;
+    case "farmPlanted": return `Plant ${goal.count} crops on your farm`;
+    case "fedSpots": return `Spread compost or lime on ${goal.count} garden spots`;
+    case "wetSpots": return `Get ${goal.count} of your crops' soil damp`;
   }
 }
 

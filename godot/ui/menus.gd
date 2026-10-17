@@ -12,6 +12,7 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"bag": return bag(game_ui)
 		"store": return store(game_ui)
 		"shipping": return shipping()
+		"chest": return chest()
 		"journal": return journal(game_ui)
 		"pause": return Screens.pause(game_ui)
 		"npc": return TownMenus.npc_dialog(game_ui)
@@ -32,7 +33,7 @@ static func intro(_game_ui: GameUi) -> Dictionary:
 	for p in [
 		"My dear grandchild, the farm is yours now. I'm sorry to say it's grown wild. Weeds, sticks, and stones are everywhere, and I never did test the soil. Treat it kindly and it will feed you for a lifetime.",
 		"Clear the weeds, test the soil, and feed it with compost and cover crops. Watch the sky, too: the weather decides more than you'd think. Keep an eye out for the little creatures. Most of them are friends.",
-		"I left you carrot and clover seeds. They don't mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.",
+		"My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime. Carrots don't mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.",
 		"The folks at Seed & Soil Co. will buy what you grow. Remember, organic produce sells for more.",
 	]:
 		letter.add_child(Ui.text(p, 15))
@@ -222,10 +223,14 @@ static func store(game_ui: GameUi) -> Dictionary:
 				col.add_child(Ui.text("[b]Takes:[/b] %s [b]Gives back:[/b] %s" % [crop.takes, crop.givesText], 12))
 				return col))
 		"soil":
-			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment"), buy))
+			var science := func(i): return (i.kind == "tool" and i.get("price")) or Data.shop_unlocks().has(i.id)
+			body.add_child(Ui.heading("Science tools"))
+			body.add_child(_item_list(w, items.filter(science), buy))
+			body.add_child(Ui.heading("For the soil"))
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment" and not science.call(i)), buy))
 			var up: Dictionary = Data.upgrades().bigCan
 			var row := Ui.hbox(10)
-			row.add_child(Ui.emoji_icon(up.icon, 32))
+			row.add_child(Ui.item_icon("bigCan", 32))
 			var col := Ui.vbox(2)
 			col.add_child(Ui.text(up.name, 15, Ui.INK, 900))
 			col.add_child(Ui.small(up.desc))
@@ -266,13 +271,78 @@ static func _item_list(w: Dictionary, items: Array, buy: Callable, extra: Varian
 		var info := Ui.vbox(2)
 		info.add_child(Ui.text("%s%s" % [i.name, "  [color=#b8432f](not organic)[/color]" if i.get("notOrganic") else ""], 15, Ui.INK, 900))
 		info.add_child(extra.call(i) if extra is Callable else Ui.text(i.desc, 12, Ui.MUTED))
-		row.add_child(info)
 		var price: float = i.price
-		row.add_child(Ui.button("🪙 %s" % Js.num(price), func(): buy.call(i.id, 1), "primary", 13, w.coins < price))
-		if i.kind != "kit" or price < 50:
-			row.add_child(Ui.button("×5", func(): buy.call(i.id, 5), "ghost", 13, w.coins < price * 5))
+		if World.locked_in_shop(w, i.id):
+			var q = Quests.by_id(Data.shop_unlocks()[i.id])
+			info.add_child(Ui.text("🔒 Not in stock yet. Finish “%s” for %s to unlock it." % [q.title, Town.npc(q.giver).short], 12, Ui.SOIL, 800))
+			row.add_child(info)
+			row.add_child(Ui.pill("🔒 %s" % Js.num(price), Ui.PAPER, Ui.MUTED, 13))
+			row.modulate = Color(1, 1, 1, 0.6)
+		elif i.kind == "tool" and World.owns(w, i.id):
+			row.add_child(info)
+			row.add_child(Ui.pill("Owned", Ui.LEAF_LIGHT, Ui.INK, 13))
+		else:
+			row.add_child(info)
+			row.add_child(Ui.button("🪙 %s" % Js.num(price), func(): buy.call(i.id, 1), "primary", 13, w.coins < price))
+			if i.kind != "tool" and (i.kind != "kit" or price < 50):
+				row.add_child(Ui.button("×5", func(): buy.call(i.id, 5), "ghost", 13, w.coins < price * 5))
 		col.add_child(Ui.panel(row, Ui.CARD, 12, 8))
 	return col
+
+
+## A storage chest: click something in the chest to take it, or in your bag to put it away.
+static func chest() -> Dictionary:
+	var w := Game.world
+	var id := Game.chest_id
+	var m := Ui.modal("Grandma Rosa's chest", "🧰", Game.close, true)
+	var body: VBoxContainer = m.body
+	var b = null
+	for x in w.buildings:
+		if x.id == id:
+			b = x
+	if b == null:
+		return m
+	var items := []
+	for i in WorldMap.CHEST_SIZE:
+		var have: Array = b.data.get("items", [])
+		items.append(have[i] if i < have.size() else null)
+	var top := Ui.hbox(8)
+	var note := Ui.text("Click something in the chest to take it. Click something in your bag to put it away.", 14, Ui.MUTED)
+	note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(note)
+	top.add_child(Ui.button("Take all", func(): Game.update(func(s): return World.take_all_from_chest(s, id)), "primary", 14, items.all(func(x): return x == null)))
+	body.add_child(top)
+	body.add_child(_slot_grid(items, 0, func(i): Game.update(func(s): return World.take_from_chest(s, id, i))))
+	body.add_child(Ui.heading("Your bag (the top row is your hotbar)"))
+	body.add_child(_slot_grid(w.inventory, World.HOTBAR_SIZE, func(i): Game.update(func(s): return World.put_in_chest(s, id, i))))
+	return m
+
+
+static func _slot_grid(slots: Array, hotbar: int, pick: Callable) -> Control:
+	var g := Ui.grid(10, 6)
+	for i in slots.size():
+		var s = slots[i]
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(62, 62)
+		b.focus_mode = Control.FOCUS_NONE
+		var bg := Ui.LEAF_LIGHT if i < hotbar else Ui.PAPER
+		b.add_theme_stylebox_override("normal", Ui.box(bg, 12, Color(0, 0, 0, 0), 0, 4))
+		b.add_theme_stylebox_override("hover", Ui.box(Color.WHITE, 12, Ui.SOIL, 2, 4))
+		b.add_theme_stylebox_override("pressed", Ui.box(Ui.SUN, 12, Ui.SOIL, 2, 4))
+		b.add_theme_stylebox_override("disabled", Ui.box(bg, 12, Color(0, 0, 0, 0), 0, 4))
+		b.disabled = s == null
+		if s:
+			var icon := Ui.item_icon(s.item, 34, s.get("grade"))
+			icon.position = Vector2(14, 12)
+			b.add_child(icon)
+			if s.qty > 1:
+				var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
+				q.position = Vector2(40, 40)
+				b.add_child(q)
+			b.tooltip_text = Items.get_def(s.item).name
+			b.pressed.connect(func(): pick.call(i))
+		g.add_child(b)
+	return g
 
 
 static func shipping() -> Dictionary:

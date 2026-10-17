@@ -14,10 +14,10 @@ import { AVATARS, DEFAULT_AVATAR } from "./avatars";
 import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, timeOfDay, yearFraction, type Calendar } from "./clock";
 import {
   act, addItem, applyTool, buy, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
-  swapSlots, tick,
+  swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
-import { cropDays, ITEMS, sellPrice, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
 import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
 import { BUILDING_SIZE, FARM, H, TOWN, W } from "./map";
 import { SPAWNS } from "./nature";
@@ -64,7 +64,7 @@ const CALENDARS: Calendar[] = [
 describe("Godot data tables", () => {
   it("are exported", () => {
     emit("data/crops.json", { crops: CROPS, order: CROP_ORDER, familyLabel: FAMILY_LABEL, world: WORLD_CROPS });
-    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO });
+    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST });
     emit("data/settings.json", { features: SCIENCE_FEATURES, presets: PRESETS, defaults: DEFAULT_SETTINGS });
     emit("data/weather.json", WEATHER);
     emit("data/journal.json", { entries: JOURNAL, categories: CATEGORY_INFO, mushroomSafety: MUSHROOM_SAFETY });
@@ -218,6 +218,9 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "ship": return { state: ship(s, op.slot as number) };
     case "move": return { state: { ...s, player: movePlayer(s, op.dx as number, op.dy as number) } };
     case "swap": return { state: swapSlots(s, op.a as number, op.b as number) };
+    case "take": return { state: takeFromChest(s, op.id as string, op.slot as number) };
+    case "takeAll": return { state: takeAllFromChest(s, op.id as string) };
+    case "put": return { state: putInChest(s, op.id as string, op.slot as number) };
     case "pickUp": return { state: pickUpBuilding(s, op.id as string) };
     case "talk": return talk(s, op.id as string);
     case "gift": return giveGift(s, op.id as string);
@@ -258,7 +261,7 @@ function finalState(s: WorldState) {
 const GIVE = ["seed_carrot", "seed_beans", "seed_tomato", "seed_corn", "seed_clover", "seed_squash", "seed_sunflower", "seed_potato", "seed_wheat", "seed_buckwheat",
   "compost", "mulch", "lime", "biochar", "synthFert", "labKit", "fiber", "kit_composter", "kit_rainBarrel", "kit_beehive", "kit_bugHotel", "kit_flowerBed", "kit_greenhouse", "kit_fence",
   "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato"];
-const BUY = ["seed_carrot", "seed_beans", "compost", "labKit", "kit_fence", "bigCan", "kit_scarecrow", "honey"];
+const BUY = ["seed_carrot", "seed_beans", "compost", "labKit", "kit_fence", "bigCan", "kit_scarecrow", "honey", "shovel", "ring"];
 const DIRS: Dir[] = ["up", "down", "left", "right"];
 const WEATHERS = [
   { kind: "storm", high: 70, low: 55 }, { kind: "rain", high: 62, low: 50 }, { kind: "frost", high: 45, low: 26 },
@@ -273,7 +276,7 @@ function farmstead(): Op[] {
   for (let y = 6; y <= 10; y++) for (let x = 22; x <= 27; x++) ops.push({ op: "tile", i: y * W + x, patch: { obstacle: null, weeds: false, crop: null } });
   for (const item of ["kit_chickenCoop", "kit_well", "kit_smallBarn"]) ops.push({ op: "give", item, qty: 1, grade: null });
   const build = (x: number, y: number, item: number) => [{ op: "player", x, y, facing: "down" }, { op: "select", i: item }, { op: "applyTool" }];
-  ops.push(...build(22, 6, 10), ...build(25, 6, 11), ...build(23, 8, 12));
+  ops.push(...build(22, 6, 8), ...build(25, 6, 9), ...build(23, 8, 10));
   for (let d = 0; d < 4; d++) ops.push({ op: "sleep" });
   ops.push({ op: "select", i: 13 });
   ops.push({ op: "player", x: 22, y: 6, facing: "down" }, { op: "interact" }, { op: "player", x: 23, y: 8, facing: "down" }, { op: "interact" });
@@ -298,6 +301,8 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
     results.push(Object.fromEntries(Object.entries(full).filter(([k]) => json[k] !== prev[k])));
     prev = json;
   };
+  // Grandma Rosa's chest holds the starting tools.
+  run({ op: "takeAll", id: "chest" });
   for (const op of prelude) run(op);
   for (let n = 0; n < steps; n++) {
     const k = r();
@@ -315,7 +320,12 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
     else if (k < 0.57) run({ op: "buy", id: pick(BUY), qty: 1 + Math.floor(r() * 3) });
     else if (k < 0.6) run({ op: "ship", slot: Math.floor(r() * 30) });
     else if (k < 0.63) run({ op: "sellNow", slot: Math.floor(r() * 30), qty: 1 + Math.floor(r() * 4) });
-    else if (k < 0.66) run({ op: "swap", a: Math.floor(r() * 30), b: Math.floor(r() * 10) });
+    else if (k < 0.66) {
+      const c = r();
+      if (c < 0.5) run({ op: "swap", a: Math.floor(r() * 30), b: Math.floor(r() * 10) });
+      else if (c < 0.8) run({ op: "put", id: "chest", slot: Math.floor(r() * 30) });
+      else run({ op: "take", id: "chest", slot: Math.floor(r() * 20) });
+    }
     else if (k < 0.7) {
       // Walk around, sliding along walls.
       run({ op: "player", x: 3 + Math.floor(r() * 70), y: 3 + Math.floor(r() * 30), facing: pick(DIRS) });
@@ -383,7 +393,7 @@ describe("Godot playthroughs", () => {
     const s = sleep(newWorld(5));
     const oldW = 40;
     const oldTiles = Array.from({ length: oldW * H }, (_, i) => ({ ...s.tiles[Math.floor(i / oldW) * W + (i % oldW)], mulch: i % oldW === 20 && Math.floor(i / oldW) === 20 }));
-    const v3 = { ...s, version: 3, tiles: oldTiles, buildings: [...s.buildings.filter((b) => b.x < 38), { id: "store", kind: "store" as const, x: 30, y: 5, data: {} }] };
+    const v3 = { ...s, version: 3, tiles: oldTiles, buildings: [...s.buildings.filter((b) => b.x < 38 && b.kind !== "chest"), { id: "store", kind: "store" as const, x: 30, y: 5, data: {} }] };
     const v1: Record<string, unknown> = { ...v3, version: 1, weather: "sunny" };
     delete v1.settings;
     golden("migrations", [v3, v1].map((old) => finalState(loadWorld(JSON.stringify(old))!)));
