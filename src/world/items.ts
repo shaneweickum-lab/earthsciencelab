@@ -99,6 +99,7 @@ const materials: ItemDef[] = [
   { id: "wood", name: "Wood", icon: "🪵", kind: "material", sell: 2, desc: "From sticks and stumps." },
   { id: "stone", name: "Stone", icon: "🪨", kind: "material", sell: 2, desc: "From rocks in the field." },
   { id: "honey", name: "Honey", icon: "🍯", kind: "produce", sell: 60, desc: "Made by bees from flower nectar." },
+  { id: "egg", name: "Egg", icon: "🥚", kind: "produce", sell: 18, desc: "Fresh from your hens, who eat bugs and weed seeds all day." },
 ];
 
 const kits: ItemDef[] = [
@@ -112,6 +113,9 @@ const kits: ItemDef[] = [
   { id: "kit_fence", name: "Fence", icon: "🚧", kind: "kit", price: 5, building: "fence", desc: "A wooden fence post." },
   { id: "kit_flowerBed", name: "Flower Bed", icon: "🌼", kind: "kit", price: 25, building: "flowerBed", desc: "Flowers feed bees and butterflies." },
   { id: "kit_pathStone", name: "Stepping Stone", icon: "⬜", kind: "kit", price: 2, building: "pathStone", desc: "A path tile. Walk on it, don't till it." },
+  { id: "kit_well", name: "Well", icon: "🪣", kind: "kit", price: 150, building: "well", desc: "Reaches groundwater. Refill your watering can here any time." },
+  { id: "kit_chickenCoop", name: "Chicken Coop", icon: "🐔", kind: "kit", price: 400, building: "chickenCoop", desc: "Hens lay eggs every morning, eat pests on nearby crops, and their manure becomes compost." },
+  { id: "kit_smallBarn", name: "Small Barn", icon: "🛖", kind: "kit", price: 600, building: "smallBarn", desc: "Stores hay. Old hay becomes straw mulch you can collect each morning." },
 ];
 
 const SEED_NAME: Record<CropId, string> = {

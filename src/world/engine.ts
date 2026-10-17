@@ -2,7 +2,7 @@ import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { cropDays, ITEMS, item, sellPrice, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
-import { BUILDING_SIZE, createMap, doorOf, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { BUILDING_SIZE, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
@@ -10,7 +10,7 @@ import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, typ
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 4;
+export const WORLD_VERSION = 5;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -378,7 +378,8 @@ function startDay(prev: WorldState, newDay: number): WorldState {
     // Pests find crops grown in the same family again and again.
     const cc = next.crop;
     if (on(state, "pests") && cc && !cc.dead && !cc.pests) {
-      const guarded = near(state, x, y, ["bugHotel", "birdHouse"], 6);
+      // Ladybugs, birds, and hens all eat pests.
+      const guarded = near(state, x, y, ["bugHotel", "birdHouse", "chickenCoop"], 6);
       const repeat = on(state, "rotation") && next.familyStreak >= 1;
       const chance = (repeat ? 0.2 : 0.04) * (guarded ? 0.25 : 1);
       if (rand() < chance) {
@@ -398,6 +399,13 @@ function startDay(prev: WorldState, newDay: number): WorldState {
       return { ...b, data: { ...b.data, fiber: (b.data.fiber ?? 0) % 5, ready: (b.data.ready ?? 0) + made, startedDay: (b.data.fiber ?? 0) % 5 ? newDay : undefined } };
     }
     if (b.kind === "rainBarrel" && yesterdayWet) return { ...b, data: { ...b.data, water: Math.min(40, (b.data.water ?? 0) + 20) } };
+    if (b.kind === "chickenCoop") {
+      // Two eggs a morning (the nest box holds six), and every 3 days the manure has composted.
+      const last = b.data.manureDay ?? newDay;
+      const composted = newDay - last >= 3;
+      return { ...b, data: { ...b.data, eggs: Math.min(6, (b.data.eggs ?? 0) + 2), ready: Math.min(5, (b.data.ready ?? 0) + (composted ? 1 : 0)), manureDay: composted ? newDay : last } };
+    }
+    if (b.kind === "smallBarn") return { ...b, data: { ...b.data, ready: Math.min(3, (b.data.ready ?? 0) + 1) } };
     if (b.kind === "beehive") {
       const last = b.data.honeyDay ?? newDay;
       if (!b.data.ready && newDay - last >= 3 && flowersNear(state, b.x, b.y, 5)) {
@@ -548,6 +556,7 @@ export function applyTool(state: WorldState): WorldState {
     case "can": {
       if (t.ground === "water") return say({ ...paid, water: state.canSize }, "Filled your watering can at the pond.");
       if (b?.kind === "rainBarrel") return refillFromBarrel(paid, b);
+      if (b?.kind === "well") return fromWell(paid);
       if (state.water <= 0) return say(state, "Your watering can is empty. Refill it at the pond or a rain barrel.");
       if (!t.tilled) return say(state, "Water tilled soil or crops.");
       // Each pour soaks the soil part way; keep pouring and it gets waterlogged.
@@ -595,6 +604,10 @@ export function applyTool(state: WorldState): WorldState {
     }
   }
   return state;
+}
+
+function fromWell(state: WorldState): WorldState {
+  return discover(say({ ...state, water: state.canSize }, "Filled your watering can from the well: groundwater, soaked up from rain over many years."), "groundwater");
 }
 
 function refillFromBarrel(state: WorldState, b: Building): WorldState {
@@ -781,6 +794,32 @@ function operateBuilding(state: WorldState, b: Building): WorldState {
     }
     case "rainBarrel":
       return refillFromBarrel(state, b);
+    case "well":
+      return fromWell(state);
+    case "chickenCoop": {
+      const eggs = b.data.eggs ?? 0, manure = b.data.ready ?? 0;
+      if (!eggs && !manure) return discover(say(state, "The hens are scratching for bugs. Come back in the morning for eggs."), "hen");
+      let got: WorldState | null = update({ ...b.data, eggs: 0, ready: 0 });
+      if (eggs) got = got && addItem(got, "egg", eggs);
+      if (manure) got = got && addItem(got, "compost", manure);
+      if (!got) return say(state, "Your bag is full.");
+      const parts = [eggs ? `${eggs} egg${eggs > 1 ? "s" : ""}` : "", manure ? `${manure} compost from composted manure` : ""].filter(Boolean).join(" and ");
+      return discover(say(got, `Collected ${parts}.`), "hen");
+    }
+    case "smallBarn": {
+      const hay = b.data.ready ?? 0;
+      if (!hay) return say(state, "The barn is stacked with hay. Old hay turns into straw mulch each morning.");
+      const got = addItem(update({ ...b.data, ready: 0 }), "mulch", hay);
+      return got ? say(got, `Collected ${hay} straw mulch from the barn.`) : say(state, "Your bag is full.");
+    }
+    case "barn":
+      return say(state, b.data.owner ? "The Ortegas' barn smells like hay and corn." : "Grandma Rosa's old barn. Swallows nest in the rafters.");
+    case "silo":
+      return say(state, "A tall silo for storing grain through the winter.");
+    case "windmill":
+      return say(state, "The windmill creaks as it turns. Wind power once pumped water for the whole valley.");
+    case "waterTower":
+      return say(state, "The town water tower. Gravity pushes the water down through the pipes to every house.");
     case "extension":
       return say(state, "The County Extension Office: free soil advice and testing. Dr. Okafor is usually out front.");
     case "cottage":
@@ -946,7 +985,31 @@ function addTown(old: WorldState): WorldState {
   // The store moved into town; the farm keeps everything you built.
   const farm = old.buildings.filter((b) => b.kind !== "store" && b.x < FARM_W);
   const town = fresh.buildings.filter((b) => !farm.some((f) => f.id === b.id));
-  return { ...old, version: WORLD_VERSION, tiles, buildings: [...farm, ...town] };
+  return { ...old, version: 4, tiles, buildings: [...farm, ...town] };
+}
+
+/**
+ * Version 5 added landmarks (barns, silos, the windmill, the water tower). Older saves get each
+ * one whose ground is still free; one that would land on something the player built or planted
+ * is left out.
+ */
+function addLandmarks(old: WorldState): WorldState {
+  let s: WorldState = { ...old, version: 5 };
+  const all = [...farmBuildings(), ...townBuildings()];
+  for (const b of all) {
+    if (s.buildings.some((x) => x.id === b.id)) continue;
+    const [w, h] = BUILDING_SIZE[b.kind];
+    let free = true;
+    for (let y = b.y; y < b.y + h; y++) for (let x = b.x; x < b.x + w; x++) if (buildingAt(s, x, y) || s.tiles[idx(x, y)].crop) free = false;
+    if (!free) continue;
+    const tiles = [...s.tiles];
+    for (let y = b.y; y < b.y + h; y++) for (let x = b.x; x < b.x + w; x++) {
+      const t = tiles[idx(x, y)];
+      tiles[idx(x, y)] = { ...t, obstacle: null, weeds: false, tilled: false, ground: t.ground === "forest" ? "grass" : t.ground };
+    }
+    s = { ...s, tiles, buildings: [...s.buildings, b] };
+  }
+  return s;
 }
 
 /** Version 1 saves had no settings and stored weather as a plain label. */
@@ -974,6 +1037,7 @@ export function loadWorld(raw: string | null): WorldState | null {
     // Version 4 grew the map east to add the town.
     if (up.version < 4) up = addTown(up);
     if (up.tiles.length !== W * H) return null;
+    if (up.version < 5) up = addLandmarks(up);
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

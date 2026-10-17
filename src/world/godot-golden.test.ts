@@ -256,7 +256,8 @@ function finalState(s: WorldState) {
 }
 
 const GIVE = ["seed_carrot", "seed_beans", "seed_tomato", "seed_corn", "seed_clover", "seed_squash", "seed_sunflower", "seed_potato", "seed_wheat", "seed_buckwheat",
-  "compost", "mulch", "lime", "biochar", "synthFert", "labKit", "fiber", "kit_composter", "kit_rainBarrel", "kit_beehive", "kit_bugHotel", "kit_flowerBed", "kit_greenhouse", "kit_fence", "crop_carrot", "crop_tomato"];
+  "compost", "mulch", "lime", "biochar", "synthFert", "labKit", "fiber", "kit_composter", "kit_rainBarrel", "kit_beehive", "kit_bugHotel", "kit_flowerBed", "kit_greenhouse", "kit_fence",
+  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato"];
 const BUY = ["seed_carrot", "seed_beans", "compost", "labKit", "kit_fence", "bigCan", "kit_scarecrow", "honey"];
 const DIRS: Dir[] = ["up", "down", "left", "right"];
 const WEATHERS = [
@@ -266,7 +267,21 @@ const WEATHERS = [
   { kind: "frost", high: 44, low: 32 }, { kind: "frost", high: 46, low: 30 }, { kind: "cloudy", high: 47, low: 25 }, { kind: "frost", high: 40, low: 22 },
 ];
 
-function playthrough(seed: number, settings: Partial<GameSettings>, steps: number) {
+/** A scripted start: clear a patch north of the field, build a coop, well, and small barn, and use them. */
+function farmstead(): Op[] {
+  const ops: Op[] = [];
+  for (let y = 6; y <= 10; y++) for (let x = 22; x <= 27; x++) ops.push({ op: "tile", i: y * W + x, patch: { obstacle: null, weeds: false, crop: null } });
+  for (const item of ["kit_chickenCoop", "kit_well", "kit_smallBarn"]) ops.push({ op: "give", item, qty: 1, grade: null });
+  const build = (x: number, y: number, item: number) => [{ op: "player", x, y, facing: "down" }, { op: "select", i: item }, { op: "applyTool" }];
+  ops.push(...build(22, 6, 10), ...build(25, 6, 11), ...build(23, 8, 12));
+  for (let d = 0; d < 4; d++) ops.push({ op: "sleep" });
+  ops.push({ op: "select", i: 13 });
+  ops.push({ op: "player", x: 22, y: 6, facing: "down" }, { op: "interact" }, { op: "player", x: 23, y: 8, facing: "down" }, { op: "interact" });
+  ops.push({ op: "select", i: 1 }, { op: "player", x: 25, y: 6, facing: "down" }, { op: "act" }, { op: "interact" });
+  return ops;
+}
+
+function playthrough(seed: number, settings: Partial<GameSettings>, steps: number, prelude: Op[] = []) {
   const r = stream(seed * 31 + 7);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)];
   let s = newWorld(seed, settings);
@@ -283,6 +298,7 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
     results.push(Object.fromEntries(Object.entries(full).filter(([k]) => json[k] !== prev[k])));
     prev = json;
   };
+  for (const op of prelude) run(op);
   for (let n = 0; n < steps; n++) {
     const k = r();
     if (k < 0.3) {
@@ -359,7 +375,7 @@ describe("Godot playthroughs", () => {
     ["winter", 5, { science: PRESETS.science.science, daysPerMonth: 5, units: "C" }],
   ];
   for (const [name, seed, settings] of cases) {
-    it(name, () => golden(`play-${name}`, playthrough(seed, settings, name === "winter" ? 500 : 350)));
+    it(name, () => golden(`play-${name}`, playthrough(seed, settings, name === "winter" ? 500 : 350, name === "classic" || name === "science" ? farmstead() : [])));
   }
 
   it("old saves", () => {

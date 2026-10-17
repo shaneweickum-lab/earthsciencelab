@@ -68,6 +68,7 @@ export function previewAction(state: WorldState): ActionPreview {
     case "can":
       if (t.ground === "water") return { label: "Refill", text: "Fill your watering can.", ok: true };
       if (b?.kind === "rainBarrel") return { label: "Refill", text: "Refill with rainwater.", ok: true };
+      if (b?.kind === "well") return { label: "Refill", text: "Fill your can with groundwater from the well.", ok: true };
       if (state.water <= 0) return { label: "Water", text: "Your can is empty. Refill at the pond.", ok: false };
       if (!t.tilled) return { label: "Water", text: "Water tilled soil or crops.", ok: false };
       if (on(state, "waterlogging") && t.moisture >= 70) return { label: "Water", text: `Careful: the soil is already wet (${Math.round(t.moisture)}). Too much water can drown roots.`, ok: true };

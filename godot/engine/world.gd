@@ -2,7 +2,7 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 4
+const WORLD_VERSION := 5
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
@@ -413,7 +413,8 @@ static func _start_day(prev: Dictionary, new_day: int) -> Dictionary:
 		# Pests find crops grown in the same family again and again.
 		var cc = next.crop
 		if Settings.on(state, "pests") and cc and not cc.dead and not cc.pests:
-			var guarded := _near(state, x, y, ["bugHotel", "birdHouse"], 6)
+			# Ladybugs, birds, and hens all eat pests.
+			var guarded := _near(state, x, y, ["bugHotel", "birdHouse", "chickenCoop"], 6)
 			var repeat: bool = Settings.on(state, "rotation") and next.familyStreak >= 1
 			var chance := (0.2 if repeat else 0.04) * (0.25 if guarded else 1.0)
 			if rand.next() < chance:
@@ -437,6 +438,19 @@ static func _start_day(prev: Dictionary, new_day: int) -> Dictionary:
 			continue
 		if b.kind == "rainBarrel" and yesterday_wet:
 			buildings.append(Js.with(b, {"data": Js.with(data, {"water": minf(40, data.get("water", 0) + 20)})}))
+			continue
+		if b.kind == "chickenCoop":
+			# Two eggs a morning (the nest box holds six), and every 3 days the manure has composted.
+			var last_manure: float = data.get("manureDay", new_day)
+			var composted := new_day - last_manure >= 3
+			buildings.append(Js.with(b, {"data": Js.with(data, {
+				"eggs": minf(6, data.get("eggs", 0) + 2),
+				"ready": minf(5, data.get("ready", 0) + (1 if composted else 0)),
+				"manureDay": new_day if composted else last_manure,
+			})}))
+			continue
+		if b.kind == "smallBarn":
+			buildings.append(Js.with(b, {"data": Js.with(data, {"ready": minf(3, data.get("ready", 0) + 1)})}))
 			continue
 		if b.kind == "beehive":
 			var last: float = data.get("honeyDay", new_day)
@@ -623,6 +637,8 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 				return say(Js.with(paid, {"water": state.canSize}), "Filled your watering can at the pond.")
 			if b and b.kind == "rainBarrel":
 				return _refill_from_barrel(paid, b)
+			if b and b.kind == "well":
+				return _from_well(paid)
 			if state.water <= 0:
 				return say(state, "Your watering can is empty. Refill it at the pond or a rain barrel.")
 			if not t.tilled:
@@ -667,6 +683,10 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 			var s := _set_tile(paid, x, y, func(tt): return Js.with(tt, {"known": Js.with(tt.known, {"water": true})}))
 			return say(s, "Infiltration test: an inch of water soaked in after %s minutes. Water holding: %s." % [Js.num(mins), Js.num(Js.round(t.soil.water))])
 	return state
+
+
+static func _from_well(state: Dictionary) -> Dictionary:
+	return discover(say(Js.with(state, {"water": state.canSize}), "Filled your watering can from the well: groundwater, soaked up from rain over many years."), "groundwater")
 
 
 static func _refill_from_barrel(state: Dictionary, b: Dictionary) -> Dictionary:
@@ -878,6 +898,40 @@ static func _operate_building(state: Dictionary, b: Dictionary) -> Dictionary:
 			return discover(say(s, "Added %d fiber. Bacteria and fungi will break it down (every 5 fiber makes 1 compost in 2 days)." % add), "decomposers")
 		"rainBarrel":
 			return _refill_from_barrel(state, b)
+		"well":
+			return _from_well(state)
+		"chickenCoop":
+			var eggs := int(data.get("eggs", 0))
+			var manure := int(data.get("ready", 0))
+			if not eggs and not manure:
+				return discover(say(state, "The hens are scratching for bugs. Come back in the morning for eggs."), "hen")
+			var got = update.call(Js.with(data, {"eggs": 0, "ready": 0}))
+			if eggs:
+				got = add_item(got, "egg", eggs) if got != null else null
+			if manure:
+				got = add_item(got, "compost", manure) if got != null else null
+			if got == null:
+				return say(state, "Your bag is full.")
+			var parts := []
+			if eggs:
+				parts.append("%d egg%s" % [eggs, "s" if eggs > 1 else ""])
+			if manure:
+				parts.append("%d compost from composted manure" % manure)
+			return discover(say(got, "Collected %s." % " and ".join(parts)), "hen")
+		"smallBarn":
+			var hay := int(data.get("ready", 0))
+			if not hay:
+				return say(state, "The barn is stacked with hay. Old hay turns into straw mulch each morning.")
+			var got = add_item(update.call(Js.with(data, {"ready": 0})), "mulch", hay)
+			return say(got, "Collected %d straw mulch from the barn." % hay) if got != null else say(state, "Your bag is full.")
+		"barn":
+			return say(state, "The Ortegas' barn smells like hay and corn." if data.get("owner") else "Grandma Rosa's old barn. Swallows nest in the rafters.")
+		"silo":
+			return say(state, "A tall silo for storing grain through the winter.")
+		"windmill":
+			return say(state, "The windmill creaks as it turns. Wind power once pumped water for the whole valley.")
+		"waterTower":
+			return say(state, "The town water tower. Gravity pushes the water down through the pipes to every house.")
 		"extension":
 			return say(state, "The County Extension Office: free soil advice and testing. Dr. Okafor is usually out front.")
 		"cottage":
@@ -1096,7 +1150,32 @@ static func _add_town(old: Dictionary) -> Dictionary:
 	# The store moved into town; the farm keeps everything you built.
 	var farm: Array = old.buildings.filter(func(b): return b.kind != "store" and b.x < WorldMap.FARM_W)
 	var town: Array = fresh.buildings.filter(func(b): return not farm.any(func(f): return f.id == b.id))
-	return Js.with(old, {"version": WORLD_VERSION, "tiles": tiles, "buildings": farm + town})
+	return Js.with(old, {"version": 4, "tiles": tiles, "buildings": farm + town})
+
+
+## Version 5 added landmarks (barns, silos, the windmill, the water tower). Older saves get each
+## one whose ground is still free; one that would land on something the player built or planted
+## is left out.
+static func _add_landmarks(old: Dictionary) -> Dictionary:
+	var s := Js.with(old, {"version": 5})
+	for b in WorldMap.farm_buildings() + WorldMap.town_buildings():
+		if s.buildings.any(func(x): return x.id == b.id):
+			continue
+		var sz := WorldMap.size_of(b.kind)
+		var free := true
+		for y in range(b.y, b.y + sz[1]):
+			for x in range(b.x, b.x + sz[0]):
+				if building_at(s, x, y) != null or s.tiles[WorldMap.idx(x, y)].crop != null:
+					free = false
+		if not free:
+			continue
+		var tiles: Array = s.tiles.duplicate()
+		for y in range(b.y, b.y + sz[1]):
+			for x in range(b.x, b.x + sz[0]):
+				var t: Dictionary = tiles[WorldMap.idx(x, y)]
+				tiles[WorldMap.idx(x, y)] = Js.with(t, {"obstacle": null, "weeds": false, "tilled": false, "ground": "grass" if t.ground == "forest" else t.ground})
+		s = Js.with(s, {"tiles": tiles, "buildings": s.buildings + [b]})
+	return s
 
 
 ## Version 1 saves had no settings and stored weather as a plain label.
@@ -1134,6 +1213,8 @@ static func load_world(raw: String) -> Variant:
 		up = _add_town(up)
 	if up.tiles.size() != WorldMap.W * WorldMap.H:
 		return null
+	if up.version < 5:
+		up = _add_landmarks(up)
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null

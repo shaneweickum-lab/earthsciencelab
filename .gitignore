@@ -8,3 +8,5 @@ screenshots/
 .asset-cache/
 .godot-cache/
 public/godot/
+public/.godot-next/
+.DS_Store

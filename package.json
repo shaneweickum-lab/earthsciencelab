@@ -13,7 +13,8 @@
     "assets": "node scripts/fetch-assets.mjs",
     "godot:fetch": "node scripts/godot.mjs fetch",
     "godot:test": "node scripts/godot.mjs test",
-    "godot:export": "node scripts/godot.mjs export"
+    "godot:export": "node scripts/godot.mjs export",
+    "vercel-build": "node scripts/godot.mjs export --optional && next build"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

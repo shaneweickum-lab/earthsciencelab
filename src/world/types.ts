@@ -54,12 +54,14 @@ export interface Tile {
 export type BuildingKind =
   | "house" | "store" | "shippingBin"
   | "composter" | "rainBarrel" | "beehive" | "birdHouse" | "bugHotel" | "scarecrow"
-  | "greenhouse" | "fence" | "flowerBed" | "pathStone"
-  // Town buildings and props (not buildable by the player).
-  | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop";
+  | "greenhouse" | "fence" | "flowerBed" | "pathStone" | "well" | "chickenCoop" | "smallBarn"
+  // Town buildings, landmarks, and props (not buildable by the player).
+  | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower";
 
 /** Town buildings the player can't build, pick up, or build over. */
-export const TOWN_KINDS: BuildingKind[] = ["house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop"];
+export const TOWN_KINDS: BuildingKind[] = [
+  "house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+];
 
 export interface Building {
   id: string;
@@ -69,6 +71,8 @@ export interface Building {
   /** Building-specific data: compost contents, water stored, honey ready, etc. */
   data: {
     fiber?: number; startedDay?: number; ready?: number; water?: number; honeyDay?: number;
+    /** Chicken coop: eggs waiting, and the day manure was last composted. */
+    eggs?: number; manureDay?: number;
     /** Town buildings: who lives or works here, and the sign over the door. */
     owner?: string; sign?: string;
     /** Props: which model to draw ("pack/name"). */

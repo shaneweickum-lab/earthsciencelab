@@ -3,7 +3,7 @@ import { dayOf, formatTime, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { DEFAULT_SETTINGS } from "./settings";
 import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
-  sellNow, ship, sleep, tick, tileAt, applyTool,
+  sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding,
 } from "./engine";
 import { idx } from "./map";
 import { spawnCritters } from "./nature";
@@ -231,6 +231,83 @@ describe("buildings", () => {
     s = act(back(sleep(s)));
     expect(countItem(s, "compost")).toBe(2);
     expect(s.journal).toContain("decomposers");
+  });
+
+  const back = (w: WorldState): WorldState => ({ ...w, player: { x: X, y: Y - 1, facing: "down" } });
+  const clearArea = (s: WorldState) => {
+    for (let y = Y; y < Y + 3; y++) for (let x = X - 1; x < X + 3; x++) s = withTile(s, x, y, { obstacle: null, weeds: false, crop: null });
+    return s;
+  };
+
+  it("a well refills the watering can and teaches about groundwater", () => {
+    let s = select(setup(), "kit_well");
+    s = placeBuilding(s, s.selected, X, Y);
+    s = select({ ...s, water: 0 }, "can");
+    s = applyTool(s);
+    expect(s.water).toBe(s.canSize);
+    expect(s.journal).toContain("groundwater");
+    expect(previewAction({ ...s, water: 0 }).label).toBe("Refill");
+  });
+
+  it("hens lay two eggs every morning and their manure composts every 3 days", () => {
+    let s = select(clearArea(setup()), "kit_chickenCoop");
+    s = placeBuilding(s, s.selected, X, Y);
+    expect(s.buildings.some((b) => b.kind === "chickenCoop")).toBe(true);
+    s = { ...s, selected: s.inventory.findIndex((x) => x === null) };
+    s = interact(back(s));
+    expect(s.journal).toContain("hen");
+    s = interact(back(sleep(s)));
+    expect(countItem(s, "egg")).toBe(2);
+    for (let d = 0; d < 3; d++) s = sleep(s);
+    s = interact(back(s));
+    expect(countItem(s, "egg")).toBe(2 + 6);
+    expect(countItem(s, "compost")).toBe(1);
+  });
+
+  it("hens guard nearby crops from pests", () => {
+    const pestDays = (withCoop: boolean) => {
+      let s = setup({ tilled: true, crop: { id: "beans", growth: 0.2, harvests: 0, dead: false, pests: false } });
+      s = { ...s, settings: { ...s.settings, science: { ...s.settings.science, rotation: false } } };
+      if (withCoop) s = { ...s, buildings: [...s.buildings, { id: "coop", kind: "chickenCoop", x: X + 2, y: Y + 2, data: {} }] };
+      let n = 0;
+      for (let d = 0; d < 40; d++) {
+        s = sleep(withTile(s, X, Y, { crop: { id: "beans", growth: 0.2, harvests: 0, dead: false, pests: false } }));
+        if (at(s).crop?.pests) n++;
+      }
+      return n;
+    };
+    expect(pestDays(true)).toBeLessThan(pestDays(false));
+  });
+
+  it("a small barn turns old hay into straw mulch", () => {
+    let s = select(clearArea(setup()), "kit_smallBarn");
+    s = placeBuilding(s, s.selected, X, Y);
+    expect(s.buildings.some((b) => b.kind === "smallBarn")).toBe(true);
+    s = { ...s, selected: s.inventory.findIndex((x) => x === null) };
+    for (let d = 0; d < 5; d++) s = sleep(s);
+    s = interact(back(s));
+    expect(countItem(s, "mulch")).toBe(3);
+  });
+
+  it("landmarks can't be picked up", () => {
+    const s = newWorld(42);
+    const barn = s.buildings.find((b) => b.id === "farm-barn")!;
+    expect(pickUpBuilding(s, barn.id)).toBe(s);
+  });
+});
+
+describe("saves from before the landmarks", () => {
+  it("gain the barns, silos, windmill, and water tower where the ground is free", () => {
+    const s = newWorld(42);
+    const landmarks = ["farm-barn", "farm-silo", "ortega-barn", "ortega-silo", "town-windmill", "water-tower"];
+    const old = { ...s, version: 4, buildings: s.buildings.filter((b) => !landmarks.includes(b.id)) };
+    // The player built a fence where the farm silo goes.
+    const fenced = { ...old, buildings: [...old.buildings, { id: "fence-1", kind: "fence" as const, x: 19, y: 5, data: {} }] };
+    const up = loadWorld(JSON.stringify(fenced))!;
+    expect(up.version).toBe(5);
+    for (const id of landmarks.filter((id) => id !== "farm-silo")) expect(up.buildings.some((b) => b.id === id), id).toBe(true);
+    expect(up.buildings.some((b) => b.id === "farm-silo")).toBe(false);
+    expect(up.buildings.some((b) => b.id === "fence-1")).toBe(true);
   });
 });
 

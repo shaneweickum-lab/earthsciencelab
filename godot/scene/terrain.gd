@@ -10,10 +10,10 @@ const GRASS := {
 	"Fall": ["#a9a552", "#b49a4a", "#9fa04e"],
 	"Winter": ["#dfe6e8", "#d6dfe2", "#e6ecee"],
 }
-const PINES := ["tree_pineRoundA", "tree_pineRoundC", "tree_pineTallA", "tree_pineSmallB"]
-const LEAFY := ["tree_default", "tree_oak", "tree_detailed"]
-const LEAF_SUFFIX := {"Spring": "", "Summer": "", "Fall": "_fall", "Winter": "_dark"}
-const FLOWERS := ["flower_yellowA", "flower_redA", "flower_purpleA", "flower_yellowB"]
+## Quaternius's Ultimate Nature models (public/models/qnature), with autumn and snowy versions.
+const TREES := ["CommonTree", "CommonTree", "PineTree", "BirchTree"]
+const SEASON_SUFFIX := {"Spring": "", "Summer": "", "Fall": "_Autumn", "Winter": "_Snow"}
+const N := "qnature/"
 
 var _ground: Node3D
 var _land: Node3D
@@ -151,6 +151,8 @@ func _build_land(world: Dictionary, season: String) -> void:
 		for y in range(b.y, b.y + sz[1]):
 			for x in range(b.x, b.x + sz[0]):
 				covered[int(y) * W + int(x)] = true
+	var winter := season == "Winter"
+	var suffix: String = SEASON_SUFFIX[season]
 	var tall := {}
 	var low := {}
 	var sticks := []
@@ -169,33 +171,45 @@ func _build_land(world: Dictionary, season: String) -> void:
 		var ry := _h(i * 5 + 2) * PI * 2
 		match t.obstacle:
 			"tree":
-				var name: String = _pick(PINES, r2) if r < 0.35 else _pick(LEAFY, r2) + LEAF_SUFFIX[season]
-				add.call(tall, "nature/" + name, Models.xf(Vector3(x + (r2 - 0.5) * 0.2, 0, z + (r - 0.5) * 0.2), Vector3(0, ry, 0), 1.3 + r * 0.45))
+				var kind: String = _pick(TREES, r2)
+				var name: String
+				if r > 0.96:
+					# A few old dead snags, for woodpeckers and fungi.
+					name = "%s_Dead%s_1" % ["BirchTree" if kind == "BirchTree" else "CommonTree", "_Snow" if winter else ""]
+				else:
+					name = "%s%s_%d" % [kind, suffix, 1 + int(floorf(_h(i * 9 + 4) * 3))]
+				var size := (0.75 if kind == "BirchTree" else 0.95) + r * 0.35
+				add.call(tall, N + name, Models.xf(Vector3(x + (r2 - 0.5) * 0.2, 0, z + (r - 0.5) * 0.2), Vector3(0, ry, 0), size))
 			"stone":
-				add.call(low, "nature/" + _pick(["stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA"], r2), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 1.9))
+				var rock := "Rock_Snow_%d" % (1 + int(r2 * 4)) if winter else ("Rock_Moss_%d" % (1 + int(r2 * 2)) if r > 0.8 else "Rock_%d" % (1 + int(r2 * 4)))
+				add.call(low, N + rock, Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.55))
 			"stump":
-				add.call(low, "nature/" + ("stump_round" if r2 > 0.5 else "stump_old"), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 2))
+				add.call(low, N + ("TreeStump_Snow" if winter else ("TreeStump_Moss" if r2 > 0.6 else "TreeStump")), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.6))
 			"log":
-				add.call(low, "nature/" + ("log" if r2 > 0.5 else "log_large"), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 1.4))
+				add.call(low, N + ("WoodLog_Snow" if winter else ("WoodLog_Moss" if r2 > 0.5 else "WoodLog")), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.38))
 			"stick":
 				sticks.append({"xf": Models.xf(Vector3(x, 0.05, z), Vector3(0, ry, 0.1)), "color": Color("#7a5636")})
 		if t.weeds:
 			for k in 3:
-				var name := _pick(["grass_large", "grass_leafs", "plant_flatShort", "grass"], _h(i * 17 + k))
-				add.call(low, "nature/" + name, Models.xf(Vector3(x + (_h(i * 7 + k) - 0.5) * 0.6, 0, z + (_h(i * 11 + k) - 0.5) * 0.6), Vector3(0, _h(i * 13 + k) * 6, 0), 1.5 + _h(i + k) * 0.6))
-			if r > 0.65 and season != "Winter":
-				add.call(low, "nature/" + _pick(FLOWERS, r2), Models.xf(Vector3(x + 0.2, 0, z - 0.15), Vector3(0, ry, 0), 1.6))
+				var name := _pick(["Grass", "Grass_2", "Grass_Short", "Plant_1"], _h(i * 17 + k))
+				var size: float = {"Grass": 0.4, "Grass_2": 0.35, "Grass_Short": 0.9, "Plant_1": 0.5}[name] * (0.85 + _h(i + k) * 0.4)
+				add.call(low, N + name, Models.xf(Vector3(x + (_h(i * 7 + k) - 0.5) * 0.6, 0, z + (_h(i * 11 + k) - 0.5) * 0.6), Vector3(0, _h(i * 13 + k) * 6, 0), size))
+			if r > 0.65 and not winter:
+				add.call(low, N + "Flowers", Models.xf(Vector3(x + 0.2, 0, z - 0.15), Vector3(0, ry, 0), 0.5))
 		# Wild plants on open grass and lily pads on the pond make the farm feel alive.
 		if not t.obstacle and not covered.has(i):
-			if t.ground == "grass" and season != "Winter":
-				if r < 0.1:
-					add.call(low, "nature/" + ("grass" if r2 > 0.5 else "grass_large"), Models.xf(Vector3(x + (r2 - 0.5) * 0.5, 0, z), Vector3(0, ry, 0), 1.4))
+			if t.ground == "grass":
+				if winter:
+					if r < 0.03:
+						add.call(low, N + "Bush_Snow_1", Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.5))
+				elif r < 0.1:
+					add.call(low, N + ("Grass_Short" if r2 > 0.5 else "Grass"), Models.xf(Vector3(x + (r2 - 0.5) * 0.5, 0, z), Vector3(0, ry, 0), 0.9 if r2 > 0.5 else 0.45))
 				elif r < 0.13:
-					add.call(low, "nature/" + _pick(FLOWERS, r2), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 1.6))
+					add.call(low, N + ("Flowers" if r2 > 0.3 else "Plant_2"), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.55))
 				elif r < 0.15:
-					add.call(low, "nature/" + ("plant_bushSmall" if r2 > 0.5 else "plant_bush"), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 1.4))
+					add.call(low, N + _pick(["Bush_1", "Bush_2", "BushBerries_1", "Plant_3"], r2), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.5))
 			if t.ground == "water" and r < 0.18:
-				add.call(low, "nature/" + ("lily_large" if r2 > 0.5 else "lily_small"), Models.xf(Vector3(x, -0.06, z), Vector3(0, ry, 0), 1.8))
+				add.call(low, N + "Lilypad", Models.xf(Vector3(x, -0.06, z), Vector3(0, ry, 0), 0.4 + r2 * 0.3))
 	for key in tall:
 		for n in Models.instances(key.get_slice("|", 0), tall[key], true):
 			_land.add_child(n)
