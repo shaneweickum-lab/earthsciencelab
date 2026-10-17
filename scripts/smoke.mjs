@@ -99,7 +99,20 @@ await shot("06b-farm");
 // Walking is slow in a software-rendered browser, so tests move the player by editing the save.
 const SAVE = "earthsciencelab-world";
 const MAP_W = 76; // tiles per row (src/world/map.ts W)
+// Requests still loading, so tests can wait for the models before leaving a page (leaving
+// mid-load makes three.js log a failed texture).
+let inflight = 0;
+page.on("request", () => inflight++);
+page.on("requestfinished", () => inflight--);
+page.on("requestfailed", () => inflight--);
+async function settle() {
+  for (let quiet = 0; quiet < 5; ) {
+    await page.waitForTimeout(100);
+    quiet = inflight > 0 ? 0 : quiet + 1;
+  }
+}
 async function teleport(x, y, facing, tiles = {}) {
+  await settle();
   await page.goto(`${BASE}/soil/sources`); // leaving the game saves the farm
   await page.evaluate(({ SAVE, x, y, facing, tiles }) => {
     const w = JSON.parse(localStorage.getItem(SAVE));
@@ -113,6 +126,13 @@ async function teleport(x, y, facing, tiles = {}) {
   await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
 }
 const inspector = page.getByLabel("Tile inspector");
+// The bag starts empty: take Grandma Rosa's tools out of the chest beside the house.
+await teleport(7, 10, "up");
+await page.keyboard.press(" ");
+await page.getByRole("dialog", { name: "Grandma Rosa's chest" }).waitFor();
+await page.getByRole("button", { name: "Take all" }).click();
+await shot("06b-chest");
+await page.keyboard.press("Escape");
 const clean = { obstacle: null, weeds: false, crop: null, tilled: false, mulch: false };
 await teleport(10, 13, "down", { [13 * MAP_W + 10]: clean, [14 * MAP_W + 10]: { ...clean, weeds: true } });
 await inspector.getByText("Weeds are growing here.").waitFor();
@@ -123,14 +143,14 @@ await page.keyboard.press("1"); // hoe
 await inspector.getByText(/Till:/).waitFor();
 await page.keyboard.press(" ");
 await inspector.getByText("Tilled", { exact: true }).waitFor();
-await page.keyboard.press("8"); // carrot seeds
+await page.keyboard.press("6"); // carrot seeds
 await page.keyboard.press(" ");
 await page.getByText(/^Planted Carrots\./).waitFor();
 await page.keyboard.press("2"); // watering can
 await page.keyboard.press(" ");
-await page.keyboard.press("0"); // lab test kit
+await page.keyboard.press("7"); // compost
 await page.keyboard.press(" ");
-await page.getByText(/Lab results: organic matter/).waitFor();
+await page.getByText(/Spread compost/).waitFor();
 await page.waitForTimeout(800);
 await shot("06c-planted");
 
@@ -188,8 +208,9 @@ await shot("07c-store");
 await page.getByRole("button", { name: "Close" }).click();
 await page.keyboard.press("i");
 const bag = page.getByRole("dialog", { name: "Your bag" });
+// Swap the kit into the 10th hotbar slot.
 await bag.getByRole("button", { name: /Compost Bin ×1/ }).click();
-await bag.getByRole("button", { name: /Lab Test Kit/ }).click();
+await bag.locator(".grid > button").nth(9).click();
 await page.keyboard.press("Escape");
 await teleport(12, 11, "down", { [12 * MAP_W + 12]: clean });
 await page.keyboard.press("0");
@@ -213,6 +234,7 @@ await page.keyboard.press("Escape");
 if (await page.getByRole("switch", { name: "Weeds" }).isChecked()) throw new Error("Weeds setting wasn't saved");
 await page.keyboard.press("Escape");
 
+await settle();
 await page.goto(`${BASE}/soil/globe`);
 await page.waitForTimeout(2000);
 await page.getByLabel("Jump to a region").selectOption("amazon");
@@ -250,6 +272,7 @@ await page.getByRole("dialog", { name: /Periodic table/ }).waitFor({ state: "det
 await page.getByRole("dialog", { name: "Main menu" }).waitFor();
 
 // Keyboard shortcut and lesson links.
+await settle();
 await page.goto(`${BASE}/soil/learn/healthy-soil`);
 await page.waitForLoadState("networkidle");
 await page.keyboard.press("e");
@@ -333,6 +356,7 @@ await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 await shot("11-mobile-game");
+await settle();
 await page.goto(`${BASE}/elements?z=8`);
 await page.getByRole("heading", { name: "Oxygen" }).waitFor();
 await page.waitForTimeout(1500);

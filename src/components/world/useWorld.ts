@@ -146,3 +146,11 @@ export const useWorld = create<WorldStore>((set, get) => {
     },
   };
 });
+
+// A farm downloaded from the cloud replaced the saved one: go back to the main menu without
+// saving over it, so Continue loads the new farm.
+if (typeof window !== "undefined") {
+  window.addEventListener("earthsciencelab:save-replaced", () => {
+    useWorld.setState({ world: null, menu: null, screen: "menu", saved: readSave() });
+  });
+}

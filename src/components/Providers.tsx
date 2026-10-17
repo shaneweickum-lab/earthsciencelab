@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useProgress } from "@/store/progress";
 import { BadgeToast } from "./BadgeToast";
+import { CloudSync } from "./CloudSync";
 import { ElementsOverlay } from "./elements/ElementsOverlay";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {children}
       <ElementsOverlay />
       <BadgeToast />
+      <CloudSync />
     </>
   );
 }
