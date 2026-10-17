@@ -117,6 +117,13 @@ async function syncAssets() {
     const src = f.replace(/\.import$/, "");
     if (src.endsWith(".glb") && !wanted.has(src)) rmSync(join(to, f));
   }
+  // Item and farmer pictures (rendered from the models by npm run assets).
+  const icons = join(project, "assets/icons");
+  mkdirSync(icons, { recursive: true });
+  for (const f of readdirSync(join(root, "public/icons")).filter((f) => f.endsWith(".png"))) {
+    const src = join(root, "public/icons", f), dest = join(icons, f);
+    if (!existsSync(dest) || statSync(dest).mtimeMs < statSync(src).mtimeMs) cpSync(src, dest);
+  }
 }
 
 async function exportWeb() {

@@ -1,0 +1,378 @@
+class_name Menus
+## The menus you open while playing. Port of Menus.tsx, Shop.tsx, JournalBook.tsx, and Town.tsx.
+## Each returns Ui.modal()'s {root, body}; GameUi rebuilds them when the world changes.
+
+
+static func build(game_ui: GameUi, menu: String) -> Variant:
+	match menu:
+		"intro": return intro(game_ui)
+		"house": return house(game_ui)
+		"tv": return tv()
+		"summary": return summary()
+		"bag": return bag(game_ui)
+		"store": return store(game_ui)
+		"shipping": return shipping()
+		"journal": return journal(game_ui)
+		"pause": return Screens.pause(game_ui)
+		"npc": return TownMenus.npc_dialog(game_ui)
+		"board": return TownMenus.notice_board(game_ui)
+		"quests": return TownMenus.quest_log()
+	return null
+
+
+static func _avatar_picker() -> Control:
+	return Screens.avatar_choice(Game.world.get("avatar", Data.world().defaultAvatar), func(a): Game.update(func(w): return Js.with(w, {"avatar": a})))
+
+
+static func intro(_game_ui: GameUi) -> Dictionary:
+	var m := Ui.modal("A letter for you", "✉️")
+	var body: VBoxContainer = m.body
+	var letter := Ui.vbox(10)
+	letter.add_child(Ui.text("Congratulations! You inherited an organic garden!", 24, Ui.LEAF, 900))
+	for p in [
+		"My dear grandchild, the farm is yours now. I'm sorry to say it's grown wild. Weeds, sticks, and stones are everywhere, and I never did test the soil. Treat it kindly and it will feed you for a lifetime.",
+		"Clear the weeds, test the soil, and feed it with compost and cover crops. Watch the sky, too: the weather decides more than you'd think. Keep an eye out for the little creatures. Most of them are friends.",
+		"I left you carrot and clover seeds. They don't mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.",
+		"The folks at Seed & Soil Co. will buy what you grow. Remember, organic produce sells for more.",
+	]:
+		letter.add_child(Ui.text(p, 15))
+	var sign := Ui.text("[i]Love, Grandma Rosa[/i] 🌻", 15)
+	sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	letter.add_child(sign)
+	body.add_child(Ui.panel(letter, Color("#fdf6e3"), 12, 16, Color(0, 0, 0, 0), 0))
+	body.add_child(Ui.text("Choose your farmer:", 14, Ui.INK, 900))
+	body.add_child(_avatar_picker())
+	var tips := Ui.grid(2, 6)
+	for kv in [["W A S D", "Walk (or arrow keys)"], ["Space", "Use the item in your hand"], ["1 – 0", "Pick a hotbar item"], ["E", "Talk, open, and harvest"], ["I", "Open your bag"], ["J", "Open your Nature Journal"]]:
+		var row := Ui.hbox(6)
+		row.add_child(Ui.key(kv[0]))
+		row.add_child(Ui.text(kv[1], 13, Ui.INK, 600, false))
+		tips.add_child(row)
+	body.add_child(tips)
+	body.add_child(Ui.small("Time passes only while you play. Each crop takes a few in-game days to grow. Sleep in your house to start a new day and save."))
+	body.add_child(Ui.button("Let's get gardening! 🌱", func():
+		Game.update(func(w): return Js.with(w, {"introSeen": true}))
+		Game.close(), "primary", 18))
+	return m
+
+
+static func house(game_ui: GameUi) -> Dictionary:
+	var m := Ui.modal("Your farmhouse", "🏠", Game.close)
+	var body: VBoxContainer = m.body
+	var h := Clock.time_of_day(Game.world.minute) / 60.0
+	body.add_child(Ui.button("🛏️ Go to bed%s" % (" (skip the rest of today)" if h < 18 else ""), func():
+		Game.update(World.sleep)
+		Game.save()
+		Game.open("summary"), "soil", 16))
+	body.add_child(Ui.button("📺 Watch the weather channel", func(): Game.open("tv"), "ghost", 16))
+	body.add_child(Ui.button("📓 Read your Nature Journal", func(): Game.open("journal"), "ghost", 16))
+	var ui: Dictionary = game_ui.ui
+	body.add_child(Ui.button("👕 Change your look", func():
+		ui.look = not ui.get("look", false)
+		game_ui.refresh(), "ghost", 16))
+	if ui.get("look", false):
+		body.add_child(_avatar_picker())
+	body.add_child(Ui.small("Your farm saves itself every in-game hour and whenever you sleep."))
+	body.add_child(Ui.button("⚙️ Game settings & main menu", func(): Game.open("pause"), "ghost", 16))
+	return m
+
+
+static func tv() -> Dictionary:
+	var w := Game.world
+	var m := Ui.modal("Weather Channel 4", "📺", func(): Game.open("house"))
+	var body: VBoxContainer = m.body
+	var today := World.today_climate(w)
+	var tomorrow := World.tomorrow_climate(w)
+	var t_info := Weather.info(tomorrow.kind)
+	var u: String = w.settings.units
+	var d := World.day(w) + 1
+	var box := Ui.vbox(4)
+	box.add_child(Ui.text("TOMORROW'S FORECAST · %s · %s" % [Clock.format_date(d, w.settings).to_upper(), Clock.season_label(d, w.settings).to_upper()], 12, Color("#bae6fd"), 900))
+	box.add_child(Ui.text("%s %s" % [t_info.icon, t_info.name], 30, Color.WHITE, 900))
+	box.add_child(Ui.text("High %s · Low %s" % [Settings.format_temp(tomorrow.high, u), Settings.format_temp(tomorrow.low, u)], 20, Color.WHITE, 900))
+	box.add_child(Ui.text(t_info.tv, 15, Color("#e0f2fe")))
+	body.add_child(Ui.panel(box, Color("#1f3550"), 16, 16, Color(0, 0, 0, 0), 0))
+	body.add_child(Ui.panel(Ui.text("[b]🔬 Weather science: %s[/b]\n%s" % [t_info.name.to_lower(), t_info.science], 14), Ui.LEAF_LIGHT, 12, 12, Color(0, 0, 0, 0), 0))
+	var info := Weather.info(today.kind)
+	body.add_child(Ui.text("Today: %s %s, high %s. %s" % [info.icon, info.name, Settings.format_temp(today.high, u), info.science], 14, Ui.MUTED))
+	if w.settings.seasons:
+		body.add_child(Ui.panel(Ui.text("[b]🌍 Why seasons?[/b] Earth's axis is tilted. In summer your part of the world leans toward the Sun, so sunlight hits more directly and days are longer. In winter sunlight comes in at a low slant and days are short, so it gets cold.", 14), Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
+	return m
+
+
+static func summary() -> Dictionary:
+	var w := Game.world
+	var d := World.day(w)
+	var m := Ui.modal("Good morning! Day %d" % d, "🌅")
+	var body: VBoxContainer = m.body
+	var c := World.today_climate(w)
+	var info := Weather.info(c.kind)
+	body.add_child(Ui.text("%s · %s · Today: %s %s, high %s" % [Clock.format_date(d, w.settings), Clock.season_label(d, w.settings), info.icon, info.name, Settings.format_temp(c.high, w.settings.units)], 14, Ui.MUTED, 800))
+	var log = w.get("log")
+	if log is Dictionary:
+		if log.earned > 0:
+			var earned := Ui.text("🪙 +%s" % Js.num(log.earned), 26, Ui.INK, 900)
+			earned.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			body.add_child(Ui.panel(earned, Color(Ui.SUN, 0.2), 12, 10, Color(0, 0, 0, 0), 0))
+		for n in log.notes:
+			body.add_child(Ui.panel(Ui.text(n, 14), Ui.PAPER, 10, 8, Color(0, 0, 0, 0), 0))
+	body.add_child(Ui.button("Start the day", Game.close, "primary", 16))
+	return m
+
+
+## Your bag. Click one slot, then another, to swap them. The top row is your hotbar.
+static func bag(game_ui: GameUi) -> Dictionary:
+	var w := Game.world
+	var ui: Dictionary = game_ui.ui
+	var m := Ui.modal("Your bag", "🎒", Game.close, true)
+	var body: VBoxContainer = m.body
+	body.add_child(Ui.small("Click an item, then another slot, to move it. The top row is your hotbar."))
+	var g := Ui.grid(10, 6)
+	var inv: Array = w.inventory
+	for i in inv.size():
+		var s = inv[i]
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(62, 62)
+		b.focus_mode = Control.FOCUS_NONE
+		var held: bool = ui.get("held", -1) == i
+		var bg := Ui.SUN if held else (Ui.LEAF_LIGHT if i < World.HOTBAR_SIZE else Ui.PAPER)
+		b.add_theme_stylebox_override("normal", Ui.box(bg, 12, Ui.SOIL if held else Color(0, 0, 0, 0), 2 if held else 0, 4))
+		b.add_theme_stylebox_override("hover", Ui.box(Color.WHITE, 12, Color(0, 0, 0, 0), 0, 4))
+		b.add_theme_stylebox_override("pressed", Ui.box(Ui.SUN, 12, Ui.SOIL, 2, 4))
+		if s:
+			var icon := Ui.item_icon(s.item, 34, s.get("grade"))
+			icon.position = Vector2(14, 12)
+			b.add_child(icon)
+			if s.qty > 1:
+				var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
+				q.position = Vector2(40, 40)
+				b.add_child(q)
+			b.tooltip_text = Items.get_def(s.item).name
+		b.pressed.connect(func():
+			ui.look_slot = i
+			var h: int = ui.get("held", -1)
+			if h == -1:
+				if s:
+					ui.held = i
+				game_ui.refresh()
+				return
+			ui.erase("held")
+			if h != i:
+				Game.update(func(x): return World.swap_slots(x, h, i))
+			else:
+				game_ui.refresh())
+		g.add_child(b)
+	body.add_child(g)
+	var look: int = ui.get("look_slot", -1)
+	var shown = inv[look] if look >= 0 else null
+	var info := Ui.vbox(4)
+	if shown:
+		var def := Items.get_def(shown.item)
+		var row := Ui.hbox(8)
+		row.add_child(Ui.item_icon(shown.item, 28, shown.get("grade")))
+		row.add_child(Ui.text("%s ×%s" % [def.name, Js.num(shown.qty)], 16, Ui.INK, 900))
+		info.add_child(row)
+		if shown.get("grade"):
+			info.add_child(Ui.text("Grade %s: sells for ×%s the normal price. Healthier soil and good care grow higher grades." % [shown.grade, Js.num(Grades.info(shown.grade).price)], 13, Ui.INK, 800))
+		info.add_child(Ui.text(def.desc, 14, Ui.MUTED))
+	else:
+		info.add_child(Ui.text("Click an item to read about it.", 14, Ui.MUTED))
+	body.add_child(Ui.panel(info, Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
+	return m
+
+
+# ───────────────────────── shop ─────────────────────────
+
+static func store(game_ui: GameUi) -> Dictionary:
+	var w := Game.world
+	var ui: Dictionary = game_ui.ui
+	var tab: String = ui.get("tab", "seeds")
+	var m := Ui.modal("Seed & Soil Co.", "🌱", Game.close, true)
+	var body: VBoxContainer = m.body
+	var tabs := Ui.hbox(6)
+	for t in [["seeds", "🌱 Seeds"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]]:
+		tabs.add_child(Ui.button(t[1], func():
+			ui.tab = t[0]
+			game_ui.refresh(), "soil" if tab == t[0] else "ghost", 14))
+	tabs.add_child(Ui.spacer())
+	tabs.add_child(Ui.pill("🪙 %s" % Js.num(w.coins), Ui.PAPER, Ui.INK, 15))
+	body.add_child(tabs)
+	var season := World.season_now(w)
+	var seasonal: bool = w.settings.seasons and Settings.on(w, "plantingSeasons")
+	var greenhouse: bool = w.buildings.any(func(b): return b.kind == "greenhouse")
+	var items: Array = Data.items().values()
+	var buy := func(id: String, n: int): Game.update(func(s): return World.buy(s, id, n))
+	match tab:
+		"seeds":
+			var note := "Every seed is for sale. Cool-season crops like it mild; warm-season crops like it hot."
+			if seasonal:
+				note = "You have a greenhouse, so every seed is for sale. Out-of-season seeds only grow inside it." if greenhouse else "In stock for %s. Build a greenhouse to grow crops in any season!" % season
+			body.add_child(Ui.text(note, 14, Ui.MUTED))
+			var seeds := items.filter(func(i): return i.kind == "seed" and (not seasonal or greenhouse or season in Items.world_crop(i.crop).seasons))
+			body.add_child(_item_list(w, seeds, buy, func(i):
+				var wc := Items.world_crop(i.crop)
+				var crop := Items.crop(i.crop)
+				var bits := "%s-season · about %s days%s%s" % ["Cool" if wc.type == "cool" else "Warm", Js.num(Items.crop_days(wc.id, w.settings.daysPerMonth)), " · keeps producing" if wc.get("regrowDays") else "", " · cover crop" if wc.get("cover") else " · sells %s" % Js.num(wc.sellPrice)]
+				if Settings.on(w, "frost"):
+					bits += " · frost-tender" if wc.killF >= 30 else " · frost-hardy"
+				if seasonal and not season in wc.seasons:
+					bits += " · greenhouse only"
+				var col := Ui.vbox(2)
+				col.add_child(Ui.text(bits, 12, Ui.MUTED, 800))
+				col.add_child(Ui.text("[b]Takes:[/b] %s [b]Gives back:[/b] %s" % [crop.takes, crop.givesText], 12))
+				return col))
+		"soil":
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment"), buy))
+			var up: Dictionary = Data.upgrades().bigCan
+			var row := Ui.hbox(10)
+			row.add_child(Ui.emoji_icon(up.icon, 32))
+			var col := Ui.vbox(2)
+			col.add_child(Ui.text(up.name, 15, Ui.INK, 900))
+			col.add_child(Ui.small(up.desc))
+			row.add_child(col)
+			var owned: bool = w.canSize >= 40
+			row.add_child(Ui.button("Owned" if owned else "🪙 %s" % Js.num(up.price), func(): Game.update(func(s): return World.buy(s, "bigCan")), "primary", 14, owned or w.coins < up.price))
+			body.add_child(Ui.panel(row, Ui.CARD, 12, 10))
+		"build":
+			body.add_child(Ui.text("Buy a kit, put it in your hotbar, face an open spot, and press Space to build. Face it and press P to pick it back up.", 14, Ui.MUTED))
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "kit"), buy))
+		"sell":
+			body.add_child(Ui.text("Sell right now, or use the shipping bin by your house. %s" % ("Your organic produce earns 25% extra!" if w.organic else "Your farm lost its organic certification, so no bonus."), 14, Ui.MUTED))
+			var any := false
+			for i in w.inventory.size():
+				var s = w.inventory[i]
+				if not s or not Items.get_def(s.item).get("sell"):
+					continue
+				any = true
+				var def := Items.get_def(s.item)
+				var each := Items.sell_price(def, s.get("grade"), w.organic)
+				var row := Ui.hbox(10)
+				row.add_child(Ui.item_icon(s.item, 30, s.get("grade")))
+				row.add_child(Ui.text("%s%s ×%s" % [def.name, " (grade %s)" % s.grade if s.get("grade") else "", Js.num(s.qty)], 15, Ui.INK, 800))
+				row.add_child(Ui.text("🪙 %s each" % Js.num(each), 13, Ui.MUTED, 700, false))
+				row.add_child(Ui.button("Sell 1", func(): Game.update(func(x): return World.sell_now(x, i, 1)), "ghost", 13))
+				row.add_child(Ui.button("All · %s" % Js.num(each * s.qty), func(): Game.update(func(x): return World.sell_now(x, i, int(s.qty))), "primary", 13))
+				body.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+			if not any:
+				body.add_child(Ui.panel(Ui.text("Nothing to sell yet. Go grow something!", 14, Ui.MUTED), Ui.PAPER, 12, 14, Color(0, 0, 0, 0), 0))
+	return m
+
+
+static func _item_list(w: Dictionary, items: Array, buy: Callable, extra: Variant = null) -> Control:
+	var col := Ui.vbox(6)
+	for i in items:
+		var row := Ui.hbox(10)
+		row.add_child(Ui.item_icon(i.id, 32))
+		var info := Ui.vbox(2)
+		info.add_child(Ui.text("%s%s" % [i.name, "  [color=#b8432f](not organic)[/color]" if i.get("notOrganic") else ""], 15, Ui.INK, 900))
+		info.add_child(extra.call(i) if extra is Callable else Ui.text(i.desc, 12, Ui.MUTED))
+		row.add_child(info)
+		var price: float = i.price
+		row.add_child(Ui.button("🪙 %s" % Js.num(price), func(): buy.call(i.id, 1), "primary", 13, w.coins < price))
+		if i.kind != "kit" or price < 50:
+			row.add_child(Ui.button("×5", func(): buy.call(i.id, 5), "ghost", 13, w.coins < price * 5))
+		col.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+	return col
+
+
+static func shipping() -> Dictionary:
+	var w := Game.world
+	var m := Ui.modal("Shipping bin", "📦", Game.close)
+	var body: VBoxContainer = m.body
+	body.add_child(Ui.text("Put things in the bin. The truck picks them up overnight and you're paid in the morning.", 14, Ui.MUTED))
+	var inbin := Ui.vbox(4)
+	inbin.add_child(Ui.heading("In the bin"))
+	var payout := 0.0
+	var parts := []
+	for s in w.shipping:
+		var def := Items.get_def(s.item)
+		payout += Items.sell_price(def, s.get("grade"), w.organic) * s.qty
+		parts.append("%s %s%s ×%s" % [def.icon, def.name, " (%s)" % s.grade if s.get("grade") else "", Js.num(s.qty)])
+	inbin.add_child(Ui.text(" · ".join(parts) if parts.size() else "Empty", 14, Ui.INK if parts.size() else Ui.MUTED))
+	inbin.add_child(Ui.text("Tomorrow's payout: 🪙 %s" % Js.num(payout), 15, Ui.INK, 900))
+	body.add_child(Ui.panel(inbin, Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
+	var any := false
+	for i in w.inventory.size():
+		var s = w.inventory[i]
+		if not s or not Items.get_def(s.item).get("sell"):
+			continue
+		any = true
+		var row := Ui.hbox(10)
+		row.add_child(Ui.item_icon(s.item, 30, s.get("grade")))
+		row.add_child(Ui.text("%s%s ×%s" % [Items.get_def(s.item).name, " (grade %s)" % s.grade if s.get("grade") else "", Js.num(s.qty)], 15, Ui.INK, 800))
+		row.add_child(Ui.button("Ship all", func(): Game.update(func(x): return World.ship(x, i)), "primary", 13))
+		body.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+	if not any:
+		body.add_child(Ui.text("Nothing in your bag can be shipped.", 14, Ui.MUTED))
+	return m
+
+
+# ───────────────────────── journal ─────────────────────────
+
+static func journal(game_ui: GameUi) -> Dictionary:
+	var w := Game.world
+	var ui: Dictionary = game_ui.ui
+	var data := Data.journal()
+	var entries: Array = data.entries
+	var found: Array = w.journal
+	var open_id: String = ui.get("page", found[-1] if found.size() else "")
+	var m := Ui.modal("Nature Journal · %d/%d pages" % [found.size(), entries.size()], "📓", Game.close, true)
+	var cols := Ui.hbox(16)
+	var left := Ui.vbox(8)
+	left.custom_minimum_size = Vector2(340, 0)
+	for cat in data.categories:
+		var info: Dictionary = data.categories[cat]
+		left.add_child(Ui.heading("%s %s" % [info.icon, info.label]))
+		var g := Ui.grid(6, 5)
+		for e in entries:
+			if e.category != cat:
+				continue
+			var has: bool = e.id in found
+			var b := Button.new()
+			b.custom_minimum_size = Vector2(48, 48)
+			b.focus_mode = Control.FOCUS_NONE
+			var sel: bool = e.id == open_id
+			b.add_theme_stylebox_override("normal", Ui.box(Ui.LEAF_LIGHT if has else Ui.PAPER, 10, Ui.SOIL if sel else Color(0, 0, 0, 0), 2 if sel else 0, 4))
+			b.add_theme_stylebox_override("hover", Ui.box(Color.WHITE, 10, Ui.SOIL if sel else Color(0, 0, 0, 0), 2 if sel else 0, 4))
+			b.add_theme_stylebox_override("pressed", Ui.box(Color.WHITE, 10, Ui.SOIL, 2, 4))
+			if has:
+				b.icon = Emoji.texture(e.icon)
+				b.expand_icon = true
+			else:
+				b.text = "?"
+			b.tooltip_text = e.name if has else "Not found yet. " + e.hint
+			b.pressed.connect(func():
+				ui.page = e.id
+				game_ui.refresh())
+			g.add_child(b)
+		left.add_child(g)
+	cols.add_child(left)
+	var page := Ui.vbox(10)
+	page.custom_minimum_size = Vector2(340, 0)
+	var entry = World.journal_entry(open_id) if open_id != "" else null
+	if entry == null:
+		page.add_child(Ui.text("Explore the farm, the forest edge, and the pond. Press Space next to a creature to add it to your journal.", 15, Ui.MUTED))
+	elif not entry.id in found:
+		page.add_child(Ui.text("??? Undiscovered", 22, Ui.MUTED, 900))
+		page.add_child(Ui.text("[b]Hint:[/b] " + entry.hint, 14))
+	else:
+		var head := Ui.hbox(10)
+		head.add_child(Ui.emoji_icon(entry.icon, 56))
+		var names := Ui.vbox(0)
+		names.add_child(Ui.text(entry.name, 24, Ui.INK, 900))
+		names.add_child(Ui.text(data.categories[entry.category].label.to_upper(), 12, Ui.MUTED, 900))
+		head.add_child(names)
+		page.add_child(head)
+		page.add_child(Ui.text(entry.fact[Site.grade_level], 16))
+		if entry.category == "fungus" and entry.id != "mycorrhizae":
+			page.add_child(Ui.panel(Ui.text("⚠️ " + data.mushroomSafety, 14, Ui.DANGER, 900), Color(Ui.DANGER, 0.1), 10, 8, Color(0, 0, 0, 0), 0))
+		var levels := Ui.hbox(4)
+		for lv in [["elementary", "K-5"], ["middle", "6-8"], ["high", "9-12"]]:
+			levels.add_child(Ui.chip(lv[1], Site.grade_level == lv[0], func():
+				Site.set_grade(lv[0])
+				game_ui.refresh(), 12))
+		page.add_child(levels)
+		page.add_child(Ui.text("Source: %s" % entry.source.org, 11, Ui.MUTED))
+	cols.add_child(Ui.panel(page, Color("#fdf6e3"), 16, 16, Color(0, 0, 0, 0), 0))
+	m.body.add_child(cols)
+	return m

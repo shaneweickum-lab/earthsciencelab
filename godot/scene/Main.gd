@@ -18,7 +18,9 @@ var _marker := MeshInstance3D.new()
 var _ghost := MeshInstance3D.new()
 var _critters := Node3D.new()
 var _critter_list: Array = []
-var _hud: Hud
+var _ui: GameUi
+var _world_root := Node3D.new()
+var _built := false
 var _acc := 0.0
 var _zoom := 1.0
 var _acted := false
@@ -26,24 +28,67 @@ var _publish_at := 0.0
 
 
 func _ready() -> void:
-	Game.load_or_new()
+	_ui = GameUi.new()
+	add_child(_ui)
+	add_child(_world_root)
+	_world_root.visible = false
+	Game.screen_changed.connect(_on_screen)
+	Game.world_changed.connect(_refresh)
+	_on_screen()
+	if Site.is_web():
+		_command_cb = JavaScriptBridge.create_callback(_command)
+		JavaScriptBridge.get_interface("window").__soilCommand = _command_cb
+
+
+var _command_cb: JavaScriptObject
+
+
+## For tests and the smoke test: window.__soilCommand("open:bag"), "continue", "use"…
+func _command(args: Array) -> void:
+	var cmd := str(args[0]) if args.size() else ""
+	var arg := cmd.get_slice(":", 1)
+	match cmd.get_slice(":", 0):
+		"continue": Game.continue_game()
+		"start": Game.start_quick()
+		"setup": Game.open_setup()
+		"open": Game.open(arg)
+		"close": Game.close()
+		"talk": Game.talk_to(arg)
+		"use": do_action("use")
+		"interact": do_action("interact")
+		"select": Game.update(func(s): return Js.with(s, {"selected": int(arg)}))
+		"quit": Game.quit_to_menu()
+
+
+## The 3D world is built the first time you play, and hidden on the menus.
+func _on_screen() -> void:
+	var playing := Game.screen == "playing"
+	_world_root.visible = playing
+	if not playing:
+		return
+	if not _built:
+		_build()
+	_refresh()
+	var p: Dictionary = Game.runtime.player
+	_camera.position = Vector3(p.x, 12 * _zoom, p.y + 0.5 + 9.5 * _zoom)
+	_acc = 0.0
+
+
+func _build() -> void:
+	_built = true
 	for n in [_sky, _terrain, _crops, _buildings, _critters]:
-		add_child(n)
+		_world_root.add_child(n)
 	_camera.fov = 40
 	_camera.near = 0.5
 	_camera.far = 120
-	add_child(_camera)
+	_world_root.add_child(_camera)
 	_player = Actor.make(Game.world.get("avatar", Data.world().defaultAvatar))
-	add_child(_player)
+	_world_root.add_child(_player)
 	for npc in Town.npcs():
 		var a := Actor.make(npc.avatar, npc)
 		_npcs.append(a)
-		add_child(a)
+		_world_root.add_child(a)
 	_make_marker()
-	_hud = Hud.new()
-	add_child(_hud)
-	Game.world_changed.connect(_refresh)
-	_refresh()
 	for layer in Site.debug:
 		match layer:
 			"noland": _terrain._land.visible = false
@@ -52,9 +97,7 @@ func _ready() -> void:
 			"nonpcs":
 				for a in _npcs: a.visible = false
 			"noshadow": _sky.sun.shadow_enabled = false
-			"nohud": _hud.visible = false
-	var p: Dictionary = Game.runtime.player
-	_camera.position = Vector3(p.x, 12, p.y + 10)
+			"nohud": _ui.visible = false
 
 
 func _make_marker() -> void:
@@ -72,7 +115,7 @@ func _make_marker() -> void:
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_marker.material_override = m
-	add_child(_marker)
+	_world_root.add_child(_marker)
 	# A see-through preview of the building you're about to place: green if it fits, red if not.
 	_ghost.mesh = BoxMesh.new()
 	var g := StandardMaterial3D.new()
@@ -80,7 +123,7 @@ func _make_marker() -> void:
 	g.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ghost.material_override = g
 	_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_ghost)
+	_world_root.add_child(_ghost)
 
 
 func _season() -> String:
@@ -88,6 +131,8 @@ func _season() -> String:
 
 
 func _refresh() -> void:
+	if not _built or not Game.has_world():
+		return
 	var w := Game.world
 	_terrain.refresh(w, _season())
 	_crops.refresh(w)
@@ -99,17 +144,12 @@ func _refresh() -> void:
 		for c in _critters.get_children():
 			c.queue_free()
 		for c in _critter_list:
-			var e = World.journal_entry(c.kind)
-			var label := Label3D.new()
-			label.text = "✦ %s" % (e.name if e else c.kind)
-			label.position = Vector3(c.x, 0.6, c.y)
-			label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			label.font_size = 28
-			label.pixel_size = 0.006
-			label.outline_size = 10
-			label.modulate = Color("#fff3b0")
-			label.outline_modulate = Color("#2d2015")
-			_critters.add_child(label)
+			var sprite := Sprite3D.new()
+			sprite.texture = Emoji.texture(Nature.critter_icon(c.kind))
+			sprite.pixel_size = 0.008
+			sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			sprite.position = Vector3(c.x, 0.6, c.y)
+			_critters.add_child(sprite)
 
 
 func _update_ghost() -> void:
@@ -130,7 +170,8 @@ func _update_ghost() -> void:
 
 func _process(delta: float) -> void:
 	var dt := minf(delta, 0.05)
-	if not Game.has_world():
+	_publish(delta)
+	if not Game.has_world() or not _built:
 		return
 	var paused := Game.menu != ""
 	var w := Game.world
@@ -140,13 +181,12 @@ func _process(delta: float) -> void:
 	var dx := 0.0
 	var dy := 0.0
 	if not paused:
+		var held: Dictionary = rt.touch.duplicate()
 		for k in MOVE_KEYS:
 			if Input.is_physical_key_pressed(k):
-				match MOVE_KEYS[k]:
-					"up": dy = -1
-					"down": dy = 1
-					"left": dx = -1
-					"right": dx = 1
+				held[MOVE_KEYS[k]] = true
+		dx = (1.0 if held.has("right") else 0.0) - (1.0 if held.has("left") else 0.0)
+		dy = (1.0 if held.has("down") else 0.0) - (1.0 if held.has("up") else 0.0)
 	rt.moving = dx != 0 or dy != 0
 	if rt.moving:
 		var len := Vector2(dx, dy).length()
@@ -191,11 +231,11 @@ func _process(delta: float) -> void:
 	_camera.position += (target - _camera.position) * minf(1, dt * 5)
 	_camera.look_at(Vector3(_camera.position.x, 0, _camera.position.z - 9.5 * _zoom))
 
-	_publish(delta)
-
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
+	if not Game.has_world():
+		return
+	if event is InputEventMouseButton and event.pressed and Game.menu == "":
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom = clampf(_zoom * 0.93, 0.55, 1.7)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -203,32 +243,45 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed:
 		return
 	var k: int = event.physical_keycode
-	if Game.menu != "":
-		if k == KEY_ESCAPE and Game.menu != "summary":
+	var menu := Game.menu
+	if menu != "":
+		# Escape (or a menu's own key) closes it, except the letter and the morning summary.
+		var toggles := (k == KEY_I and menu == "bag") or (k == KEY_J and menu == "journal") or (k == KEY_Q and menu == "quests")
+		if (k == KEY_ESCAPE or toggles) and menu != "intro" and menu != "summary":
 			Game.close()
 		return
-	if k == KEY_SPACE or k == KEY_E:
-		if not event.echo:
-			_do_action("interact" if k == KEY_E else "use")
-		get_viewport().set_input_as_handled()
-	elif k >= KEY_0 and k <= KEY_9:
-		var n := 9 if k == KEY_0 else k - KEY_1
-		Game.update(func(s): return Js.with(s, {"selected": n}))
-	elif k == KEY_P:
-		var f := World.facing_tile(Game.world)
-		var b = World.building_at(Game.world, f.x, f.y)
-		if b:
-			Game.update(func(s): return World.pick_up_building(s, b.id))
+	match k:
+		KEY_ESCAPE:
+			Game.open("pause")
+		KEY_SPACE, KEY_E:
+			if not event.echo:
+				do_action("interact" if k == KEY_E else "use")
+		KEY_I, KEY_TAB:
+			Game.open("bag")
+		KEY_J:
+			Game.open("journal")
+		KEY_Q:
+			Game.open("quests")
+		KEY_P:
+			var f := World.facing_tile(Game.world)
+			var b = World.building_at(Game.world, f.x, f.y)
+			if b:
+				Game.update(func(s): return World.pick_up_building(s, b.id))
+		_:
+			if k >= KEY_0 and k <= KEY_9:
+				var n := 9 if k == KEY_0 else k - KEY_1
+				Game.update(func(s): return Js.with(s, {"selected": n}))
+	get_viewport().set_input_as_handled()
 
 
-## E talks, opens buildings, harvests, and observes; Space uses the item in your hand.
-func _do_action(mode: String) -> void:
+## Space uses the item in your hand; E always interacts: talk, open, harvest, or observe.
+func do_action(mode: String) -> void:
+	if not Game.has_world() or Game.menu != "":
+		return
 	var here := Js.with(Game.world, {"player": Game.runtime.player})
 	var npc = Town.npc_in_front(here)
 	if npc:
-		var r := Town.talk(here, npc.id)
-		Game.update(func(_s): return r.state)
-		_hud.say("%s: “%s”" % [npc.short, r.text])
+		Game.talk_to(npc.id)
 		return
 	var target := World.interact_target(here)
 	if target != "":
@@ -244,17 +297,15 @@ func _publish(delta: float) -> void:
 	if _publish_at > 0 or not Site.is_web():
 		return
 	_publish_at = 0.25
-	var w := Game.world
-	var p: Dictionary = Game.runtime.player
-	var state := {
-		"ready": true, "grade": Site.grade_level, "save": Game.saved,
-		"day": World.day(w), "minute": w.minute, "coins": w.coins, "menu": Game.menu,
-		"player": {"x": p.x, "y": p.y, "facing": p.facing}, "selected": w.selected,
-		"message": w.messages[-1].text if w.messages.size() else "",
-		"fps": Engine.get_frames_per_second(),
-		"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * 1000,
-		"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
-		"primitives": Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
-		"objects": Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
-	}
+	var state := {"ready": true, "grade": Site.grade_level, "save": Game.saved, "screen": Game.screen, "menu": Game.menu, "fps": Engine.get_frames_per_second()}
+	if Game.has_world():
+		var w := Game.world
+		var p: Dictionary = Game.runtime.player
+		state.merge({
+			"day": World.day(w), "minute": w.minute, "coins": w.coins, "selected": w.selected, "journal": w.journal.size(),
+			"player": {"x": p.x, "y": p.y, "facing": p.facing},
+			"message": w.messages[-1].text if w.messages.size() else "",
+			"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			"primitives": Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+		})
 	JavaScriptBridge.eval("window.__soil = %s" % JSON.stringify(state), true)

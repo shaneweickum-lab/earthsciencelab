@@ -4,8 +4,9 @@ extends Node
 ## Protocol (the page is app/soil/game/godot/page.tsx):
 ## - The page loads /godot/index.html?grade=elementary|middle|high.
 ## - It posts {type: "grade", level} when the reader changes their grade level.
-## - Godot posts {type: "soil:ready"} once it starts, and {type: "soil:recordFarm", ...}
-##   for badges. Godot never writes the site's progress key itself.
+## - Godot posts {type: "soil:ready"} once it starts, {type: "soil:recordFarm", ...} for badges,
+##   and {type: "soil:setGrade", level} when the player changes the level in the game.
+##   Godot never writes the site's progress key itself.
 ## Outside a browser (the editor, tests, desktop), the grade level is "middle".
 
 signal grade_changed(level: String)
@@ -32,6 +33,15 @@ func _ready() -> void:
 
 static func is_web() -> bool:
 	return OS.has_feature("web")
+
+
+## Change the grade level from inside the game; the site remembers it.
+func set_grade(level: String) -> void:
+	if not level in LEVELS:
+		return
+	grade_level = level
+	grade_changed.emit(level)
+	post({"type": "soil:setGrade", "level": level})
 
 
 ## Send a message to the page that embeds the game.
