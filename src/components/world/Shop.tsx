@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { CROPS } from "@/game/crops";
 import { dayOf, seasonOf } from "@/world/clock";
-import { buy, sellNow, ship } from "@/world/engine";
-import { cropDays, ITEMS, sellPrice, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
+import { buy, lockedInShop, owns, sellNow, ship } from "@/world/engine";
+import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
+import { QUEST_BY_ID } from "@/world/quests";
+import { NPC_BY_ID } from "@/world/town";
 import { on } from "@/world/settings";
 import type { WorldState } from "@/world/types";
 import { Modal } from "./Menus";
@@ -22,7 +24,9 @@ export function StoreMenu() {
   const hasGreenhouse = w.buildings.some((b) => b.kind === "greenhouse");
   const all = Object.values(ITEMS);
   const seeds = all.filter((i) => i.kind === "seed" && (!seasonal || hasGreenhouse || WORLD_CROPS[i.crop!].seasons.includes(season)));
-  const soil = all.filter((i) => i.kind === "amendment");
+  const science = (i: ItemDef) => (i.kind === "tool" && !!i.price) || i.id in SHOP_UNLOCKS;
+  const tools = all.filter(science);
+  const soil = all.filter((i) => i.kind === "amendment" && !science(i));
   const kits = all.filter((i) => i.kind === "kit");
   const sellable = w.inventory.map((s, i) => ({ s, i })).filter(({ s }) => s && ITEMS[s.item].sell);
 
@@ -62,9 +66,13 @@ export function StoreMenu() {
       )}
       {tab === "soil" && (
         <>
+          <p className="mb-1.5 text-xs font-black uppercase tracking-wider text-muted">Science tools</p>
+          <ItemList items={tools} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+          <p className="mb-1.5 mt-3 text-xs font-black uppercase tracking-wider text-muted">For the soil</p>
           <ItemList items={soil} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
           <div className="mt-3 flex items-center gap-3 rounded-xl border border-line p-3">
-            <span className="text-2xl">{UPGRADES.bigCan.icon}</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={UPGRADES.bigCan.image} alt="" aria-hidden className="h-8 w-8 object-contain" draggable={false} />
             <div className="flex-1">
               <p className="font-bold">{UPGRADES.bigCan.name}</p>
               <p className="text-xs text-muted">{UPGRADES.bigCan.desc}</p>
@@ -117,8 +125,12 @@ function ItemList({ items, w, onBuy, extra }: {
 }) {
   return (
     <ul className="space-y-1.5">
-      {items.map((i) => (
-        <li key={i.id} className="flex items-center gap-3 rounded-xl border border-line p-2">
+      {items.map((i) => {
+        const locked = lockedInShop(w, i.id);
+        const quest = locked ? QUEST_BY_ID[SHOP_UNLOCKS[i.id]] : null;
+        const owned = i.kind === "tool" && owns(w, i.id);
+        return (
+        <li key={i.id} className={`flex items-center gap-3 rounded-xl border border-line p-2 ${locked ? "opacity-60" : ""}`}>
           <ItemIcon id={i.id} className="text-2xl" />
           <div className="min-w-0 flex-1">
             <p className="font-bold">
@@ -126,19 +138,31 @@ function ItemList({ items, w, onBuy, extra }: {
               {i.notOrganic && <span className="ml-1 rounded-full bg-danger/15 px-1.5 text-[10px] font-black text-danger">not organic</span>}
             </p>
             {extra ? extra(i) : <p className="text-xs text-muted">{i.desc}</p>}
+            {quest && (
+              <p className="mt-0.5 text-xs font-bold text-soil">
+                🔒 Not in stock yet. Finish &ldquo;{quest.title}&rdquo; for {NPC_BY_ID[quest.giver]?.short ?? quest.giver} to unlock it.
+              </p>
+            )}
           </div>
+          {locked ? (
+            <span className="shrink-0 rounded-full bg-paper px-3 py-1 text-sm font-black text-muted">🔒 {i.price}</span>
+          ) : owned ? (
+            <span className="shrink-0 rounded-full bg-leaf-light px-3 py-1 text-sm font-black">Owned</span>
+          ) : (
           <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
             <button className="btn btn-primary px-3 py-1 text-sm" disabled={w.coins < i.price!} onClick={() => onBuy(i.id, 1)} aria-label={`Buy ${i.name}`}>
               🪙 {i.price}
             </button>
-            {i.kind !== "kit" || i.price! < 50 ? (
+            {i.kind !== "tool" && (i.kind !== "kit" || i.price! < 50) ? (
               <button className="btn btn-ghost px-3 py-1 text-sm" disabled={w.coins < i.price! * 5} onClick={() => onBuy(i.id, 5)} aria-label={`Buy 5 ${i.name}`}>
                 ×5
               </button>
             ) : null}
           </div>
+          )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

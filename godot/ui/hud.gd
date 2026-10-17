@@ -5,7 +5,7 @@ class_name Hud
 const SEASON_ICON := {"Spring": "🌸", "Summer": "☀️", "Fall": "🍂", "Winter": "❄️"}
 const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest"}
 const LABELS := {
-	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "extension": "Extension Office", "cottage": "Cottage",
+	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "chest": "Tool Chest", "extension": "Extension Office", "cottage": "Cottage",
 	"fountain": "Fountain", "noticeBoard": "Notice board", "field": "Cornfield", "lamp": "Street lamp", "prop": "Market cart",
 }
 

@@ -16,6 +16,8 @@ static func preview_action(state: Dictionary) -> Dictionary:
 	if t == null:
 		return _r("", "", false)
 	var b = World.building_at(state, x, y)
+	if b != null and b.kind == "chest":
+		return _r("Open", "Open the chest to take things out or put them away.", true)
 	if World._crit_at(state, x, y) != null:
 		return _r("Observe", "Look closely and add it to your Nature Journal.", true)
 	var c = t.crop

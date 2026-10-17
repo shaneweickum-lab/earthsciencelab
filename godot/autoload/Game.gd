@@ -20,6 +20,8 @@ var menu := ""
 var saved_world: Variant = null
 ## Which townsperson you're talking to, and what they said when you started.
 var talking_to := ""
+## The chest that's open.
+var chest_id := ""
 var npc_line := ""
 
 var runtime := {

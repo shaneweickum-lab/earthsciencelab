@@ -113,7 +113,8 @@ func test_old_saves() -> void:
 		var x := i % old_w
 		var y := i / old_w
 		tiles.append(Js.with(s.tiles[y * WorldMap.W + x], {"mulch": x == 20 and y == 20}))
-	var farm: Array = s.buildings.filter(func(b): return b.x < 38)
+	# Old saves had no chest (and no landmarks, which are added back where there's room).
+	var farm: Array = s.buildings.filter(func(b): return b.x < 38 and b.kind != "chest")
 	var v3 := Js.with(s, {"version": 3, "tiles": tiles, "buildings": farm + [{"id": "store", "kind": "store", "x": 30, "y": 5, "data": {}}]})
 	var v1 := Js.with(v3, {"version": 1, "weather": "sunny"})
 	v1.erase("settings")

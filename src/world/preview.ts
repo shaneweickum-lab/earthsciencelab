@@ -23,6 +23,7 @@ export function previewAction(state: WorldState): ActionPreview {
   const critter = state.critters.find((c) => c.x === x && c.y === y);
   if (critter) return { label: "Observe", text: "Look closely and add it to your Nature Journal.", ok: true };
 
+  if (b?.kind === "chest") return { label: "Open", text: "Open the chest to take things out or put them away.", ok: true };
   if (!slot) {
     if (t.crop && t.crop.growth >= 1) return { label: "Harvest", text: `Pick the ${CROPS[t.crop.id].name.toLowerCase()}.`, ok: true };
     return { label: "Hands", text: "Nothing to pick up here.", ok: false };

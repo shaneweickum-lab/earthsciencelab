@@ -251,7 +251,7 @@ static func toggle(s: String, value: bool, on_change: Callable, disabled := fals
 
 ## An item's picture (rendered from its model) or its emoji, with a grade badge for produce.
 static func item_icon(id: String, px := 32, grade: Variant = null) -> Control:
-	var def = Data.items().get(id)
+	var def = Data.items().get(id, Data.upgrades().get(id))
 	var tex: Texture2D = null
 	if def and def.get("image"):
 		var p: String = "res://assets/icons/" + def.image.get_file()

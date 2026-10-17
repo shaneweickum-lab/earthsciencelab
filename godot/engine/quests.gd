@@ -41,6 +41,16 @@ static func _count_at_grade(s: Dictionary, item: String, min_grade: Variant) -> 
 	return n
 
 
+## Your own garden soil: the farm field and greenhouse beds.
+static func _own_garden(s: Dictionary) -> Array:
+	var out := []
+	for i in s.tiles.size():
+		var t: Dictionary = s.tiles[i]
+		if i % WorldMap.W < WorldMap.FARM_W and (t.ground == "farm" or t.greenhouse):
+			out.append(t)
+	return out
+
+
 static func _garden_tiles(s: Dictionary) -> Array:
 	var g: Dictionary = WorldMap.TOWN.garden
 	var out := []
@@ -88,6 +98,12 @@ static func goal_progress(s: Dictionary, goal: Dictionary) -> Dictionary:
 		"gardenPlanted":
 			var planted := _garden_tiles(s).filter(func(t): return t.crop != null and t.crop.id == goal.crop and not t.crop.dead).size()
 			return _p(planted, goal.count)
+		"farmPlanted":
+			return _p(_own_garden(s).filter(func(t): return t.crop != null and not t.crop.dead).size(), goal.count)
+		"fedSpots":
+			return _p(_own_garden(s).filter(func(t): return t.get("boost", 0) > 0).size(), goal.count)
+		"wetSpots":
+			return _p(_own_garden(s).filter(func(t): return t.crop != null and not t.crop.dead and t.moisture >= 60).size(), goal.count)
 	return _p(0, 1)
 
 
@@ -111,6 +127,12 @@ static func goal_label(goal: Dictionary) -> String:
 			return "Clear %s%% of the community garden" % Js.num(goal.percent)
 		"gardenPlanted":
 			return "Plant %s on %s community garden spots" % [goal.crop, Js.num(goal.count)]
+		"farmPlanted":
+			return "Plant %s crops on your farm" % Js.num(goal.count)
+		"fedSpots":
+			return "Spread compost or lime on %s garden spots" % Js.num(goal.count)
+		"wetSpots":
+			return "Get %s of your crops' soil damp" % Js.num(goal.count)
 	return ""
 
 

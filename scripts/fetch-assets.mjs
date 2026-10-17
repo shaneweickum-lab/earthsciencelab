@@ -29,9 +29,6 @@ const PACKS = {
       "crops_leafsStageA", "crops_leafsStageB", "crop_carrot", "crop_pumpkin", "plant_bushDetailed", "plant_bushLarge", "plant_flatTall",
       "fence_simple", "path_stone", "path_stoneCircle",
     ],
-    icons: { previewDir: "Isometric", suffix: "_NE", map: {
-      kit_fence: "fence_simple", kit_pathStone: "path_stone", kit_flowerBed: "flower_yellowA",
-    } },
   },
   town: {
     title: "Fantasy Town Kit", url: "https://kenney.nl/media/pages/assets/fantasy-town-kit/efe948d309-1754222374/kenney_fantasy-town-kit_2.0.zip",
@@ -45,17 +42,11 @@ const PACKS = {
     title: "Survival Kit", url: "https://kenney.nl/media/pages/assets/survival-kit/4065a8185b-1712149243/kenney_survival-kit.zip",
     page: "https://kenney.nl/assets/survival-kit", dir: "Models/GLB format", textures: true,
     models: ["barrel", "chest", "box-large", "bucket", "signpost", "resource-wood", "tool-hoe", "tool-shovel", "tool-axe", "tool-pickaxe"],
-    icons: { previewDir: "Previews", suffix: "", map: {
-      pickaxe: "tool-pickaxe", shovel: "tool-shovel", wood: "resource-wood",
-    } },
   },
   food: {
     title: "Food Kit", url: "https://kenney.nl/media/pages/assets/food-kit/83086fa91c-1719418518/kenney_food-kit.zip",
     page: "https://kenney.nl/assets/food-kit", dir: "Models/GLB format", textures: true,
     models: ["tomato", "carrot", "corn", "pumpkin-basic"],
-    icons: { previewDir: "Previews", suffix: "", map: {
-      crop_tomato: "tomato", crop_carrot: "carrot", crop_corn: "corn", crop_squash: "pumpkin-basic", honey: "honey",
-    } },
   },
   characters: {
     title: "Mini Characters", url: "https://kenney.nl/media/pages/assets/mini-characters/bfc7e272b4-1774770718/kenney_mini-characters.zip",
@@ -199,11 +190,11 @@ function sizeOf(dir) {
     return n + (statSync(p).isDirectory() ? sizeOf(p) : statSync(p).size);
   }, 0);
 }
-total = sizeOf(MODELS) + sizeOf(ICONS);
 
 writeFileSync(path.join(MODELS, "CREDITS.md"), `# 3D model and icon credits
 
-All models in this folder (and the item icons in \`public/icons\`, rendered from the packs' previews) are released under
+All models in this folder (and the icons in \`public/icons\`: the avatars from Kenney's previews, the items rendered
+from these models by \`npm run icons\`) are released under
 **Creative Commons Zero (CC0 1.0)**: http://creativecommons.org/publicdomain/zero/1.0/
 
 | Folder | Pack | Author | Source |
@@ -214,6 +205,9 @@ ${OBJ_PACKS.map((p) => `| \`${p.out}/\` | ${p.title} (converted from OBJ in \`as
 Credit is not required by CC0, but we're grateful. Regenerate this folder with \`npm run assets\`.
 `);
 
+// Item icons are rendered from the models above, so they match the game.
+execFileSync(process.execPath, [path.join(ROOT, "scripts/render-icons.mjs")], { stdio: "inherit" });
+total = sizeOf(MODELS) + sizeOf(ICONS);
 console.log(`Assets ready: ${(total / 1024 / 1024).toFixed(2)} MB`);
 if (total > BUDGET_BYTES) {
   console.error(`Over the ${(BUDGET_BYTES / 1024 / 1024).toFixed(1)} MB budget.`);

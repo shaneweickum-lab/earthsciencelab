@@ -40,6 +40,12 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": Js.with(s, {"player": World.move_player(s, op.dx, op.dy)})}
 		"swap":
 			return {"state": World.swap_slots(s, int(op.a), int(op.b))}
+		"take":
+			return {"state": World.take_from_chest(s, op.id, int(op.slot))}
+		"takeAll":
+			return {"state": World.take_all_from_chest(s, op.id)}
+		"put":
+			return {"state": World.put_in_chest(s, op.id, int(op.slot))}
 		"pickUp":
 			return {"state": World.pick_up_building(s, op.id)}
 		"talk":

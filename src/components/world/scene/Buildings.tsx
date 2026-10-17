@@ -70,6 +70,13 @@ const Procedural = memo(function Procedural({ b }: { b: Building }) {
           <mesh position={[0, 0.74, -0.1]} rotation={[-0.3, 0, 0]}><boxGeometry args={[0.95, 0.06, 0.75]} /><Mat color="#7a5230" /></mesh>
         </group>
       );
+    case "chest":
+      return (
+        <group>
+          <mesh position={[0, 0.3, 0]} castShadow><boxGeometry args={[0.8, 0.6, 0.55]} /><Mat color="#8a5a3c" /></mesh>
+          <mesh position={[0, 0.63, 0]}><boxGeometry args={[0.85, 0.08, 0.6]} /><Mat color="#6b4423" /></mesh>
+        </group>
+      );
     case "composter":
       return (
         <group>
@@ -284,6 +291,8 @@ function Fancy({ b }: { b: Building }) {
         </group>
       );
     case "shippingBin":
+      return <Model url={model("survival", "box-large")} scale={1.6} />;
+    case "chest":
       return <Model url={model("survival", "chest")} position={[0, 0.12, -0.15]} scale={3} />;
     case "fence":
       return <Model url={model("nature", "fence_simple")} position={[0, 0, 0.47]} scale={[1, 1.5, 1]} />;
