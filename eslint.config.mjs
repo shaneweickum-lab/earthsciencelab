@@ -7,7 +7,7 @@ const compat = new FlatCompat({ baseDirectory: __dirname });
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
-  { ignores: [".next/**", "node_modules/**", "next-env.d.ts", "scripts/**"] },
+  { ignores: [".next/**", "node_modules/**", "next-env.d.ts", "scripts/**", "public/godot/**", "godot/**", ".godot-cache/**"] },
 ];
 
 export default eslintConfig;

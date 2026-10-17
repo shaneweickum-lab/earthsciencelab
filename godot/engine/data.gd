@@ -1,0 +1,64 @@
+class_name Data
+## The game's tables, exported from the TS sources by src/world/godot-golden.test.ts.
+
+static var _cache := {}
+
+
+static func load_json(name: String) -> Variant:
+	if not _cache.has(name):
+		var text := FileAccess.get_file_as_string("res://data/%s.json" % name)
+		assert(text != "", "Missing data file res://data/%s.json" % name)
+		_cache[name] = JSON.parse_string(text)
+	return _cache[name]
+
+
+static func crops() -> Dictionary:
+	return load_json("crops").crops
+
+
+static func crop_order() -> Array:
+	return load_json("crops").order
+
+
+static func world_crops() -> Dictionary:
+	return load_json("crops").world
+
+
+static func items() -> Dictionary:
+	return load_json("items").items
+
+
+static func upgrades() -> Dictionary:
+	return load_json("items").upgrades
+
+
+static func grade_info() -> Dictionary:
+	return load_json("items").gradeInfo
+
+
+static func settings() -> Dictionary:
+	return load_json("settings")
+
+
+static func weather() -> Dictionary:
+	return load_json("weather")
+
+
+static func journal() -> Dictionary:
+	return load_json("journal")
+
+
+static func spawns() -> Array:
+	return load_json("nature").spawns
+
+
+static func npcs() -> Array:
+	return load_json("town").npcs
+
+
+static func quests() -> Array:
+	return load_json("town").quests
+
+
+static func world() -> Dictionary:
+	return load_json("world")

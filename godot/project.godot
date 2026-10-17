@@ -1,0 +1,29 @@
+; Engine configuration file.
+; Soil & Sprout, the Godot port of the game at /soil/game. See README.md.
+
+config_version=5
+
+[application]
+
+config/name="Soil & Sprout"
+config/description="A cozy farming game about soil science."
+run/main_scene="res://scene/Main.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+
+[autoload]
+
+Site="*res://autoload/Site.gd"
+SaveIO="*res://autoload/SaveIO.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

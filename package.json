@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
-    "assets": "node scripts/fetch-assets.mjs"
+    "assets": "node scripts/fetch-assets.mjs",
+    "godot:fetch": "node scripts/godot.mjs fetch",
+    "godot:test": "node scripts/godot.mjs test",
+    "godot:export": "node scripts/godot.mjs export"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

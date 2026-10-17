@@ -291,8 +291,22 @@ await page.goto(`${BASE}/soil`);
 await page.waitForTimeout(500);
 await shot("10-soil-home-after");
 
+// The Godot port (only when it's been built with npm run godot:export).
+if (existsSync("public/godot/index.html")) {
+  await page.goto(`${BASE}/soil/game/godot`);
+  const game = page.frameLocator('iframe[title="Soil & Sprout"]');
+  await game.locator("canvas").waitFor();
+  const frame = page.frames().find((f) => f.url().includes("/godot/"));
+  await frame.waitForFunction(() => window.__soil?.ready, null, { timeout: 60000 });
+  const grade = await page.evaluate(() => JSON.parse(localStorage.getItem("earthsciencelab-progress")).state.gradeLevel);
+  await frame.waitForFunction((g) => window.__soil.grade === g, grade, { timeout: 10000 });
+  if (!(await frame.evaluate(() => window.__soil.save))) throw new Error("The Godot build didn't find the farm save.");
+  await page.waitForTimeout(1000);
+  await shot("30-godot-preview");
+}
+
 await page.setViewportSize({ width: 390, height: 844 });
-await page.goto(`${BASE}/soil/game`);
+await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);
 await shot("11-mobile-game");
 await page.goto(`${BASE}/elements?z=8`);

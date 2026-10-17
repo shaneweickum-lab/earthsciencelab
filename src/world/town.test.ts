@@ -171,4 +171,18 @@ describe("saves from before the town", () => {
     expect(up.buildings.find((b) => b.kind === "store")!.x).toBeGreaterThan(FARM_W);
     expect(loadWorld(saveWorld(up))).not.toBeNull();
   });
+
+  it("including the very first saves, which had no settings either", () => {
+    const s = newWorld(5);
+    const oldW = 40;
+    const tiles = Array.from({ length: oldW * H }, (_, i) => s.tiles[Math.floor(i / oldW) * W + (i % oldW)]);
+    const v1: Record<string, unknown> = { ...s, version: 1, weather: "sunny", tiles, buildings: s.buildings.filter((b) => b.x < FARM_W) };
+    delete v1.settings;
+    const up = loadWorld(JSON.stringify(v1))!;
+    expect(up).not.toBeNull();
+    expect(up.version).toBe(WORLD_VERSION);
+    expect(up.tiles).toHaveLength(W * H);
+    expect(up.settings.daysPerMonth).toBeGreaterThan(0);
+    expect(up.weather[1].kind).toBeTruthy();
+  });
 });

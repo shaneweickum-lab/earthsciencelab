@@ -61,6 +61,18 @@ The map is two halves joined by a road through a forest strip: your farm on the 
 - **Friendship**: one chat and one gift a day raise friendship, up to 10 hearts. Everyone has loved, liked, and disliked gifts. New heart levels unlock personal stories and new quests.
 - **Quests** (`src/world/quests.ts`): story quests from each person (deliveries, science requests like testing soil spots or raising pH, finding critters), and a three-step community project to restore the garden. The notice board posts two delivery requests a day that pay well and come down after 3 days. Deliveries take your lowest qualifying grade first. **Q** opens the quest log.
 
+### Godot port (in progress)
+
+Soil & Sprout is being ported to [Godot 4](https://godotengine.org) (GDScript) so it can run on the web and, later, on desktop and Steam. The project lives in `godot/`. Its web build is embedded at `/soil/game/godot` and shares the farm save (the same localStorage key and JSON format) and the site's grade level with the current game, which stays at `/soil/game` until the port catches up.
+
+| Command | What it does |
+| --- | --- |
+| `npm run godot:fetch` | Downloads the pinned Godot editor and the web export templates into `.godot-cache/` (about 70 MB; the templates are read straight out of the release archive) |
+| `npm run godot:test` | Runs the GDScript tests in `godot/tests` headless |
+| `npm run godot:export` | Copies `public/models` into the project, imports it, and exports the web build to `public/godot/` (gitignored) |
+
+The game engine is ported to GDScript in `godot/engine` (one module per TS file, working on the same JSON-shaped world as the save). The TypeScript engine in `src/world` is the reference while the port is under way: `src/world/godot-golden.test.ts` writes fixtures to `godot/tests/golden/`, and the GDScript tests must reproduce them exactly. Besides unit fixtures (weather, maps, grades, critters, NPC routes, the notice board), four seeded playthroughs record every step of a bot playing the game (tools, planting, nights, shopping, quests, gifts) and Godot must match each step. The game's tables (crops, items, journal, NPCs, quests) are exported to `godot/data/` the same way. Regenerate with `GOLDEN=1 npx vitest run godot-golden`; `npm test` fails if they're stale. Saves written by the Godot tests are loaded back by `src/world/godot-roundtrip.test.ts`. Site ↔ game messages are documented in `godot/autoload/Site.gd`.
+
 ### Game art
 
 The farm's 3D models and item pictures are free CC0 packs by [Kenney](https://kenney.nl) (Nature Kit, Fantasy Town Kit, Survival Kit, Food Kit, Mini Characters) and [Quaternius](https://quaternius.com) (Ultimate Crops: carrots, corn, pumpkins, tomatoes, wheat), committed under `public/models` and `public/icons`. Quaternius's OBJ source files live in `assets-src/quaternius-crops`; `npm run assets` converts the ones the game uses to compressed GLB (rebuilding any missing `.mtl` colors from the pack's shared palette) and keeps only the three animations the farmers use. `npm run assets` re-downloads the packs, copies only the models the game uses, renders the item icons, and writes `public/models/CREDITS.md`. Each model has a hand-built fallback shape, so the game still works while models load. Crops are composed from these parts at four growth stages (sprout, young, mature, ripe) in `src/components/world/scene/cropLooks.ts`, including real flower colors before fruit sets.
