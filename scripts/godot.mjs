@@ -112,7 +112,11 @@ async function syncAssets() {
     ext.dispose();
     await io.write(dest, doc);
   }
-  if (existsSync(to)) for (const f of files(to)) if (!wanted.has(f.replace(/\.import$/, ""))) rmSync(join(to, f));
+  // Remove models that are gone from public/models. (Leave other files: Godot extracts textures next to models.)
+  if (existsSync(to)) for (const f of files(to)) {
+    const src = f.replace(/\.import$/, "");
+    if (src.endsWith(".glb") && !wanted.has(src)) rmSync(join(to, f));
+  }
 }
 
 async function exportWeb() {

@@ -9,6 +9,7 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import { CROP_ORDER, CROPS, FAMILY_LABEL, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
+import { CROP_LOOKS } from "@/components/world/scene/cropLooks";
 import { AVATARS, DEFAULT_AVATAR } from "./avatars";
 import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, timeOfDay, yearFraction, type Calendar } from "./clock";
 import {
@@ -70,6 +71,7 @@ describe("Godot data tables", () => {
     emit("data/nature.json", { spawns: SPAWNS });
     emit("data/town.json", { npcs: NPCS, quests: QUESTS });
     emit("data/world.json", { avatars: AVATARS, defaultAvatar: DEFAULT_AVATAR, buildingSize: BUILDING_SIZE });
+    emit("data/crop_looks.json", CROP_LOOKS);
   });
 });
 

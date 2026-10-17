@@ -14,12 +14,15 @@ const LEVELS := ["elementary", "middle", "high"]
 const PROGRESS_KEY := "earthsciencelab-progress"
 
 var grade_level := "middle"
+## Debug switches from ?debug=a,b (web only), for measuring performance.
+var debug := PackedStringArray()
 var _on_message: JavaScriptObject  # kept alive so the browser callback isn't freed
 
 
 func _ready() -> void:
 	if not is_web():
 		return
+	debug = _query_param("debug").split(",", false)
 	var from_url := _query_param("grade")
 	grade_level = from_url if from_url in LEVELS else _saved_grade()
 	_on_message = JavaScriptBridge.create_callback(_message)

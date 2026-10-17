@@ -14,6 +14,7 @@ config/features=PackedStringArray("4.4", "GL Compatibility")
 
 Site="*res://autoload/Site.gd"
 SaveIO="*res://autoload/SaveIO.gd"
+Game="*res://autoload/Game.gd"
 
 [display]
 
@@ -27,3 +28,5 @@ window/stretch/aspect="expand"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+lights_and_shadows/directional_shadow/size=1024
+lights_and_shadows/directional_shadow/size.mobile=1024
