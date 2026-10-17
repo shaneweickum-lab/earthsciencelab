@@ -301,6 +301,46 @@ async function ore(color) {
 }
 for (const [id, color] of Object.entries(ORE_COLORS)) ICONS[id] = () => ore(color);
 
+/** A metal ingot (a little stack of two). */
+function bars(color) {
+  const bar = (y, ry) => {
+    const m = mesh(new THREE.CylinderGeometry(0.42, 0.55, 0.28, 4, 1), color, [0, y, 0], [0, ry, 0], [1.6, 1, 0.8]);
+    if (color === "#5fd8f0") m.material.emissive = new THREE.Color(color).multiplyScalar(0.3);
+    return m;
+  };
+  return group(bar(0.14, Math.PI / 4), place(bar(0.42, Math.PI / 4), [0.1, 0, 0.05], [0, 0.4, 0]));
+}
+ICONS.copperBar = async () => bars("#c8753d");
+ICONS.bronzeBar = async () => bars("#b8893a");
+ICONS.ironBar = async () => bars("#c9ced6");
+ICONS.goldBar = async () => bars("#f2c230");
+ICONS.mithrilBar = async () => bars("#5fd8f0");
+ICONS.sticks = async () => group([-0.3, 0, 0.3].map((z, i) => cyl(0.05, 0.06, 1.3, i === 1 ? "#9a6b3f" : "#8a5a3c", [0, 0.06 + i * 0.05, z], [0, (i - 1) * 0.35, Math.PI / 2], 6)));
+ICONS.refinedFiber = async () => group(
+  mesh(new THREE.TorusGeometry(0.4, 0.17, 8, 16), "#e8d9a8", [0, 0.2, 0], [Math.PI / 2, 0, 0]),
+  mesh(new THREE.TorusGeometry(0.3, 0.12, 8, 16), "#d9c88f", [0, 0.42, 0], [Math.PI / 2, 0, 0]),
+);
+ICONS.rope = async () => group([0, 1, 2].map((i) => mesh(new THREE.TorusGeometry(0.45 - i * 0.04, 0.09, 6, 20), i % 2 ? "#b08458" : "#c49a6c", [0, 0.1 + i * 0.17, 0], [Math.PI / 2, 0, i])));
+ICONS.kit_workbench = () => survival("workbench");
+ICONS.kit_grinder = () => survival("workbench-grind");
+ICONS.kit_chest = () => survival("chest");
+/** The spinning wheel and furnace are drawn the same way in the game (scene/Buildings.tsx). */
+ICONS.kit_spinningWheel = async () => group(
+  mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 20), "#9a6b3f", [0, 0.85, 0]),
+  [0, 1, 2, 3].map((k) => box(0.04, 0.95, 0.04, "#b08458", [0, 0.85, 0], [0, 0, (k * Math.PI) / 4])),
+  box(0.9, 0.08, 0.3, "#7a5636", [0.15, 0.25, 0]),
+  [[-0.25, 0.12], [0.55, 0.12]].map(([x]) => box(0.07, 0.5, 0.07, "#7a5636", [x, 0.12, 0])),
+  box(0.07, 0.75, 0.07, "#7a5636", [0, 0.5, 0.12]),
+  cyl(0.06, 0.06, 0.25, "#e8d9a8", [0.45, 0.45, 0], [0, 0, 0], 8),
+);
+ICONS.kit_furnace = async () => group(
+  box(0.9, 0.9, 0.8, "#8f8a82", [0, 0.45, 0]),
+  box(0.95, 0.12, 0.85, "#7a756d", [0, 0.92, 0]),
+  box(0.4, 0.35, 0.05, "#1a1410", [0, 0.3, 0.41]),
+  box(0.3, 0.12, 0.06, "#ff8a2a", [0, 0.2, 0.42]),
+  cyl(0.14, 0.16, 0.5, "#7a756d", [0.25, 1.2, -0.15], [0, 0, 0], 8),
+);
+
 for (const [tier, color] of Object.entries(TIER_COLORS)) {
   ICONS[`axe_${tier}`] = async () => metal(await survival("tool-axe-upgraded"), color);
   ICONS[`pickaxe_${tier}`] = async () => metal(await survival("tool-pickaxe-upgraded"), color);

@@ -2,13 +2,13 @@
 
 import { CROPS } from "@/game/crops";
 import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf } from "@/world/clock";
-import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
+import { buildingAt, canPickUp, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
 import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
 import { expectedGrade } from "@/world/grades";
 import { previewAction } from "@/world/preview";
 import { NPC_BY_ID } from "@/world/town";
-import { TOWN_KINDS, type Tile, type WorldState } from "@/world/types";
+import type { Tile, WorldState } from "@/world/types";
 import { tempAt, WEATHER } from "@/world/weather";
 import { GradeBadge, ItemIcon, WearBar } from "./ItemIcon";
 import { useWorld } from "./useWorld";
@@ -147,7 +147,7 @@ export function TileInspector() {
   const garden = t.ground === "farm" || t.greenhouse;
   const known = knownSoil(w, t);
   const critter = w.critters.find((c) => c.x === x && c.y === y);
-  const pickable = b && !TOWN_KINDS.includes(b.kind) && !b.data.owner;
+  const pickable = b && canPickUp(b);
   return (
     <div className="pointer-events-auto w-64 space-y-2 rounded-2xl border-2 border-soil-dark/20 bg-card/95 p-3 shadow-lg" aria-label="Tile inspector">
       <div className="flex items-baseline justify-between">

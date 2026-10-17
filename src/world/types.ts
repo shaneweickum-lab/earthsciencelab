@@ -61,6 +61,8 @@ export type BuildingKind =
   | "house" | "store" | "shippingBin"
   | "composter" | "rainBarrel" | "beehive" | "birdHouse" | "bugHotel" | "scarecrow"
   | "greenhouse" | "fence" | "flowerBed" | "pathStone" | "well" | "chickenCoop" | "smallBarn" | "chest"
+  // Crafting stations.
+  | "workbench" | "grinder" | "spinningWheel" | "furnace"
   // Town buildings, landmarks, and props (not buildable by the player).
   | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower"
   // The mine: its entrance in town, and the ladders on each floor.
@@ -68,7 +70,7 @@ export type BuildingKind =
 
 /** Town buildings the player can't build, pick up, or build over. */
 export const TOWN_KINDS: BuildingKind[] = [
-  "house", "store", "shippingBin", "chest", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+  "house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
   "mineEntrance", "ladderUp", "ladderDown",
 ];
 
@@ -153,6 +155,8 @@ export interface WorldState {
   mine?: MineFloor;
   /** The deepest mine floor reached, for the mine cart at the entrance. */
   deepest?: number;
+  /** Grandma Rosa's workbench has been found in the barn. */
+  foundWorkbench?: boolean;
   /** Friendship with townsfolk, by NPC id. */
   friends?: Record<string, { points: number; talked?: number; gifted?: number; met?: boolean; stories?: number[] }>;
   /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */

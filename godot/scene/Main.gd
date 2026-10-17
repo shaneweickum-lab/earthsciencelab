@@ -299,7 +299,7 @@ func do_action(mode: String) -> void:
 		Game.talk_to(npc.id)
 		return
 	var target := World.interact_target(here)
-	if target == "chest":
+	if target == "chest" or target == "craft":
 		var f := World.facing_tile(here)
 		Game.chest_id = World.building_at(here, f.x, f.y).id
 	if target != "":

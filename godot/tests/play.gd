@@ -19,6 +19,8 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": Js.with(s, {"selected": int(op.i)})}
 		"enterMine":
 			return {"state": World.enter_mine(s, int(op.floor))}
+		"craft":
+			return {"state": World.craft(s, op.id)}
 		"selectItem":
 			var at := 0
 			for i in s.inventory.size():

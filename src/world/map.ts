@@ -28,6 +28,7 @@ export const BUILDING_SIZE: Record<Building["kind"], [number, number]> = {
   extension: [5, 4], cottage: [4, 4], fountain: [2, 2], noticeBoard: [1, 1], field: [5, 3], lamp: [1, 1], prop: [1, 1],
   barn: [4, 4], silo: [2, 2], windmill: [3, 2], waterTower: [2, 2],
   mineEntrance: [2, 2], ladderUp: [1, 1], ladderDown: [1, 1],
+  workbench: [1, 1], grinder: [1, 1], spinningWheel: [1, 1], furnace: [1, 1],
 };
 
 /** The mine entrance (2×2, opening south onto the road), and the size of each mine floor. */

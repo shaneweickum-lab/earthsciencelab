@@ -42,7 +42,7 @@ export function ChestMenu() {
   const items = Array.from({ length: CHEST_SIZE }, (_, i) => chest.data.items?.[i] ?? null);
   const empty = items.every((s) => !s);
   return (
-    <Modal title="Grandma Rosa's chest" icon="🧰" onClose={close} wide>
+    <Modal title={chest.id === "chest" ? "Grandma Rosa's chest" : "Storage chest"} icon="🧰" onClose={close} wide>
       <div className="mb-2 flex items-center gap-2">
         <p className="flex-1 text-sm text-muted">Click something in the chest to take it. Click something in your bag to put it away.</p>
         <button className="btn btn-primary py-1.5 text-sm" disabled={empty} onClick={() => update((s) => takeAllFromChest(s, id))}>

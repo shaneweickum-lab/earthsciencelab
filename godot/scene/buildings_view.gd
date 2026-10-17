@@ -121,6 +121,33 @@ func _fancy(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 			_m(root, "survival/box-large", Vector3.ZERO, 0, 1.6)
 		"chest":
 			_m(root, "survival/chest", Vector3(0, 0.12, -0.15), 0, 3)
+		"workbench":
+			_m(root, "survival/workbench", Vector3.ZERO, 0, 1.6)
+		"grinder":
+			_m(root, "survival/workbench-grind", Vector3.ZERO, 0, 1.6)
+		"spinningWheel":
+			var wheel := MeshInstance3D.new()
+			var torus := TorusMesh.new()
+			torus.inner_radius = 0.4
+			torus.outer_radius = 0.5
+			wheel.mesh = torus
+			wheel.position = Vector3(0, 0.85, 0)
+			wheel.rotation.x = PI / 2
+			wheel.material_override = Models.mat("#9a6b3f")
+			root.add_child(wheel)
+			for k in 4:
+				_box(root, Vector3(0.04, 0.88, 0.04), Vector3(0, 0.85, 0), "#b08458", Vector3(0, 0, k * PI / 4))
+			_box(root, Vector3(0.8, 0.08, 0.3), Vector3(0.1, 0.25, 0), "#7a5636")
+			for x in [-0.25, 0.45]:
+				_box(root, Vector3(0.07, 0.25, 0.07), Vector3(x, 0.12, 0), "#7a5636")
+			_box(root, Vector3(0.07, 0.7, 0.07), Vector3(0, 0.5, 0.1), "#7a5636")
+			_cyl(root, 0.06, 0.06, 0.22, Vector3(0.4, 0.42, 0), "#e8d9a8", 8)
+		"furnace":
+			_box(root, Vector3(0.85, 0.9, 0.75), Vector3(0, 0.45, 0), "#8f8a82")
+			_box(root, Vector3(0.9, 0.12, 0.8), Vector3(0, 0.92, 0), "#7a756d")
+			_box(root, Vector3(0.38, 0.33, 0.02), Vector3(0, 0.3, 0.38), "#1a1410")
+			_box(root, Vector3(0.28, 0.1, 0.02), Vector3(0, 0.2, 0.39), "#ff8a2a", Vector3.ZERO, "#ff6a00", 1.2)
+			_cyl(root, 0.13, 0.15, 0.5, Vector3(0.22, 1.2, -0.15), "#7a756d", 8)
 		"fence":
 			_m(root, "nature/fence_simple", Vector3(0, 0, 0.47), 0, Vector3(1, 1.5, 1))
 		"pathStone":

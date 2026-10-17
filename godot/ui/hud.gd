@@ -7,6 +7,7 @@ const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "
 const LABELS := {
 	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "chest": "Tool Chest", "extension": "Extension Office", "cottage": "Cottage",
 	"mineEntrance": "Old Mine", "ladderUp": "Ladder up", "ladderDown": "Ladder down",
+	"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace",
 	"fountain": "Fountain", "noticeBoard": "Notice board", "field": "Cornfield", "lamp": "Street lamp", "prop": "Market cart",
 }
 
@@ -167,7 +168,7 @@ static func inspector(w: Dictionary) -> Control:
 			col.add_child(Ui.text("Soil health: %s" % Js.num(Grades.soil_health(t)), 12, Ui.INK, 900))
 	if preview.label:
 		col.add_child(Ui.panel(Ui.text("[b]Space · %s:[/b] %s" % [preview.label, preview.text], 12), Ui.LEAF_LIGHT if preview.ok else Ui.PAPER, 10, 7, Color(0, 0, 0, 0), 0))
-	if b and not b.kind in WorldMap.TOWN_KINDS and not b.data.get("owner"):
+	if b and World.can_pick_up(b):
 		col.add_child(Ui.button("Pick up (P)", func(): Game.update(func(s): return World.pick_up_building(s, b.id)), "ghost", 12))
 	return Ui.panel(col, Color(Ui.CARD, 0.95), 16, 12, Color(Ui.SOIL_DARK, 0.2), 2)
 

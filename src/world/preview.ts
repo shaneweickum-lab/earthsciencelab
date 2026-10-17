@@ -1,6 +1,6 @@
 import { CROPS } from "@/game/crops";
-import { buildingAt, canPlantHere, crittersHere, facingTile, mineOpen, OBSTACLE_HP, obstacleName, ROCKS, selectedItem, tileAt } from "./engine";
-import { ITEMS, TIERS, WORLD_CROPS, type ItemDef } from "./items";
+import { buildingAt, canPlantHere, crittersHere, facingTile, mineOpen, OBSTACLE_HP, obstacleName, ROCKS, selectedItem, STATIONS, tileAt } from "./engine";
+import { ITEMS, TIERS, WORLD_CROPS, type ItemDef, type Station } from "./items";
 import { amendmentPoints, MAX_BOOST } from "./grades";
 import { on } from "./settings";
 import type { Tile, WorldState } from "./types";
@@ -37,6 +37,8 @@ export function previewAction(state: WorldState): ActionPreview {
     : { label: "Enter", text: "The mine is boarded up. Luis might know about it.", ok: false };
   if (b?.kind === "ladderDown") return { label: "Climb", text: `Climb down to floor ${(state.mine?.floor ?? 0) + 1}.`, ok: true };
   if (b?.kind === "ladderUp") return { label: "Climb", text: "Climb back up to town.", ok: true };
+  if (b?.kind === "barn" && !b.data.owner && !state.foundWorkbench) return { label: "Look", text: "Something big is under a dusty tarp in the barn.", ok: true };
+  if (b && b.kind in STATIONS) return { label: "Craft", text: `Use the ${STATIONS[b.kind as Station].toLowerCase()}.`, ok: true };
   if (!slot) {
     if (t.crop && t.crop.growth >= 1) return { label: "Harvest", text: `Pick the ${CROPS[t.crop.id].name.toLowerCase()}.`, ok: true };
     return { label: "Hands", text: "Nothing to pick up here.", ok: false };

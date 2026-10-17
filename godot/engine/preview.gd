@@ -34,6 +34,10 @@ static func preview_action(state: Dictionary) -> Dictionary:
 		return _r("Climb", "Climb down to floor %d." % (int(state.mine.floor) + 1), true)
 	if b != null and b.kind == "ladderUp":
 		return _r("Climb", "Climb back up to town.", true)
+	if b != null and b.kind == "barn" and not b.data.get("owner") and not state.get("foundWorkbench"):
+		return _r("Look", "Something big is under a dusty tarp in the barn.", true)
+	if b != null and World.STATIONS.has(b.kind):
+		return _r("Craft", "Use the %s." % World.STATIONS[b.kind].to_lower(), true)
 	if World._crit_at(state, x, y) != null:
 		return _r("Observe", "Look closely and add it to your Nature Journal.", true)
 	var c = t.crop

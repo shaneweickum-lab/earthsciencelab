@@ -5,9 +5,9 @@ import { DEFAULT_SETTINGS } from "./settings";
 import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
   sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding, lockedInShop, putInChest, takeAllFromChest, takeFromChest,
-  WORLD_VERSION, enterMine, leaveMine, isWalkable, buildingAt, cartFloors,
+  WORLD_VERSION, enterMine, leaveMine, isWalkable, buildingAt, cartFloors, craft, recipeStatus, canPickUp,
 } from "./engine";
-import { ITEMS, UPGRADES } from "./items";
+import { ITEMS, RECIPES, UPGRADES } from "./items";
 import { idx, MINE_ENTRANCE, MINE_START, MINE_W, mineFloor } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
@@ -441,6 +441,54 @@ describe("the mine", () => {
   it("remembers every fifth floor for the mine cart", () => {
     const s = enterMine(open(newWorld(42)), 11);
     expect(cartFloors(s)).toEqual([1, 5, 10]);
+  });
+});
+
+describe("crafting", () => {
+  it("starts with Grandma's workbench, found in the barn", () => {
+    let s = newWorld(42);
+    const barn = s.buildings.find((b) => b.id === "farm-barn")!;
+    s = { ...s, player: { x: barn.x + 1, y: barn.y + 4, facing: "up" } };
+    s = act(s);
+    expect(countItem(s, "kit_workbench")).toBe(1);
+    expect(s.foundWorkbench).toBe(true);
+    expect(countItem(interact(s), "kit_workbench")).toBe(1); // only once
+  });
+
+  it("turns fiber into rope and wood into sticks", () => {
+    let s = addItem(newWorld(42), "fiber", 24)!;
+    for (let i = 0; i < 8; i++) s = craft(s, "refinedFiber");
+    expect(countItem(s, "fiber")).toBe(0);
+    s = craft(s, "rope");
+    expect(countItem(s, "rope")).toBe(1);
+    expect(countItem(s, "refinedFiber")).toBe(0);
+    s = craft(addItem(s, "wood", 1)!, "sticks");
+    expect(countItem(s, "sticks")).toBe(2);
+    // Not enough: nothing changes.
+    expect(countItem(craft(s, "rope"), "rope")).toBe(1);
+  });
+
+  it("smelts bronze from copper and tin, and makes a bronze axe at the grinder", () => {
+    let s = newWorld(42);
+    for (const [item, n] of [["copperOre", 9], ["tinOre", 6], ["wood", 3], ["sticks", 2], ["rope", 1]] as const) s = addItem(s, item, n)!;
+    for (let i = 0; i < 3; i++) s = craft(s, "bronzeBar");
+    expect(countItem(s, "bronzeBar")).toBe(3);
+    expect(s.journal).toContain("alloy");
+    expect(recipeStatus(s, RECIPES.find((r) => r.id === "axe_bronze")!).ok).toBe(true);
+    s = craft(s, "axe_bronze");
+    expect(countItem(s, "axe_bronze")).toBe(1);
+    expect(countItem(s, "bronzeBar")).toBe(0);
+  });
+
+  it("has every recipe's ingredients and products as real items, and a tool recipe for every tier", () => {
+    for (const r of RECIPES) for (const id of [r.id, ...r.inputs.map((i) => i.item)]) expect(ITEMS[id], id).toBeDefined();
+    for (const t of ["copper", "bronze", "iron", "gold", "mithril"]) expect(RECIPES.some((r) => r.id === `pickaxe_${t}`)).toBe(true);
+  });
+
+  it("lets you pick up a crafted chest, but not Grandma's", () => {
+    const s = newWorld(42);
+    expect(canPickUp(s.buildings.find((b) => b.id === "chest")!)).toBe(false);
+    expect(canPickUp({ id: "chest-9", kind: "chest", x: 3, y: 3, data: {} })).toBe(true);
   });
 });
 

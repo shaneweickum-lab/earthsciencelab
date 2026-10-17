@@ -617,9 +617,9 @@ static func act(state: Dictionary) -> Dictionary:
 		return state
 	if _crit_at(state, f.x, f.y) != null:
 		return interact(state)
-	# Ladders and the mine entrance work with whatever you're holding.
+	# Ladders, the mine entrance, and Grandma's barn work with whatever you're holding.
 	var lb = building_at(state, f.x, f.y)
-	if lb != null and lb.kind in ["ladderUp", "ladderDown", "mineEntrance"]:
+	if lb != null and (lb.kind in ["ladderUp", "ladderDown", "mineEntrance"] or (lb.kind == "barn" and not lb.data.get("owner"))):
 		return interact(state)
 	var slot = selected_item(state)
 	var def = Data.items()[slot.item] if slot else null
@@ -946,6 +946,8 @@ static func interact_target(state: Dictionary) -> String:
 			# Once you've been deep enough, the mine cart at the entrance can take you down.
 			if mine_open(state) and int(state.get("deepest", 0)) >= 5:
 				return "mine"
+	if STATIONS.has(b.kind):
+		return "craft"
 	return ""
 
 
@@ -1059,7 +1061,15 @@ static func _operate_building(state: Dictionary, b: Dictionary) -> Dictionary:
 			var got = add_item(update.call(Js.with(data, {"ready": 0})), "mulch", hay)
 			return say(got, "Collected %d straw mulch from the barn." % hay) if got != null else say(state, "Your bag is full.")
 		"barn":
-			return say(state, "The Ortegas' barn smells like hay and corn." if data.get("owner") else "Grandma Rosa's old barn. Swallows nest in the rafters.")
+			if data.get("owner"):
+				return say(state, "The Ortegas' barn smells like hay and corn.")
+			if state.get("foundWorkbench"):
+				return say(state, "Grandma Rosa's old barn. Swallows nest in the rafters.")
+			# Under a dusty tarp in the barn: Grandma's workbench.
+			var wb = add_item(state, "kit_workbench", 1)
+			if wb == null:
+				return say(state, "Something big is under a tarp in the barn. Make room in your bag to carry it.")
+			return say(Js.with(wb, {"foundWorkbench": true}), "Under a dusty tarp in the barn you find Grandma Rosa's old workbench! Set it up on the farm to start crafting.")
 		"chest":
 			return say(state, "Grandma Rosa's old chest. Open it to store things or take them out.")
 		"mineEntrance":
@@ -1229,14 +1239,21 @@ static func place_building(state: Dictionary, slot_index: int, x: int, y: int) -
 	return discover(next, "greenhouse-effect") if kind == "greenhouse" else next
 
 
+## Things you built yourself can be picked back up (Grandma's chest stays by the house).
+static func can_pick_up(b: Dictionary) -> bool:
+	return not b.kind in WorldMap.TOWN_KINDS and not b.data.get("owner") and b.id != "chest"
+
+
 static func pick_up_building(state: Dictionary, id: String) -> Dictionary:
 	var b = null
 	for o in state.buildings:
 		if o.id == id:
 			b = o
 			break
-	if b == null or b.kind in WorldMap.TOWN_KINDS or b.data.get("owner"):
+	if b == null or not can_pick_up(b):
 		return state
+	if b.kind == "chest" and b.data.get("items", []).any(func(x): return x != null):
+		return say(state, "Empty the chest first.")
 	if b.kind == "greenhouse" and WorldMap.greenhouse_interior(b).any(func(p): return state.tiles[WorldMap.idx(p.x, p.y)].crop != null):
 		return say(state, "Harvest or clear the greenhouse beds first.")
 	var kit: String = "kit_" + b.kind
@@ -1303,6 +1320,52 @@ static func swap_slots(state: Dictionary, a: int, b: int) -> Dictionary:
 	inv[a] = inv[b]
 	inv[b] = tmp
 	return Js.with(state, {"inventory": inv})
+
+
+# ───────────────────────── crafting ─────────────────────────
+
+## What each crafting station is called.
+const STATIONS := {"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace"}
+
+
+static func recipe(id: String) -> Variant:
+	for r in Data.recipes():
+		if r.id == id:
+			return r
+	return null
+
+
+## How many of a recipe's inputs you have, and whether you can make it: {inputs, ok}.
+static func recipe_status(state: Dictionary, r: Dictionary) -> Dictionary:
+	var inputs := []
+	var ok := true
+	for i in r.inputs:
+		var have := count_item(state, i.item)
+		inputs.append({"item": i.item, "qty": int(i.qty), "have": have})
+		if have < i.qty:
+			ok = false
+	return {"inputs": inputs, "ok": ok}
+
+
+## Make one batch of a recipe at a station.
+static func craft(state: Dictionary, id: String) -> Dictionary:
+	var r = recipe(id)
+	if r == null:
+		return state
+	if not recipe_status(state, r).ok:
+		return say(state, "You don't have everything for that yet.")
+	var s := state
+	for i in r.inputs:
+		s = remove_item(s, i.item, int(i.qty))
+	var got = add_item(s, r.id, int(r.qty))
+	if got == null:
+		return say(state, "Your bag is full.")
+	var made := say(got, "Made %s%s!" % ["%d " % r.qty if r.qty > 1 else "", Items.get_def(r.id).name])
+	if r.id == "bronzeBar":
+		return discover(made, "alloy")
+	if r.station == "furnace":
+		return discover(made, "smelting")
+	return made
 
 
 # ───────────────────────── the mine ─────────────────────────

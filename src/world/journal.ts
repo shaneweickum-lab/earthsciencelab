@@ -334,6 +334,24 @@ export const JOURNAL: JournalEntry[] = [
       high: "Titanium is the 9th most common element in Earth's crust, yet it's expensive because separating it from oxygen takes a lot of energy (the Kroll process). Its high strength-to-weight ratio makes it valuable for aircraft and medical implants.",
     },
   },
+  {
+    id: "smelting", name: "Smelting", icon: "🔥", category: "rock", source: USGS_MINERALS,
+    hint: "Smelt ore into a bar at a furnace.",
+    fact: {
+      elementary: "Metal in rocks is mixed with other stuff. Heating ore in a very hot fire melts the metal out so it can be poured into bars. That's smelting!",
+      middle: "Most ores are compounds, like a metal joined to oxygen or sulfur. Smelting uses heat and carbon (from charcoal or coke) to pull the oxygen away, leaving the pure metal behind.",
+      high: "In smelting, carbon monoxide from burning carbon reduces metal oxides (for example Fe₂O₃ + 3CO → 2Fe + 3CO₂). It takes a lot of energy and releases CO₂, which is why recycling metal and newer methods using hydrogen matter for the climate.",
+    },
+  },
+  {
+    id: "alloy", name: "Bronze, an Alloy", icon: "🟫", category: "rock", source: USGS_MINERALS,
+    hint: "Smelt copper and tin together.",
+    fact: {
+      elementary: "Bronze is copper and tin melted together. Mixing metals can make a new metal that's stronger than either one. A mix of metals is called an alloy.",
+      middle: "About 5,000 years ago people discovered that adding tin to copper made bronze, which is much harder. It made better tools and weapons, starting the Bronze Age. Steel (iron + carbon) and brass (copper + zinc) are alloys too.",
+      high: "In an alloy, atoms of a different size distort the metal's crystal lattice and pin dislocations (the defects that let planes of atoms slip), so the metal resists bending: solid-solution strengthening. Bronze with about 12% tin is far harder than pure copper.",
+    },
+  },
 ];
 
 export const JOURNAL_BY_ID: Record<string, JournalEntry> = Object.fromEntries(JOURNAL.map((e) => [e.id, e]));

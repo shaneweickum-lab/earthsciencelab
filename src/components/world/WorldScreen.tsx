@@ -13,6 +13,7 @@ import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
 import { Bag, DaySummary, HouseMenu, IntroLetter, TvForecast } from "./Menus";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart } from "./Chest";
+import { CraftMenu } from "./Craft";
 import { labelLayer, runtime, useWorld } from "./useWorld";
 
 const WorldScene = dynamic(() => import("./scene/WorldScene"), {
@@ -49,9 +50,9 @@ export function doAction(mode: "use" | "interact" = "use") {
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
   else if (target === "mine") st.open("mine");
-  else if (target === "chest") {
+  else if (target === "chest" || target === "craft") {
     const { x, y } = facingTile(here);
-    st.openChest(buildingAt(here, x, y)!.id);
+    st.openChest(buildingAt(here, x, y)!.id, target);
   } else {
     runtime.actionAt = performance.now();
     st.update(mode === "interact" ? interact : act);
@@ -256,6 +257,7 @@ export function WorldScreen() {
           {menu === "shipping" && <ShippingMenu />}
           {menu === "chest" && <ChestMenu />}
           {menu === "mine" && <MineCart />}
+          {menu === "craft" && <CraftMenu />}
           {menu === "journal" && <JournalBook />}
           {menu === "pause" && <PauseMenu />}
           {menu === "npc" && <NpcDialog />}

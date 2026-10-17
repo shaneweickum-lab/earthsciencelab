@@ -1,7 +1,7 @@
 import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
-import { cropDays, ITEMS, item, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type ToolUse } from "./items";
+import { cropDays, ITEMS, item, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type Recipe, type Station, type ToolUse } from "./items";
 import { BUILDING_SIZE, CHEST_SIZE, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
@@ -620,9 +620,9 @@ export function act(state: WorldState): WorldState {
   const t = tileAt(state, x, y);
   if (!t) return state;
   if (crittersHere(state).some((c) => c.x === x && c.y === y)) return interact(state);
-  // Ladders and the mine entrance work with whatever you're holding.
+  // Ladders, the mine entrance, and Grandma's barn work with whatever you're holding.
   const b = buildingAt(state, x, y);
-  if (b && (b.kind === "ladderUp" || b.kind === "ladderDown" || b.kind === "mineEntrance")) return interact(state);
+  if (b && (b.kind === "ladderUp" || b.kind === "ladderDown" || b.kind === "mineEntrance" || (b.kind === "barn" && !b.data.owner))) return interact(state);
   const slot = selectedItem(state);
   const def = slot ? ITEMS[slot.item] : null;
   if (t.crop && !t.crop.dead && t.crop.growth >= 1 && def?.kind !== "amendment") return harvest(state, x, y);
@@ -812,7 +812,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -823,6 +823,7 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "shippingBin") return "shipping";
   if (b?.kind === "noticeBoard") return "board";
   if (b?.kind === "chest") return "chest";
+  if (b && b.kind in STATIONS) return "craft";
   // Once you've been deep enough, the mine cart at the entrance can take you down.
   if (b?.kind === "mineEntrance" && mineOpen(state) && (state.deepest ?? 0) >= 5) return "mine";
   return null;
@@ -920,8 +921,14 @@ function operateBuilding(state: WorldState, b: Building): WorldState {
       const got = addItem(update({ ...b.data, ready: 0 }), "mulch", hay);
       return got ? say(got, `Collected ${hay} straw mulch from the barn.`) : say(state, "Your bag is full.");
     }
-    case "barn":
-      return say(state, b.data.owner ? "The Ortegas' barn smells like hay and corn." : "Grandma Rosa's old barn. Swallows nest in the rafters.");
+    case "barn": {
+      if (b.data.owner) return say(state, "The Ortegas' barn smells like hay and corn.");
+      if (state.foundWorkbench) return say(state, "Grandma Rosa's old barn. Swallows nest in the rafters.");
+      // Under a dusty tarp in the barn: Grandma's workbench.
+      const got = addItem(state, "kit_workbench", 1);
+      if (!got) return say(state, "Something big is under a tarp in the barn. Make room in your bag to carry it.");
+      return say({ ...got, foundWorkbench: true }, "Under a dusty tarp in the barn you find Grandma Rosa's old workbench! Set it up on the farm to start crafting.");
+    }
     case "chest":
       return say(state, "Grandma Rosa's old chest. Open it to store things or take them out.");
     case "mineEntrance":
@@ -1063,9 +1070,13 @@ export function placeBuilding(state: WorldState, slotIndex: number, x: number, y
   return def.building === "greenhouse" ? discover(next, "greenhouse-effect") : next;
 }
 
+/** Things you built yourself can be picked back up (Grandma's chest stays by the house). */
+export const canPickUp = (b: Building) => !TOWN_KINDS.includes(b.kind) && !b.data.owner && b.id !== "chest";
+
 export function pickUpBuilding(state: WorldState, id: string): WorldState {
   const b = state.buildings.find((x) => x.id === id);
-  if (!b || TOWN_KINDS.includes(b.kind) || b.data.owner) return state;
+  if (!b || !canPickUp(b)) return state;
+  if (b.kind === "chest" && b.data.items?.some(Boolean)) return say(state, "Empty the chest first.");
   if (b.kind === "greenhouse" && greenhouseInterior(b).some((p) => state.tiles[idx(p.x, p.y)].crop)) return say(state, "Harvest or clear the greenhouse beds first.");
   const kit = `kit_${b.kind}`;
   const got = addItem(state, kit, 1);
@@ -1106,6 +1117,30 @@ export function swapSlots(state: WorldState, a: number, b: number): WorldState {
   const inv = [...state.inventory];
   [inv[a], inv[b]] = [inv[b], inv[a]];
   return { ...state, inventory: inv };
+}
+
+// ───────────────────────── crafting ─────────────────────────
+
+/** What each crafting station is called. */
+export const STATIONS: Record<Station, string> = { workbench: "Workbench", grinder: "Grinder", spinningWheel: "Spinning Wheel", furnace: "Furnace" };
+
+/** How many of a recipe's inputs you have, and whether you can make it. */
+export function recipeStatus(state: WorldState, recipe: Recipe) {
+  const inputs = recipe.inputs.map((i) => ({ ...i, have: countItem(state, i.item) }));
+  return { inputs, ok: inputs.every((i) => i.have >= i.qty) };
+}
+
+/** Make one batch of a recipe at a station. */
+export function craft(state: WorldState, id: string): WorldState {
+  const recipe = RECIPES.find((x) => x.id === id);
+  if (!recipe) return state;
+  if (!recipeStatus(state, recipe).ok) return say(state, "You don't have everything for that yet.");
+  let s = state;
+  for (const i of recipe.inputs) s = removeItem(s, i.item, i.qty)!;
+  const got = addItem(s, recipe.id, recipe.qty);
+  if (!got) return say(state, "Your bag is full.");
+  const made = say(got, `Made ${recipe.qty > 1 ? `${recipe.qty} ` : ""}${item(recipe.id).name}!`);
+  return recipe.id === "bronzeBar" ? discover(made, "alloy") : recipe.station === "furnace" ? discover(made, "smelting") : made;
 }
 
 // ───────────────────────── the mine ─────────────────────────

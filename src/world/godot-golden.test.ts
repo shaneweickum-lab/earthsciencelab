@@ -14,10 +14,10 @@ import { AVATARS, DEFAULT_AVATAR } from "./avatars";
 import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, timeOfDay, yearFraction, type Calendar } from "./clock";
 import {
   act, addItem, applyTool, buy, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
-  swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest, enterMine, tileAt, facingTile,
+  swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest, enterMine, tileAt, facingTile, craft,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
-import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
 import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
 import { BUILDING_SIZE, FARM, H, MINE_ENTRANCE, MINE_START, MINE_W, TOWN, W } from "./map";
 import { SPAWNS } from "./nature";
@@ -64,7 +64,7 @@ const CALENDARS: Calendar[] = [
 describe("Godot data tables", () => {
   it("are exported", () => {
     emit("data/crops.json", { crops: CROPS, order: CROP_ORDER, familyLabel: FAMILY_LABEL, world: WORLD_CROPS });
-    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST, tiers: TIERS });
+    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST, tiers: TIERS, recipes: RECIPES });
     emit("data/settings.json", { features: SCIENCE_FEATURES, presets: PRESETS, defaults: DEFAULT_SETTINGS });
     emit("data/weather.json", WEATHER);
     emit("data/journal.json", { entries: JOURNAL, categories: CATEGORY_INFO, mushroomSafety: MUSHROOM_SAFETY });
@@ -208,6 +208,7 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "weather": return { state: { ...s, weather: { ...s.weather, [op.day as number]: op.w as WorldState["weather"][number] } } };
     case "select": return { state: { ...s, selected: op.i as number } };
     case "enterMine": return { state: enterMine(s, op.floor as number) };
+    case "craft": return { state: craft(s, op.id as string) };
     case "selectItem": return { state: { ...s, selected: Math.max(0, s.inventory.findIndex((x) => x?.item === op.item)) } };
     case "give": return { state: addItem(s, op.item as string, op.qty as number, (op.grade as Grade) ?? undefined) ?? s };
     case "act": return { state: act(s) };
@@ -344,6 +345,17 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
     run({ op: "enterMine", floor: 5 });
     run({ op: "player", x: MINE_START.x, y: MINE_START.y + 1, facing: "up" });
     run({ op: "interact" });
+    // Find Grandma's workbench in the barn, set it up, and craft with what the mine gave.
+    run({ op: "player", x: 16, y: 8, facing: "up" });
+    run({ op: "act" });
+    run({ op: "selectItem", item: "kit_workbench" });
+    run({ op: "player", x: 27, y: 8, facing: "down" });
+    run({ op: "applyTool" });
+    run({ op: "player", x: 27, y: 8, facing: "down" });
+    run({ op: "give", item: "fiber", qty: 24, grade: null });
+    run({ op: "give", item: "wood", qty: 6, grade: null });
+    for (const id of ["refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "rope",
+      "sticks", "sticks", "copperBar", "bronzeBar", "ironBar", "axe_copper", "pickaxe_bronze", "axe", "kit_chest", "kit_furnace", "hoe", "rope"]) run({ op: "craft", id });
   }
   for (let n = 0; n < steps; n++) {
     const k = r();

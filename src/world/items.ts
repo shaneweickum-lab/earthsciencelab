@@ -134,6 +134,15 @@ const materials: ItemDef[] = [
   { id: "stone", name: "Stone", icon: "🪨", kind: "material", sell: 2, desc: "From rocks in the field." },
   { id: "honey", name: "Honey", icon: "🍯", kind: "produce", sell: 60, desc: "Made by bees from flower nectar." },
   { id: "egg", name: "Egg", icon: "🥚", kind: "produce", sell: 18, desc: "Fresh from your hens, who eat bugs and weed seeds all day." },
+  // Crafting materials.
+  { id: "sticks", name: "Sticks", icon: "🥢", kind: "material", sell: 1, desc: "Split from wood at a workbench. Handles for tools." },
+  { id: "refinedFiber", name: "Refined Fiber", icon: "🧶", kind: "material", sell: 2, desc: "Plant fiber spun smooth and strong on a spinning wheel." },
+  { id: "rope", name: "Rope", icon: "🪢", kind: "material", sell: 12, desc: "Refined fiber twisted into rope. Lashes tool heads to handles." },
+  { id: "copperBar", name: "Copper Bar", icon: "🟧", kind: "material", sell: 30, desc: "Smelted from copper ore. Makes copper tools." },
+  { id: "bronzeBar", name: "Bronze Bar", icon: "🟫", kind: "material", sell: 40, desc: "An alloy of copper and tin, harder than either one alone." },
+  { id: "ironBar", name: "Iron Bar", icon: "⬜", kind: "material", sell: 60, desc: "Smelted from iron ore. Tough and long-lasting." },
+  { id: "goldBar", name: "Gold Bar", icon: "🟨", kind: "material", sell: 140, desc: "Pure gold. Beautiful, valuable, and soft." },
+  { id: "mithrilBar", name: "Mithril Bar", icon: "🟦", kind: "material", sell: 320, desc: "Glows faintly blue. The best tools are made from it." },
   // Ores from the mine. Smelt them into bars at a furnace.
   { id: "copperOre", name: "Copper Ore", icon: "🟠", kind: "material", sell: 5, desc: "Green-streaked rock with copper in it. Found near the top of the mine." },
   { id: "tinOre", name: "Tin Ore", icon: "⚪", kind: "material", sell: 5, desc: "Heavy, dark rock with tin in it. Melt it with copper to make bronze." },
@@ -155,6 +164,11 @@ const kits: ItemDef[] = [
   { id: "kit_pathStone", name: "Stepping Stone", icon: "⬜", kind: "kit", price: 2, building: "pathStone", desc: "A path tile. Walk on it, don't till it." },
   { id: "kit_well", name: "Well", icon: "🪣", kind: "kit", price: 150, building: "well", desc: "Reaches groundwater. Refill your watering can here any time." },
   { id: "kit_chickenCoop", name: "Chicken Coop", icon: "🐔", kind: "kit", price: 400, building: "chickenCoop", desc: "Hens lay eggs every morning, eat pests on nearby crops, and their manure becomes compost." },
+  { id: "kit_workbench", name: "Workbench", icon: "🪚", kind: "kit", building: "workbench", desc: "Craft sticks, chests, and the other workstations." },
+  { id: "kit_grinder", name: "Grinder", icon: "⚙️", kind: "kit", building: "grinder", desc: "Sharpen and fit tool heads: makes axes, pickaxes, and other tools." },
+  { id: "kit_spinningWheel", name: "Spinning Wheel", icon: "🧵", kind: "kit", building: "spinningWheel", desc: "Spin plant fiber into refined fiber, and refined fiber into rope." },
+  { id: "kit_furnace", name: "Furnace", icon: "🔥", kind: "kit", building: "furnace", desc: "Smelts ore into metal bars, burning wood for heat." },
+  { id: "kit_chest", name: "Storage Chest", icon: "🧰", kind: "kit", building: "chest", desc: "Twenty slots of storage. Put it anywhere on your farm." },
   { id: "kit_smallBarn", name: "Small Barn", icon: "🛖", kind: "kit", price: 600, building: "smallBarn", desc: "Stores hay. Old hay becomes straw mulch you can collect each morning." },
 ];
 
@@ -204,6 +218,45 @@ export function item(id: string): ItemDef {
   if (!i) throw new Error(`Unknown item ${id}`);
   return i;
 }
+
+export type Station = "workbench" | "grinder" | "spinningWheel" | "furnace";
+
+export interface Recipe {
+  /** The item made (and the recipe's id). */
+  id: string;
+  qty: number;
+  station: Station;
+  inputs: { item: string; qty: number }[];
+}
+
+const r = (station: Station, id: string, inputs: [string, number][], qty = 1): Recipe => ({ id, qty, station, inputs: inputs.map(([item, n]) => ({ item, qty: n })) });
+/** Furnaces burn wood for heat: more for metals that melt hotter. */
+const smelt = (bar: string, ores: [string, number][], wood: number) => r("furnace", bar, [...ores, ["wood", wood]]);
+const toolHead = (tier: Tier) => (tier === "base" ? ["stone", 3] : [`${tier}Bar`, 3]) as [string, number];
+
+/** What each station makes. */
+export const RECIPES: Recipe[] = [
+  r("workbench", "sticks", [["wood", 1]], 2),
+  r("workbench", "kit_chest", [["wood", 25]]),
+  r("workbench", "kit_grinder", [["stone", 15], ["wood", 10]]),
+  r("workbench", "kit_spinningWheel", [["wood", 20], ["sticks", 4]]),
+  r("workbench", "kit_furnace", [["stone", 25], ["copperOre", 5]]),
+  r("spinningWheel", "refinedFiber", [["fiber", 3]]),
+  r("spinningWheel", "rope", [["refinedFiber", 8]]),
+  smelt("copperBar", [["copperOre", 5]], 1),
+  // Bronze is an alloy: copper and tin melted together.
+  smelt("bronzeBar", [["copperOre", 3], ["tinOre", 2]], 1),
+  smelt("ironBar", [["ironOre", 5]], 2),
+  smelt("goldBar", [["goldOre", 5]], 2),
+  smelt("mithrilBar", [["mithrilOre", 5]], 3),
+  r("grinder", "hoe", [["sticks", 2], ["stone", 3]]),
+  r("grinder", "scythe", [["sticks", 2], ["stone", 2], ["rope", 1]]),
+  r("grinder", "can", [["copperBar", 2]]),
+  ...TIER_ORDER.flatMap((tier) => (["axe", "pickaxe"] as const).map((use) => r(
+    "grinder", tier === "base" ? use : `${use}_${tier}`,
+    [toolHead(tier), ["sticks", 2], ["rope", tier === "mithril" ? 2 : 1]],
+  ))),
+];
 
 /** Science tools the store only sells after the quest that introduces them (quests.ts). */
 export const SHOP_UNLOCKS: Record<string, string> = { shovel: "dig-deeper", labKit: "feed-the-soil", ring: "soak-it-up" };
