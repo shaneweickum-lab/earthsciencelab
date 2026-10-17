@@ -3,9 +3,11 @@ class_name Hud
 ## the hotbar; and the tile inspector. Port of Hud.tsx.
 
 const SEASON_ICON := {"Spring": "🌸", "Summer": "☀️", "Fall": "🍂", "Winter": "❄️"}
-const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest"}
+const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest", "cave": "Cave floor", "caveWall": "Rock wall"}
 const LABELS := {
 	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "chest": "Tool Chest", "extension": "Extension Office", "cottage": "Cottage",
+	"mineEntrance": "Old Mine", "ladderUp": "Ladder up", "ladderDown": "Ladder down",
+	"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace",
 	"fountain": "Fountain", "noticeBoard": "Notice board", "field": "Cornfield", "lamp": "Street lamp", "prop": "Market cart",
 }
 
@@ -97,6 +99,9 @@ static func _slot(w: Dictionary, i: int) -> Control:
 			var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
 			q.position = Vector2(30, 32)
 			b.add_child(q)
+		var wear := Ui.wear_bar(s, 52, 45)
+		if wear:
+			b.add_child(wear)
 	var n := Ui.text(str((i + 1) % 10), 10, Ui.MUTED, 900, false)
 	n.position = Vector2(4, 0)
 	b.add_child(n)
@@ -163,7 +168,7 @@ static func inspector(w: Dictionary) -> Control:
 			col.add_child(Ui.text("Soil health: %s" % Js.num(Grades.soil_health(t)), 12, Ui.INK, 900))
 	if preview.label:
 		col.add_child(Ui.panel(Ui.text("[b]Space · %s:[/b] %s" % [preview.label, preview.text], 12), Ui.LEAF_LIGHT if preview.ok else Ui.PAPER, 10, 7, Color(0, 0, 0, 0), 0))
-	if b and not b.kind in WorldMap.TOWN_KINDS and not b.data.get("owner"):
+	if b and World.can_pick_up(b):
 		col.add_child(Ui.button("Pick up (P)", func(): Game.update(func(s): return World.pick_up_building(s, b.id)), "ghost", 12))
 	return Ui.panel(col, Color(Ui.CARD, 0.95), 16, 12, Color(Ui.SOIL_DARK, 0.2), 2)
 
@@ -174,7 +179,9 @@ static func _status(w: Dictionary, t: Dictionary, x: int, y: int) -> Array:
 	if World._crit_at(w, x, y) != null:
 		lines.append("Something is here! Press Space to take a closer look.")
 	if t.obstacle:
-		lines.append("A %s is in the way." % t.obstacle)
+		var o: String = t.obstacle
+		var broken := " (%s%% broken)" % Js.num(Js.round(float(t.hits) / World.OBSTACLE_HP[o] * 100)) if t.get("hits") else ""
+		lines.append("A %s is in the way.%s" % [World.obstacle_name(o), broken])
 	if t.weeds:
 		lines.append("Weeds are growing here.")
 	if t.mulch:

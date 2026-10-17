@@ -187,6 +187,9 @@ func _build_land(world: Dictionary, season: String) -> void:
 				add.call(low, N + ("TreeStump_Snow" if winter else ("TreeStump_Moss" if r2 > 0.6 else "TreeStump")), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.6))
 			"log":
 				add.call(low, N + ("WoodLog_Snow" if winter else ("WoodLog_Moss" if r2 > 0.5 else "WoodLog")), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.38))
+			"sapling":
+				var kind: String = _pick(TREES, r2)
+				add.call(low, N + "%s%s_1" % [kind, suffix], Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.35))
 			"stick":
 				sticks.append({"xf": Models.xf(Vector3(x, 0.05, z), Vector3(0, ry, 0.1)), "color": Color("#7a5636")})
 		if t.weeds:

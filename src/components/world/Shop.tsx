@@ -18,14 +18,15 @@ export function StoreMenu() {
   const w = useWorld((s) => s.world!);
   const update = useWorld((s) => s.update);
   const close = useWorld((s) => s.close);
-  const [tab, setTab] = useState<"seeds" | "soil" | "build" | "sell">("seeds");
+  const [tab, setTab] = useState<"seeds" | "tools" | "soil" | "build" | "sell">("seeds");
   const season = seasonOf(dayOf(w.minute), w.settings);
   const seasonal = w.settings.seasons && on(w, "plantingSeasons");
   const hasGreenhouse = w.buildings.some((b) => b.kind === "greenhouse");
   const all = Object.values(ITEMS);
   const seeds = all.filter((i) => i.kind === "seed" && (!seasonal || hasGreenhouse || WORLD_CROPS[i.crop!].seasons.includes(season)));
-  const science = (i: ItemDef) => (i.kind === "tool" && !!i.price) || i.id in SHOP_UNLOCKS;
-  const tools = all.filter(science);
+  const science = (i: ItemDef) => i.id in SHOP_UNLOCKS;
+  const farmTools = all.filter((i) => i.kind === "tool" && i.price && !science(i));
+  const scienceTools = all.filter(science);
   const soil = all.filter((i) => i.kind === "amendment" && !science(i));
   const kits = all.filter((i) => i.kind === "kit");
   const sellable = w.inventory.map((s, i) => ({ s, i })).filter(({ s }) => s && ITEMS[s.item].sell);
@@ -33,7 +34,7 @@ export function StoreMenu() {
   return (
     <Modal title="Seed & Soil Co." icon="🌱" onClose={close} wide>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {([["seeds", "🌱 Seeds"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]] as const).map(([id, label]) => (
+        {([["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className={`btn py-1.5 text-sm ${tab === id ? "btn-soil" : "btn-ghost"}`}>{label}</button>
         ))}
         <span className="ml-auto rounded-full bg-paper px-3 py-1 text-sm font-black">🪙 {w.coins.toLocaleString()}</span>
@@ -64,11 +65,17 @@ export function StoreMenu() {
           }} />
         </>
       )}
+      {tab === "tools" && (
+        <>
+          <p className="mb-2 text-sm text-muted">Tools wear out with use. Buy a new one here, or craft a better one at a workbench.</p>
+          <p className="mb-1.5 text-xs font-black uppercase tracking-wider text-muted">Farm tools</p>
+          <ItemList items={farmTools} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+          <p className="mb-1.5 mt-3 text-xs font-black uppercase tracking-wider text-muted">Science tools</p>
+          <ItemList items={scienceTools} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+        </>
+      )}
       {tab === "soil" && (
         <>
-          <p className="mb-1.5 text-xs font-black uppercase tracking-wider text-muted">Science tools</p>
-          <ItemList items={tools} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
-          <p className="mb-1.5 mt-3 text-xs font-black uppercase tracking-wider text-muted">For the soil</p>
           <ItemList items={soil} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
           <div className="mt-3 flex items-center gap-3 rounded-xl border border-line p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -1,5 +1,5 @@
 import { nextRandom } from "@/game/rng";
-import type { Building, Ground, Obstacle, SoilState, Tile } from "./types";
+import type { Building, Ground, MineFloor, Obstacle, OreRock, SoilState, Tile } from "./types";
 
 /** The farm is the west part of the map (x < 38); the town is east of the forest strip. */
 export const W = 76;
@@ -27,7 +27,14 @@ export const BUILDING_SIZE: Record<Building["kind"], [number, number]> = {
   well: [1, 1], chickenCoop: [2, 2], smallBarn: [3, 3], chest: [1, 1],
   extension: [5, 4], cottage: [4, 4], fountain: [2, 2], noticeBoard: [1, 1], field: [5, 3], lamp: [1, 1], prop: [1, 1],
   barn: [4, 4], silo: [2, 2], windmill: [3, 2], waterTower: [2, 2],
+  mineEntrance: [2, 2], ladderUp: [1, 1], ladderDown: [1, 1],
+  workbench: [1, 1], grinder: [1, 1], spinningWheel: [1, 1], furnace: [1, 1],
 };
+
+/** The mine entrance (2×2, opening south onto the road), and the size of each mine floor. */
+export const MINE_ENTRANCE = { x: 71, y: 8 };
+export const MINE_W = 24;
+export const MINE_H = 18;
 
 /** Slots in a storage chest. */
 export const CHEST_SIZE = 20;
@@ -103,6 +110,8 @@ export function townBuildings(): Building[] {
     { id: "ortega-silo", kind: "silo", x: 59, y: 22, data: { owner: "luis" } },
     { id: "town-windmill", kind: "windmill", x: 67, y: 14, data: {} },
     { id: "water-tower", kind: "waterTower", x: 43, y: 14, data: {} },
+    // The old mine, past the town at the east end of the road.
+    { id: "mine-entrance", kind: "mineEntrance", x: MINE_ENTRANCE.x, y: MINE_ENTRANCE.y, data: {} },
   ];
 }
 
@@ -167,7 +176,7 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
   for (let y = sq.y0; y <= sq.y1; y++) for (let x = sq.x0; x <= sq.x1; x++) path(x, y);
   // Walkways to doors and the garden.
   // (Doors face south, so the Ortegas' walkway wraps around to the front of their cottage.)
-  for (const [x, y0, y1] of [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20]] as const)
+  for (const [x, y0, y1] of [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20], [72, 10, 10]] as const)
     for (let y = y0; y <= y1; y++) path(x, y);
   for (let x = 45; x <= 47; x++) path(x, 26);
   for (let x = 48; x < sq.x0; x++) path(x, 16);
@@ -185,4 +194,74 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
     }
   }
   return { tiles, buildings };
+}
+
+// ───────────────────────── the mine ─────────────────────────
+
+const CAVE_SOIL: SoilState = { om: 0, life: 0, structure: 0, water: 0, nutrients: 0, ph: 7 };
+
+/** Which ores show up how often, by depth: copper and tin near the top, gold and mithril deep down. */
+export function oreChances(floor: number): [OreRock, number][] {
+  if (floor < 5) return [["copperOre", 0.12], ["tinOre", 0.08]];
+  if (floor < 10) return [["copperOre", 0.1], ["tinOre", 0.08], ["ironOre", 0.06]];
+  if (floor < 20) return [["copperOre", 0.05], ["tinOre", 0.05], ["ironOre", 0.1], ["goldOre", 0.04]];
+  if (floor < 30) return [["ironOre", 0.1], ["goldOre", 0.06], ["mithrilOre", 0.03]];
+  return [["ironOre", 0.08], ["goldOre", 0.08], ["mithrilOre", 0.07]];
+}
+
+/** Where you arrive on a floor: the ladder up is here, and you stand just south of it. */
+export const MINE_START = { x: 12, y: 8 };
+
+/**
+ * A fresh floor of the mine: a winding cave carved by random walkers, full of rocks, some with
+ * ore. The ladder down hides under one rock far from the start. Floors differ each day.
+ */
+export function mineFloor(seed: number, floor: number, day: number): MineFloor {
+  let s = (seed ^ Math.imul(floor, 0x9e3779b1) ^ Math.imul(day, 0x85ebca6b)) >>> 0;
+  const rand = () => {
+    const [v, n] = nextRandom(s);
+    s = n;
+    return v;
+  };
+  const at = (x: number, y: number) => y * MINE_W + x;
+  const tiles: Tile[] = Array.from({ length: MINE_W * MINE_H }, () => tile("caveWall", CAVE_SOIL));
+  const carve = (x: number, y: number) => (tiles[at(x, y)] = tile("cave", CAVE_SOIL));
+  const { x: sx, y: sy } = MINE_START;
+  for (const [dx, dy] of [[0, 0], [0, 1], [0, 2], [-1, 1], [1, 1]]) carve(sx + dx, sy + dy);
+  for (let w = 0; w < 5; w++) {
+    let x = sx, y = sy + 1;
+    for (let step = 0; step < 90; step++) {
+      const d = Math.floor(rand() * 4);
+      x = Math.min(MINE_W - 2, Math.max(1, x + [1, -1, 0, 0][d]));
+      y = Math.min(MINE_H - 2, Math.max(1, y + [0, 0, 1, -1][d]));
+      carve(x, y);
+    }
+  }
+  const chances = oreChances(floor);
+  const rocks: number[] = [];
+  for (let y = 1; y < MINE_H - 1; y++) for (let x = 1; x < MINE_W - 1; x++) {
+    const i = at(x, y);
+    if (tiles[i].ground !== "cave" || (Math.abs(x - sx) <= 1 && y >= sy - 1 && y <= sy + 2)) continue;
+    if (rand() >= 0.42) continue;
+    let r = rand();
+    let rock: Obstacle = "stone";
+    for (const [ore, p] of chances) {
+      if (r < p) {
+        rock = ore;
+        break;
+      }
+      r -= p;
+    }
+    tiles[i].obstacle = rock;
+    rocks.push(i);
+  }
+  // The ladder down hides under a rock well away from the start.
+  const far = rocks.filter((i) => Math.abs((i % MINE_W) - sx) + Math.abs(Math.floor(i / MINE_W) - sy) >= 6);
+  const pool = far.length ? far : rocks;
+  let ladderAt = pool.length ? pool[Math.floor(rand() * pool.length)] : -1;
+  if (ladderAt < 0) {
+    ladderAt = at(sx, sy + 2);
+    tiles[ladderAt].obstacle = "stone";
+  }
+  return { floor, tiles, ladderAt, buildings: [{ id: "ladder-up", kind: "ladderUp", x: sx, y: sy, data: {} }] };
 }

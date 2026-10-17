@@ -23,7 +23,15 @@ function findChromium() {
 const browser = await chromium.launch({ executablePath: findChromium(), args: ["--use-gl=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist"] });
 const errors = [];
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-page.on("console", (m) => { if (m.type() === "error") errors.push(`${page.url()}: ${m.text()}`); });
+// Leaving a page cancels its downloads, and three.js reports a cancelled texture as an error.
+// Those come from the test moving on, not from the page, so they don't count.
+let lastAbort = 0;
+page.on("requestfailed", (r) => { if (r.failure()?.errorText === "net::ERR_ABORTED") lastAbort = Date.now(); });
+page.on("console", (m) => {
+  if (m.type() !== "error") return;
+  if (/Couldn't load texture/.test(m.text()) && Date.now() - lastAbort < 1000) return;
+  errors.push(`${page.url()}: ${m.text()}`);
+});
 page.on("pageerror", (e) => errors.push(`${page.url()}: ${e.message}`));
 
 async function shot(name) {
@@ -113,6 +121,13 @@ async function teleport(x, y, facing, tiles = {}) {
   await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
 }
 const inspector = page.getByLabel("Tile inspector");
+// The bag starts empty: take Grandma Rosa's tools out of the chest beside the house.
+await teleport(7, 10, "up");
+await page.keyboard.press(" ");
+await page.getByRole("dialog", { name: "Grandma Rosa's chest" }).waitFor();
+await page.getByRole("button", { name: "Take all" }).click();
+await shot("06b-chest");
+await page.keyboard.press("Escape");
 const clean = { obstacle: null, weeds: false, crop: null, tilled: false, mulch: false };
 await teleport(10, 13, "down", { [13 * MAP_W + 10]: clean, [14 * MAP_W + 10]: { ...clean, weeds: true } });
 await inspector.getByText("Weeds are growing here.").waitFor();
@@ -123,14 +138,14 @@ await page.keyboard.press("1"); // hoe
 await inspector.getByText(/Till:/).waitFor();
 await page.keyboard.press(" ");
 await inspector.getByText("Tilled", { exact: true }).waitFor();
-await page.keyboard.press("8"); // carrot seeds
+await page.keyboard.press("6"); // carrot seeds
 await page.keyboard.press(" ");
 await page.getByText(/^Planted Carrots\./).waitFor();
 await page.keyboard.press("2"); // watering can
 await page.keyboard.press(" ");
-await page.keyboard.press("0"); // lab test kit
+await page.keyboard.press("7"); // compost
 await page.keyboard.press(" ");
-await page.getByText(/Lab results: organic matter/).waitFor();
+await page.getByText(/Spread compost/).waitFor();
 await page.waitForTimeout(800);
 await shot("06c-planted");
 
@@ -188,8 +203,9 @@ await shot("07c-store");
 await page.getByRole("button", { name: "Close" }).click();
 await page.keyboard.press("i");
 const bag = page.getByRole("dialog", { name: "Your bag" });
+// Swap the kit into the 10th hotbar slot.
 await bag.getByRole("button", { name: /Compost Bin ×1/ }).click();
-await bag.getByRole("button", { name: /Lab Test Kit/ }).click();
+await bag.locator(".grid > button").nth(9).click();
 await page.keyboard.press("Escape");
 await teleport(12, 11, "down", { [12 * MAP_W + 12]: clean });
 await page.keyboard.press("0");

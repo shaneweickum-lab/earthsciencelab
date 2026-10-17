@@ -2,15 +2,15 @@
 
 import { CROPS } from "@/game/crops";
 import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf } from "@/world/clock";
-import { buildingAt, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
+import { buildingAt, canPickUp, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
 import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
 import { expectedGrade } from "@/world/grades";
 import { previewAction } from "@/world/preview";
 import { NPC_BY_ID } from "@/world/town";
-import { TOWN_KINDS, type Tile, type WorldState } from "@/world/types";
+import type { Tile, WorldState } from "@/world/types";
 import { tempAt, WEATHER } from "@/world/weather";
-import { GradeBadge, ItemIcon } from "./ItemIcon";
+import { GradeBadge, ItemIcon, WearBar } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 const SEASON_ICON = { Spring: "🌸", Summer: "☀️", Fall: "🍂", Winter: "❄️" };
@@ -85,6 +85,7 @@ export function Hotbar() {
             }`}
           >
             {s && <ItemIcon id={s.item} grade={s.grade} />}
+            <WearBar slot={s} />
             <span className="absolute left-1 top-0 text-[10px] font-black text-muted">{(i + 1) % 10}</span>
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black text-ink">{s.qty}</span>}
           </button>
@@ -110,7 +111,7 @@ export function Messages() {
 }
 
 const GROUND_NAME: Record<Tile["ground"], string> = {
-  grass: "Grass", farm: "Garden soil", path: "Path", water: "Pond", sand: "Sandy shore", forest: "Forest",
+  grass: "Grass", farm: "Garden soil", path: "Path", water: "Pond", sand: "Sandy shore", forest: "Forest", cave: "Cave floor", caveWall: "Rock wall",
 };
 
 function SoilRow({ label, value, known, unit = "", tip }: { label: string; value: number; known: boolean; unit?: string; tip: string }) {
@@ -146,7 +147,7 @@ export function TileInspector() {
   const garden = t.ground === "farm" || t.greenhouse;
   const known = knownSoil(w, t);
   const critter = w.critters.find((c) => c.x === x && c.y === y);
-  const pickable = b && !TOWN_KINDS.includes(b.kind) && !b.data.owner;
+  const pickable = b && canPickUp(b);
   return (
     <div className="pointer-events-auto w-64 space-y-2 rounded-2xl border-2 border-soil-dark/20 bg-card/95 p-3 shadow-lg" aria-label="Tile inspector">
       <div className="flex items-baseline justify-between">
@@ -190,13 +191,14 @@ function labelFor(kind: string) {
   return {
     house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", chest: "Tool Chest", extension: "Extension Office", cottage: "Cottage",
     fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
+    mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down",
   }[kind] ?? kind;
 }
 
 function Status({ w, t, x, y, critter }: { w: WorldState; t: Tile; x: number; y: number; critter: boolean }) {
   const lines: string[] = [];
   if (critter) lines.push("Something is here! Press Space to take a closer look.");
-  if (t.obstacle) lines.push(`A ${t.obstacle} is in the way.`);
+  if (t.obstacle) lines.push(`A ${obstacleName(t.obstacle)} is in the way.${t.hits ? ` (${Math.round((t.hits / OBSTACLE_HP[t.obstacle]) * 100)}% broken)` : ""}`);
   if (t.weeds) lines.push("Weeds are growing here.");
   if (t.mulch) lines.push("Covered with straw mulch.");
   if ((t.boost ?? 0) > 0 && !t.crop) lines.push(`🏅 Amendments: grade bonus +${t.boost} for the next crop here.`);

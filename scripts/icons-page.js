@@ -52,6 +52,43 @@ const nature = (n) => kenney("nature-kit", n);
 const crop = (n) => glb(`/models/crops/${n}.glb`);
 const building = (n) => glb(`/models/qbuildings/${n}.glb`);
 
+/** The same model with its grey metal recolored, for copper, bronze, iron, gold, and mithril tools. */
+function metal(root, color) {
+  // sRGB 0–255, as the texture's pixels are.
+  const tint = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material.map) return;
+    const img = o.material.map.image;
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const px = g.getImageData(0, 0, c.width, c.height);
+    const d = px.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const max = Math.max(d[i], d[i + 1], d[i + 2]), min = Math.min(d[i], d[i + 1], d[i + 2]);
+      // Grey, not too dark: the metal parts. Keep their shading, take the tier's color.
+      if (max > 90 && (max - min) / max < 0.3) {
+        const k = max / 175;
+        d[i] = Math.min(255, tint[0] * k);
+        d[i + 1] = Math.min(255, tint[1] * k);
+        d[i + 2] = Math.min(255, tint[2] * k);
+      }
+    }
+    g.putImageData(px, 0, 0);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = o.material.map.flipY;
+    tex.magFilter = THREE.NearestFilter;
+    o.material = o.material.clone();
+    o.material.map = tex;
+  });
+  return root;
+}
+
+const TIER_COLORS = { copper: "#c8753d", bronze: "#b8893a", iron: "#d4d8dc", gold: "#f2c230", mithril: "#7fd6e8" };
+
 // ───────────────────────── simple shapes ─────────────────────────
 
 const mat = (color) => new THREE.MeshStandardMaterial({ color, metalness: 0, roughness: 0.85, flatShading: true });
@@ -248,6 +285,66 @@ const ICONS = {
   kit_chickenCoop: () => building("ChickenCoop"),
   kit_smallBarn: () => building("SmallBarn"),
 };
+/** Ore: a rock from the world with crystals of the ore's color, as the mine draws it. */
+const ORE_COLORS = { copperOre: "#3fae7a", tinOre: "#3b3440", ironOre: "#b24a2c", goldOre: "#f2c230", mithrilOre: "#5fd8f0" };
+async function ore(color) {
+  const rock = await glb("/models/qnature/Rock_2.glb");
+  const r = new THREE.Box3().setFromObject(rock).getSize(new THREE.Vector3());
+  const k = 1 / Math.max(r.x, r.y, r.z);
+  rock.scale.setScalar(k);
+  const bits = [[0.25, 0.55, 0.3, 0.24], [-0.22, 0.45, 0.35, 0.19], [0.05, 0.72, 0.05, 0.21], [0.38, 0.3, -0.1, 0.16]].map(([x, y, z, r]) => {
+    const m = mesh(new THREE.OctahedronGeometry(r, 0), color, [x, y, z], [0.4, x * 3, 0.3]);
+    if (color === ORE_COLORS.mithrilOre) m.material.emissive = new THREE.Color(color).multiplyScalar(0.4);
+    return m;
+  });
+  return group(rock, bits);
+}
+for (const [id, color] of Object.entries(ORE_COLORS)) ICONS[id] = () => ore(color);
+
+/** A metal ingot (a little stack of two). */
+function bars(color) {
+  const bar = (y, ry) => {
+    const m = mesh(new THREE.CylinderGeometry(0.42, 0.55, 0.28, 4, 1), color, [0, y, 0], [0, ry, 0], [1.6, 1, 0.8]);
+    if (color === "#5fd8f0") m.material.emissive = new THREE.Color(color).multiplyScalar(0.3);
+    return m;
+  };
+  return group(bar(0.14, Math.PI / 4), place(bar(0.42, Math.PI / 4), [0.1, 0, 0.05], [0, 0.4, 0]));
+}
+ICONS.copperBar = async () => bars("#c8753d");
+ICONS.bronzeBar = async () => bars("#b8893a");
+ICONS.ironBar = async () => bars("#c9ced6");
+ICONS.goldBar = async () => bars("#f2c230");
+ICONS.mithrilBar = async () => bars("#5fd8f0");
+ICONS.sticks = async () => group([-0.3, 0, 0.3].map((z, i) => cyl(0.05, 0.06, 1.3, i === 1 ? "#9a6b3f" : "#8a5a3c", [0, 0.06 + i * 0.05, z], [0, (i - 1) * 0.35, Math.PI / 2], 6)));
+ICONS.refinedFiber = async () => group(
+  mesh(new THREE.TorusGeometry(0.4, 0.17, 8, 16), "#e8d9a8", [0, 0.2, 0], [Math.PI / 2, 0, 0]),
+  mesh(new THREE.TorusGeometry(0.3, 0.12, 8, 16), "#d9c88f", [0, 0.42, 0], [Math.PI / 2, 0, 0]),
+);
+ICONS.rope = async () => group([0, 1, 2].map((i) => mesh(new THREE.TorusGeometry(0.45 - i * 0.04, 0.09, 6, 20), i % 2 ? "#b08458" : "#c49a6c", [0, 0.1 + i * 0.17, 0], [Math.PI / 2, 0, i])));
+ICONS.kit_workbench = () => survival("workbench");
+ICONS.kit_grinder = () => survival("workbench-grind");
+ICONS.kit_chest = () => survival("chest");
+/** The spinning wheel and furnace are drawn the same way in the game (scene/Buildings.tsx). */
+ICONS.kit_spinningWheel = async () => group(
+  mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 20), "#9a6b3f", [0, 0.85, 0]),
+  [0, 1, 2, 3].map((k) => box(0.04, 0.95, 0.04, "#b08458", [0, 0.85, 0], [0, 0, (k * Math.PI) / 4])),
+  box(0.9, 0.08, 0.3, "#7a5636", [0.15, 0.25, 0]),
+  [[-0.25, 0.12], [0.55, 0.12]].map(([x]) => box(0.07, 0.5, 0.07, "#7a5636", [x, 0.12, 0])),
+  box(0.07, 0.75, 0.07, "#7a5636", [0, 0.5, 0.12]),
+  cyl(0.06, 0.06, 0.25, "#e8d9a8", [0.45, 0.45, 0], [0, 0, 0], 8),
+);
+ICONS.kit_furnace = async () => group(
+  box(0.9, 0.9, 0.8, "#8f8a82", [0, 0.45, 0]),
+  box(0.95, 0.12, 0.85, "#7a756d", [0, 0.92, 0]),
+  box(0.4, 0.35, 0.05, "#1a1410", [0, 0.3, 0.41]),
+  box(0.3, 0.12, 0.06, "#ff8a2a", [0, 0.2, 0.42]),
+  cyl(0.14, 0.16, 0.5, "#7a756d", [0.25, 1.2, -0.15], [0, 0, 0], 8),
+);
+
+for (const [tier, color] of Object.entries(TIER_COLORS)) {
+  ICONS[`axe_${tier}`] = async () => metal(await survival("tool-axe-upgraded"), color);
+  ICONS[`pickaxe_${tier}`] = async () => metal(await survival("tool-pickaxe-upgraded"), color);
+}
 for (const [id, color] of Object.entries(SEED_COLORS)) {
   ICONS[`seed_${id}`] = () => packet(color, PRODUCE[id]());
   ICONS[`crop_${id}`] = PRODUCE[id];

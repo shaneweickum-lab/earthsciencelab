@@ -10,6 +10,9 @@ const MOVE_KEYS := {
 var _terrain := TerrainView.new()
 var _crops := CropsView.new()
 var _buildings := BuildingsView.new()
+var _mine := MineView.new()
+## Where the camera last was ("up", or "mine-<floor>"), so it can jump when you change places.
+var _place := ""
 var _sky := SkyView.new()
 var _camera := Camera3D.new()
 var _player: Actor
@@ -76,7 +79,7 @@ func _on_screen() -> void:
 
 func _build() -> void:
 	_built = true
-	for n in [_sky, _terrain, _crops, _buildings, _critters]:
+	for n in [_sky, _terrain, _crops, _buildings, _critters, _mine]:
 		_world_root.add_child(n)
 	_camera.fov = 40
 	_camera.near = 0.5
@@ -134,6 +137,13 @@ func _refresh() -> void:
 	if not _built or not Game.has_world():
 		return
 	var w := Game.world
+	# Underground, only the mine floor shows; the farm keeps growing out of sight.
+	var up: bool = w.get("mine") == null
+	for n in [_terrain, _crops, _buildings, _critters]:
+		n.visible = up
+	for a in _npcs:
+		a.visible = up and not "nonpcs" in Site.debug
+	_mine.refresh(w)
 	_terrain.refresh(w, _season())
 	_crops.refresh(w)
 	_buildings.refresh(w)
@@ -216,7 +226,8 @@ func _process(delta: float) -> void:
 
 	w = Game.world
 	var player: Dictionary = rt.player
-	_player.update_player(player, rt.moving, _acted, dt, Clock.daylight(w.minute))
+	# Your lantern lights up at night, and always underground.
+	_player.update_player(player, rt.moving, _acted, dt, 0.0 if w.get("mine") != null else Clock.daylight(w.minute))
 	_acted = false
 	for a in _npcs:
 		a.update_npc(w, w.minute + rt.minute_frac, player, dt)
@@ -226,8 +237,12 @@ func _process(delta: float) -> void:
 	for c in _critters.get_children():
 		c.position.y = 0.6 + absf(sin(Time.get_ticks_msec() / 250.0)) * 0.15
 
-	# Camera follows the player.
+	# Camera follows the player (and jumps there when you go in or out of the mine).
 	var target := Vector3(player.x, 12 * _zoom, player.y + 0.5 + 9.5 * _zoom)
+	var place: String = "mine-%d" % int(w.mine.floor) if w.get("mine") != null else "up"
+	if place != _place:
+		_place = place
+		_camera.position = target
 	_camera.position += (target - _camera.position) * minf(1, dt * 5)
 	_camera.look_at(Vector3(_camera.position.x, 0, _camera.position.z - 9.5 * _zoom))
 
@@ -284,7 +299,7 @@ func do_action(mode: String) -> void:
 		Game.talk_to(npc.id)
 		return
 	var target := World.interact_target(here)
-	if target == "chest":
+	if target == "chest" or target == "craft":
 		var f := World.facing_tile(here)
 		Game.chest_id = World.building_at(here, f.x, f.y).id
 	if target != "":

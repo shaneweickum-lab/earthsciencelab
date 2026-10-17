@@ -24,7 +24,16 @@ const BUILDING_SIZE := {
 	"well": [1, 1], "chickenCoop": [2, 2], "smallBarn": [3, 3], "chest": [1, 1],
 	"extension": [5, 4], "cottage": [4, 4], "fountain": [2, 2], "noticeBoard": [1, 1], "field": [5, 3], "lamp": [1, 1], "prop": [1, 1],
 	"barn": [4, 4], "silo": [2, 2], "windmill": [3, 2], "waterTower": [2, 2],
+	"mineEntrance": [2, 2], "ladderUp": [1, 1], "ladderDown": [1, 1],
+	"workbench": [1, 1], "grinder": [1, 1], "spinningWheel": [1, 1], "furnace": [1, 1],
 }
+
+## The mine entrance (2×2, opening south onto the road), and the size of each mine floor.
+const MINE_ENTRANCE := {"x": 71, "y": 8}
+const MINE_W := 24
+const MINE_H := 18
+## Where you arrive on a floor: the ladder up is here, and you stand just south of it.
+const MINE_START := {"x": 12, "y": 8}
 
 ## Slots in a storage chest.
 const CHEST_SIZE := 20
@@ -34,7 +43,8 @@ const WALKABLE_BUILDINGS := ["pathStone", "flowerBed"]
 
 ## Town buildings the player can't build, pick up, or build over.
 const TOWN_KINDS := [
-	"house", "store", "shippingBin", "chest", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+	"house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
+	"mineEntrance", "ladderUp", "ladderDown",
 ]
 
 
@@ -125,6 +135,8 @@ static func town_buildings() -> Array:
 		{"id": "ortega-silo", "kind": "silo", "x": 59, "y": 22, "data": {"owner": "luis"}},
 		{"id": "town-windmill", "kind": "windmill", "x": 67, "y": 14, "data": {}},
 		{"id": "water-tower", "kind": "waterTower", "x": 43, "y": 14, "data": {}},
+		# The old mine, past the town at the east end of the road.
+		{"id": "mine-entrance", "kind": "mineEntrance", "x": MINE_ENTRANCE.x, "y": MINE_ENTRANCE.y, "data": {}},
 	]
 
 
@@ -179,7 +191,7 @@ static func create_map(seed: int) -> Dictionary:
 		for px in range(sq.x0, sq.x1 + 1):
 			path.call(px, py)
 	# Walkways to doors and the garden. (Doors face south, so the Ortegas' walkway wraps around.)
-	for w in [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20]]:
+	for w in [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20], [72, 10, 10]]:
 		for py in range(w[1], w[2] + 1):
 			path.call(w[0], py)
 	for px in range(45, 48):
@@ -201,3 +213,70 @@ static func create_map(seed: int) -> Dictionary:
 				if t.ground == "forest":
 					t.ground = "grass"
 	return {"tiles": tiles, "buildings": buildings}
+
+
+# ───────────────────────── the mine ─────────────────────────
+
+const CAVE_SOIL := {"om": 0, "life": 0, "structure": 0, "water": 0, "nutrients": 0, "ph": 7}
+
+
+## Which ores show up how often, by depth: copper and tin near the top, gold and mithril deep down.
+static func ore_chances(level: int) -> Array:
+	if level < 5:
+		return [["copperOre", 0.12], ["tinOre", 0.08]]
+	if level < 10:
+		return [["copperOre", 0.1], ["tinOre", 0.08], ["ironOre", 0.06]]
+	if level < 20:
+		return [["copperOre", 0.05], ["tinOre", 0.05], ["ironOre", 0.1], ["goldOre", 0.04]]
+	if level < 30:
+		return [["ironOre", 0.1], ["goldOre", 0.06], ["mithrilOre", 0.03]]
+	return [["ironOre", 0.08], ["goldOre", 0.08], ["mithrilOre", 0.07]]
+
+
+## A fresh floor of the mine: a winding cave carved by random walkers, full of rocks, some with
+## ore. The ladder down hides under one rock far from the start. Floors differ each day.
+static func mine_floor(seed: int, level: int, day: int) -> Dictionary:
+	var r := Rng.stream(seed ^ U32.imul(level, 0x9e3779b1) ^ U32.imul(day, 0x85ebca6b))
+	var tiles := []
+	for i in MINE_W * MINE_H:
+		tiles.append(_tile("caveWall", CAVE_SOIL.duplicate()))
+	var carve := func(x: int, y: int) -> void:
+		tiles[y * MINE_W + x] = _tile("cave", CAVE_SOIL.duplicate())
+	var sx: int = MINE_START.x
+	var sy: int = MINE_START.y
+	for d in [[0, 0], [0, 1], [0, 2], [-1, 1], [1, 1]]:
+		carve.call(sx + d[0], sy + d[1])
+	for w in 5:
+		var x := sx
+		var y := sy + 1
+		for step in 90:
+			var d := int(floor(r.next() * 4))
+			x = mini(MINE_W - 2, maxi(1, x + [1, -1, 0, 0][d]))
+			y = mini(MINE_H - 2, maxi(1, y + [0, 0, 1, -1][d]))
+			carve.call(x, y)
+	var chances := ore_chances(level)
+	var rocks := []
+	for y in range(1, MINE_H - 1):
+		for x in range(1, MINE_W - 1):
+			var i := y * MINE_W + x
+			if tiles[i].ground != "cave" or (absi(x - sx) <= 1 and y >= sy - 1 and y <= sy + 2):
+				continue
+			if r.next() >= 0.42:
+				continue
+			var p := r.next()
+			var rock := "stone"
+			for c in chances:
+				if p < c[1]:
+					rock = c[0]
+					break
+				p -= c[1]
+			tiles[i].obstacle = rock
+			rocks.append(i)
+	# The ladder down hides under a rock well away from the start.
+	var far := rocks.filter(func(i): return absi(i % MINE_W - sx) + absi(i / MINE_W - sy) >= 6)
+	var pool := far if far.size() else rocks
+	var ladder_at: int = pool[int(floor(r.next() * pool.size()))] if pool.size() else -1
+	if ladder_at < 0:
+		ladder_at = (sy + 2) * MINE_W + sx
+		tiles[ladder_at].obstacle = "stone"
+	return {"floor": level, "tiles": tiles, "ladderAt": ladder_at, "buildings": [{"id": "ladder-up", "kind": "ladderUp", "x": sx, "y": sy, "data": {}}]}

@@ -14,12 +14,12 @@ import { AVATARS, DEFAULT_AVATAR } from "./avatars";
 import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, timeOfDay, yearFraction, type Calendar } from "./clock";
 import {
   act, addItem, applyTool, buy, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
-  swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest,
+  swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest, enterMine, tileAt, facingTile, craft,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
-import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, tempFactor, UPGRADES, WORLD_CROPS } from "./items";
+import { cropDays, ITEMS, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
 import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
-import { BUILDING_SIZE, FARM, H, TOWN, W } from "./map";
+import { BUILDING_SIZE, FARM, H, MINE_ENTRANCE, MINE_START, MINE_W, TOWN, W } from "./map";
 import { SPAWNS } from "./nature";
 import { previewAction } from "./preview";
 import { accept, boardRequests, expireBoard, goalLabel, offers, QUESTS, questState, questStatus, rewardText, turnIn } from "./quests";
@@ -64,7 +64,7 @@ const CALENDARS: Calendar[] = [
 describe("Godot data tables", () => {
   it("are exported", () => {
     emit("data/crops.json", { crops: CROPS, order: CROP_ORDER, familyLabel: FAMILY_LABEL, world: WORLD_CROPS });
-    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST });
+    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST, tiers: TIERS, recipes: RECIPES });
     emit("data/settings.json", { features: SCIENCE_FEATURES, presets: PRESETS, defaults: DEFAULT_SETTINGS });
     emit("data/weather.json", WEATHER);
     emit("data/journal.json", { entries: JOURNAL, categories: CATEGORY_INFO, mushroomSafety: MUSHROOM_SAFETY });
@@ -207,6 +207,9 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     }
     case "weather": return { state: { ...s, weather: { ...s.weather, [op.day as number]: op.w as WorldState["weather"][number] } } };
     case "select": return { state: { ...s, selected: op.i as number } };
+    case "enterMine": return { state: enterMine(s, op.floor as number) };
+    case "craft": return { state: craft(s, op.id as string) };
+    case "selectItem": return { state: { ...s, selected: Math.max(0, s.inventory.findIndex((x) => x?.item === op.item)) } };
     case "give": return { state: addItem(s, op.item as string, op.qty as number, (op.grade as Grade) ?? undefined) ?? s };
     case "act": return { state: act(s) };
     case "applyTool": return { state: applyTool(s) };
@@ -241,15 +244,15 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
 const compactInv = (s: WorldState) => s.inventory.flatMap((x, i) => (x ? [[i, x.item, x.qty, x.grade ?? null]] : []));
 
 function summary(s: WorldState, text?: string) {
-  const f = { x: Math.round(s.player.x) + ({ up: 0, down: 0, left: -1, right: 1 }[s.player.facing]), y: Math.round(s.player.y) + ({ up: -1, down: 1, left: 0, right: 0 }[s.player.facing]) };
-  const inside = f.x >= 0 && f.y >= 0 && f.x < W && f.y < H;
-  const t = inside ? s.tiles[f.y * W + f.x] : null;
+  const f = facingTile(s);
+  const t = tileAt(s, f.x, f.y);
   return {
     minute: s.minute, coins: s.coins, energy: s.energy, water: s.water, canSize: s.canSize, organic: s.organic, selected: s.selected,
     harvests: s.harvests, player: s.player, msg: s.messages.at(-1)?.text ?? null, nMsg: s.messages.length, text: text ?? null,
     inv: compactInv(s), journal: s.journal, shipping: s.shipping, nBuildings: s.buildings.length,
     preview: previewAction(s), tile: t, growth: t ? growthFactor(s, f.x, f.y) : null, grade: t ? expectedGrade(s, t) : null,
     npc: npcInFront(s)?.id ?? null, quests: s.quests ?? null, friends: s.friends ?? null,
+    mine: s.mine ? { floor: s.mine.floor, ladderAt: s.mine.ladderAt, buildings: s.mine.buildings } : null, deepest: s.deepest ?? null,
   };
 }
 
@@ -260,7 +263,7 @@ function finalState(s: WorldState) {
 
 const GIVE = ["seed_carrot", "seed_beans", "seed_tomato", "seed_corn", "seed_clover", "seed_squash", "seed_sunflower", "seed_potato", "seed_wheat", "seed_buckwheat",
   "compost", "mulch", "lime", "biochar", "synthFert", "labKit", "fiber", "kit_composter", "kit_rainBarrel", "kit_beehive", "kit_bugHotel", "kit_flowerBed", "kit_greenhouse", "kit_fence",
-  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato"];
+  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato", "axe_copper", "pickaxe_gold"];
 const BUY = ["seed_carrot", "seed_beans", "compost", "labKit", "kit_fence", "bigCan", "kit_scarecrow", "honey", "shovel", "ring"];
 const DIRS: Dir[] = ["up", "down", "left", "right"];
 const WEATHERS = [
@@ -281,10 +284,19 @@ function farmstead(): Op[] {
   ops.push({ op: "select", i: 13 });
   ops.push({ op: "player", x: 22, y: 6, facing: "down" }, { op: "interact" }, { op: "player", x: 23, y: 8, facing: "down" }, { op: "interact" });
   ops.push({ op: "select", i: 1 }, { op: "player", x: 25, y: 6, facing: "down" }, { op: "act" }, { op: "interact" });
+  // Fell a tree outside the field with a mithril axe, then watch the stump sprout and grow back.
+  ops.push({ op: "give", item: "axe_mithril", qty: 1, grade: null }, { op: "selectItem", item: "axe_mithril" });
+  ops.push({ op: "tile", i: 7 * W + 30, patch: { obstacle: "tree", weeds: false, crop: null } }, { op: "tile", i: 6 * W + 30, patch: { obstacle: null, weeds: false } });
+  ops.push({ op: "player", x: 30, y: 6, facing: "down" }, { op: "applyTool" });
+  // And chop a log with the basic axe, swing by swing.
+  ops.push({ op: "tile", i: 7 * W + 29, patch: { obstacle: "log", weeds: false, crop: null } }, { op: "player", x: 29, y: 6, facing: "down" }, { op: "selectItem", item: "axe" });
+  for (let k = 0; k < 4; k++) ops.push({ op: "applyTool" });
+  // Look at the stump after each night, so its sprouting is in the summaries.
+  for (let d = 0; d < 14; d++) ops.push({ op: "sleep" }, { op: "player", x: 30, y: 6, facing: "down" });
   return ops;
 }
 
-function playthrough(seed: number, settings: Partial<GameSettings>, steps: number, prelude: Op[] = []) {
+function playthrough(seed: number, settings: Partial<GameSettings>, steps: number, prelude: Op[] = [], mine = false) {
   const r = stream(seed * 31 + 7);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)];
   let s = newWorld(seed, settings);
@@ -304,6 +316,47 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
   // Grandma Rosa's chest holds the starting tools.
   run({ op: "takeAll", id: "chest" });
   for (const op of prelude) run(op);
+  if (mine) {
+    // Open the old mine, then dig down floor by floor, sometimes going straight for the ladder rock.
+    run({ op: "give", item: "wood", qty: 20, grade: null });
+    run({ op: "give", item: "stone", qty: 10, grade: null });
+    run({ op: "give", item: "pickaxe_mithril", qty: 1, grade: null });
+    run({ op: "accept", id: "reopen-mine" });
+    run({ op: "turnIn", id: "reopen-mine" });
+    run({ op: "player", x: MINE_ENTRANCE.x + 1, y: MINE_ENTRANCE.y + 2, facing: "up" });
+    run({ op: "interact" });
+    for (let n = 0; n < 70 && s.mine; n++) {
+      const m = s.mine;
+      const down = m.buildings.find((b) => b.kind === "ladderDown");
+      if (down && r() < 0.7) {
+        run({ op: "player", x: down.x, y: down.y - 1, facing: "down" });
+        run({ op: "interact" });
+        continue;
+      }
+      const rocks = m.tiles.flatMap((t, i) => (t.obstacle ? [i] : []));
+      const i = r() < 0.35 && m.tiles[m.ladderAt]?.obstacle ? m.ladderAt : rocks[Math.floor(r() * rocks.length)];
+      if (i === undefined) break;
+      run({ op: "player", x: i % MINE_W, y: Math.floor(i / MINE_W) - 1, facing: "down" });
+      run({ op: "selectItem", item: r() < 0.2 ? "pickaxe" : "pickaxe_mithril" });
+      run({ op: r() < 0.8 ? "applyTool" : "act" });
+    }
+    run({ op: "player", x: MINE_START.x, y: MINE_START.y + 1, facing: "up" });
+    run({ op: "interact" });
+    run({ op: "enterMine", floor: 5 });
+    run({ op: "player", x: MINE_START.x, y: MINE_START.y + 1, facing: "up" });
+    run({ op: "interact" });
+    // Find Grandma's workbench in the barn, set it up, and craft with what the mine gave.
+    run({ op: "player", x: 16, y: 8, facing: "up" });
+    run({ op: "act" });
+    run({ op: "selectItem", item: "kit_workbench" });
+    run({ op: "player", x: 27, y: 8, facing: "down" });
+    run({ op: "applyTool" });
+    run({ op: "player", x: 27, y: 8, facing: "down" });
+    run({ op: "give", item: "fiber", qty: 24, grade: null });
+    run({ op: "give", item: "wood", qty: 6, grade: null });
+    for (const id of ["refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "refinedFiber", "rope",
+      "sticks", "sticks", "copperBar", "bronzeBar", "ironBar", "axe_copper", "pickaxe_bronze", "axe", "kit_chest", "kit_furnace", "hoe", "rope"]) run({ op: "craft", id });
+  }
   for (let n = 0; n < steps; n++) {
     const k = r();
     if (k < 0.3) {
@@ -385,7 +438,8 @@ describe("Godot playthroughs", () => {
     ["winter", 5, { science: PRESETS.science.science, daysPerMonth: 5, units: "C" }],
   ];
   for (const [name, seed, settings] of cases) {
-    it(name, () => golden(`play-${name}`, playthrough(seed, settings, name === "winter" ? 500 : 350, name === "classic" || name === "science" ? farmstead() : [])));
+    const farm = name === "classic" || name === "science";
+    it(name, () => golden(`play-${name}`, playthrough(seed, settings, name === "winter" ? 500 : 350, farm ? farmstead() : [], farm)));
   }
 
   it("old saves", () => {

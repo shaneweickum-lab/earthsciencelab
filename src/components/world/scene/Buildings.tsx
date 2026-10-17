@@ -4,7 +4,8 @@ import { Html } from "@react-three/drei";
 import { memo, Suspense } from "react";
 import { BUILDING_SIZE } from "@/world/map";
 import type { Building } from "@/world/types";
-import { labelLayer } from "../useWorld";
+import { mineOpen } from "@/world/engine";
+import { labelLayer, useWorld } from "../useWorld";
 import { Model, model, type Pack } from "./models";
 
 const Mat = ({ color, ...rest }: { color: string; transparent?: boolean; opacity?: number; emissive?: string; emissiveIntensity?: number }) => (
@@ -37,6 +38,34 @@ function Cottage({ w, h, wall, roof, trim }: { w: number; h: number; wall: strin
         <mesh key={s} position={[s * (w / 2 - 1), 1.05, (h - 0.6) / 2 + 0.01]}>
           <boxGeometry args={[0.55, 0.5, 0.05]} /><Mat color="#ffe7a8" emissive="#ffc861" emissiveIntensity={0.35} />
         </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** The old mine: a rocky hillside with a timber-framed opening, boarded up until Luis's quest. */
+function MineEntrance() {
+  const open = useWorld((s) => !!s.world && mineOpen(s.world));
+  return (
+    <group>
+      <mesh position={[0, 0.9, -0.35]} castShadow receiveShadow>
+        <boxGeometry args={[2.2, 1.8, 1.3]} />
+        <Mat color="#7d756b" />
+      </mesh>
+      <mesh position={[0, 1.9, -0.5]} rotation={[0, Math.PI / 4, 0]} scale={[1.5, 0.7, 1.2]} castShadow>
+        <coneGeometry args={[1, 1, 5]} />
+        <Mat color="#6d665d" />
+      </mesh>
+      <mesh position={[0, 0.65, 0.31]}>
+        <boxGeometry args={[1, 1.3, 0.02]} />
+        <meshBasicMaterial color="#0d0a08" />
+      </mesh>
+      {[-0.55, 0.55].map((x) => (
+        <mesh key={x} position={[x, 0.7, 0.35]} castShadow><boxGeometry args={[0.16, 1.4, 0.16]} /><Mat color="#7a5636" /></mesh>
+      ))}
+      <mesh position={[0, 1.42, 0.35]} castShadow><boxGeometry args={[1.35, 0.16, 0.18]} /><Mat color="#6b4423" /></mesh>
+      {!open && [0.3, 0.7, 1.05].map((y, i) => (
+        <mesh key={y} position={[0, y, 0.42]} rotation={[0, 0, (i - 1) * 0.12]}><boxGeometry args={[1.25, 0.14, 0.05]} /><Mat color="#a8774f" /></mesh>
       ))}
     </group>
   );
@@ -179,6 +208,37 @@ const Procedural = memo(function Procedural({ b }: { b: Building }) {
       return (
         <mesh position={[0, 0.02, 0]} receiveShadow><cylinderGeometry args={[0.42, 0.45, 0.06, 8]} /><Mat color="#b9b2a4" /></mesh>
       );
+    case "mineEntrance":
+      return <MineEntrance />;
+    case "workbench":
+    case "grinder":
+      return <mesh position={[0, 0.4, 0]} castShadow><boxGeometry args={[0.9, 0.8, 0.6]} /><Mat color="#b07a4f" /></mesh>;
+    case "spinningWheel":
+      return (
+        <group>
+          <mesh position={[0, 0.85, 0]} castShadow><torusGeometry args={[0.45, 0.05, 6, 20]} /><Mat color="#9a6b3f" /></mesh>
+          {[0, 1, 2, 3].map((k) => (
+            <mesh key={k} position={[0, 0.85, 0]} rotation={[0, 0, (k * Math.PI) / 4]}><boxGeometry args={[0.04, 0.88, 0.04]} /><Mat color="#b08458" /></mesh>
+          ))}
+          <mesh position={[0.1, 0.25, 0]} castShadow><boxGeometry args={[0.8, 0.08, 0.3]} /><Mat color="#7a5636" /></mesh>
+          {[-0.25, 0.45].map((x) => (
+            <mesh key={x} position={[x, 0.12, 0]}><boxGeometry args={[0.07, 0.25, 0.07]} /><Mat color="#7a5636" /></mesh>
+          ))}
+          <mesh position={[0, 0.5, 0.1]}><boxGeometry args={[0.07, 0.7, 0.07]} /><Mat color="#7a5636" /></mesh>
+          <mesh position={[0.4, 0.42, 0]}><cylinderGeometry args={[0.06, 0.06, 0.22, 8]} /><Mat color="#e8d9a8" /></mesh>
+        </group>
+      );
+    case "furnace":
+      return (
+        <group>
+          <mesh position={[0, 0.45, 0]} castShadow receiveShadow><boxGeometry args={[0.85, 0.9, 0.75]} /><Mat color="#8f8a82" /></mesh>
+          <mesh position={[0, 0.92, 0]}><boxGeometry args={[0.9, 0.12, 0.8]} /><Mat color="#7a756d" /></mesh>
+          <mesh position={[0, 0.3, 0.38]}><boxGeometry args={[0.38, 0.33, 0.02]} /><meshBasicMaterial color="#1a1410" /></mesh>
+          <mesh position={[0, 0.2, 0.39]}><boxGeometry args={[0.28, 0.1, 0.02]} /><Mat color="#ff8a2a" emissive="#ff6a00" emissiveIntensity={1.2} /></mesh>
+          <mesh position={[0.22, 1.2, -0.15]} castShadow><cylinderGeometry args={[0.13, 0.15, 0.5, 8]} /><Mat color="#7a756d" /></mesh>
+          <pointLight position={[0, 0.3, 0.6]} color="#ff8a2a" intensity={0.8} distance={2.5} />
+        </group>
+      );
     case "noticeBoard":
       return (
         <group>
@@ -294,6 +354,10 @@ function Fancy({ b }: { b: Building }) {
       return <Model url={model("survival", "box-large")} scale={1.6} />;
     case "chest":
       return <Model url={model("survival", "chest")} position={[0, 0.12, -0.15]} scale={3} />;
+    case "workbench":
+      return <Model url={model("survival", "workbench")} scale={1.6} />;
+    case "grinder":
+      return <Model url={model("survival", "workbench-grind")} scale={1.6} />;
     case "fence":
       return <Model url={model("nature", "fence_simple")} position={[0, 0, 0.47]} scale={[1, 1.5, 1]} />;
     case "pathStone":

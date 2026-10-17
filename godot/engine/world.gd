@@ -2,14 +2,25 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 6
+const WORLD_VERSION := 7
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
 const ORGANIC_BONUS := 1.25
 
 const DIRS := {"up": [0, -1], "down": [0, 1], "left": [-1, 0], "right": [1, 0]}
-const ENERGY := {"hoe": 2, "can": 1, "scythe": 1, "axe": 2, "pickaxe": 3, "shovel": 2, "ring": 1}
+const ENERGY := {"hoe": 2, "can": 1, "scythe": 1, "axe": 2, "pickaxe": 2, "shovel": 2, "ring": 1}
+## How many swings' worth of power it takes to clear each obstacle (a basic tool does 1 a swing).
+const OBSTACLE_HP := {
+	"stick": 1, "sapling": 1, "stone": 2, "log": 4, "stump": 5, "tree": 8,
+	"copperOre": 3, "tinOre": 3, "ironOre": 5, "goldOre": 6, "mithrilOre": 9,
+}
+## Rocks you break with a pickaxe (the rest are wood, for the axe).
+const ROCKS := ["stone", "copperOre", "tinOre", "ironOre", "goldOre", "mithrilOre"]
+## Wood from chopping each one.
+const WOOD := {"stick": 1, "sapling": 1, "log": 4, "stump": 3, "tree": 6}
+## Days for a felled tree's stump to sprout, and for the sapling to grow back into a tree.
+const REGROW_DAYS := 7
 const DRY := {"sunny": 1.2, "cloudy": 0.6, "fog": 0.4, "heat": 2.4, "frost": 0.5, "snow": 0.2, "rain": 0.0, "storm": 0.0}
 
 static func _clamp(v: float) -> float:
@@ -96,11 +107,20 @@ static func mean_temp_f(state: Dictionary, greenhouse := false) -> float:
 
 
 static func tile_at(state: Dictionary, x: int, y: int) -> Variant:
+	var m = state.get("mine")
+	if m != null:
+		return m.tiles[y * WorldMap.MINE_W + x] if x >= 0 and y >= 0 and x < WorldMap.MINE_W and y < WorldMap.MINE_H else null
 	return state.tiles[WorldMap.idx(x, y)] if WorldMap.in_bounds(x, y) else null
 
 
+## The buildings where the player is: the farm and town, or the ladders on a mine floor.
+static func buildings_here(state: Dictionary) -> Array:
+	var m = state.get("mine")
+	return m.buildings if m != null else state.buildings
+
+
 static func building_at(state: Dictionary, x: int, y: int) -> Variant:
-	for b in state.buildings:
+	for b in buildings_here(state):
 		var sz := WorldMap.size_of(b.kind)
 		if x >= b.x and x < b.x + sz[0] and y >= b.y and y < b.y + sz[1]:
 			return b
@@ -110,7 +130,7 @@ static func building_at(state: Dictionary, x: int, y: int) -> Variant:
 ## Can the player stand on this tile?
 static func is_walkable(state: Dictionary, x: int, y: int) -> bool:
 	var t = tile_at(state, x, y)
-	if t == null or t.ground == "water":
+	if t == null or t.ground == "water" or t.ground == "caveWall":
 		return false
 	if t.obstacle:
 		return false
@@ -201,6 +221,12 @@ static func remove_item(state: Dictionary, id: String, qty: int, grade: Variant 
 
 
 static func _set_tile(state: Dictionary, x: int, y: int, fn: Callable) -> Dictionary:
+	var m = state.get("mine")
+	if m != null:
+		var mt: Array = m.tiles.duplicate()
+		var k := y * WorldMap.MINE_W + x
+		mt[k] = fn.call(mt[k])
+		return Js.with(state, {"mine": Js.with(m, {"tiles": mt})})
 	var tiles: Array = state.tiles.duplicate()
 	var i := WorldMap.idx(x, y)
 	tiles[i] = fn.call(tiles[i])
@@ -402,6 +428,17 @@ static func _start_day(prev: Dictionary, new_day: int) -> Dictionary:
 			elif Settings.on(state, "frost") and climate.low <= wc.killF:
 				next = Js.with(next, {"crop": Js.with(c, {"dead": true})})
 				killed_frost += 1
+		# Felled trees sprout from their stumps, then grow back.
+		if next.get("regrow") != null and new_day >= next.regrow:
+			var was = next.obstacle
+			next = next.duplicate()
+			next.erase("regrow")
+			next.erase("hits")
+			if was == "stump":
+				next.obstacle = "sapling"
+				next.regrow = new_day + REGROW_DAYS
+			elif was == "sapling":
+				next.obstacle = "tree"
 		# Weeds sprout on uncovered farm soil.
 		if Settings.on(state, "weeds") and next.ground == "farm" and not next.greenhouse and not next.weeds and not next.obstacle and not next.mulch and building_at(state, x, y) == null:
 			var nc = next.crop
@@ -536,7 +573,7 @@ static func _run_night(state: Dictionary) -> Dictionary:
 static func sleep(state: Dictionary) -> Dictionary:
 	var late := Clock.time_of_day(state.minute) >= 24 * 60
 	var d := day(state) + 1
-	var s := _start_day(_run_night(state), d)
+	var s := _surface(_start_day(_run_night(state), d))
 	return Js.with(s, {
 		"energy": Js.round(s.maxEnergy * 0.8) if late else s.maxEnergy,
 		"player": {"x": 10, "y": 9, "facing": "down"},
@@ -546,7 +583,7 @@ static func sleep(state: Dictionary) -> Dictionary:
 static func _faint(state: Dictionary) -> Dictionary:
 	var lost := minf(100, Js.round(state.coins * 0.1))
 	var d := day(Js.with(state, {"minute": state.minute - 1})) + 1
-	var s := _start_day(Js.with(state, {"minute": Clock.start_of_day(d) - 1}), d)
+	var s := _surface(_start_day(Js.with(state, {"minute": Clock.start_of_day(d) - 1}), d))
 	var notes: Array = ["You stayed up past 2 AM and fainted! A neighbor carried you home and charged %s coins." % Js.num(lost)] + s.log.notes
 	return Js.with(s, {
 		"coins": s.coins - lost,
@@ -562,7 +599,10 @@ static func selected_item(state: Dictionary) -> Variant:
 	return state.inventory[int(state.selected)]
 
 
+## Critters live up on the farm; there are none underground.
 static func _crit_at(state: Dictionary, x: int, y: int) -> Variant:
+	if state.get("mine") != null:
+		return null
 	for c in state.critters:
 		if c.x == x and c.y == y:
 			return c
@@ -577,6 +617,10 @@ static func act(state: Dictionary) -> Dictionary:
 		return state
 	if _crit_at(state, f.x, f.y) != null:
 		return interact(state)
+	# Ladders, the mine entrance, and Grandma's barn work with whatever you're holding.
+	var lb = building_at(state, f.x, f.y)
+	if lb != null and (lb.kind in ["ladderUp", "ladderDown", "mineEntrance"] or (lb.kind == "barn" and not lb.data.get("owner"))):
+		return interact(state)
 	var slot = selected_item(state)
 	var def = Data.items()[slot.item] if slot else null
 	var c = t.crop
@@ -586,6 +630,90 @@ static func act(state: Dictionary) -> Dictionary:
 
 
 ## Use the selected item on the tile in front of the player.
+## A tool's uses left (full when the slot doesn't say), or null for things that don't wear.
+static func durability(slot: Dictionary) -> Variant:
+	var def = Data.items().get(slot.item)
+	if def == null or not def.get("tool"):
+		return null
+	var mx := int(def.tool.durability)
+	return {"left": int(slot.get("dur", mx)), "max": mx}
+
+
+## Use up one use of the selected tool; it breaks when it runs out.
+static func _wear(state: Dictionary, i: int) -> Dictionary:
+	var slot = state.inventory[i]
+	if slot == null:
+		return state
+	var d = durability(slot)
+	if d == null:
+		return state
+	var inv: Array = state.inventory.duplicate()
+	if d.left > 1:
+		inv[i] = Js.with(slot, {"dur": d.left - 1})
+		return Js.with(state, {"inventory": inv})
+	inv[i] = null
+	return say(Js.with(state, {"inventory": inv}), "Your %s wore out! Buy or craft a new one." % Items.get_def(slot.item).name.to_lower())
+
+
+## Without the hits and regrow marks: a tile whose obstacle is gone.
+static func _cleared(t: Dictionary) -> Dictionary:
+	var out := Js.with(t, {"obstacle": null})
+	out.erase("hits")
+	out.erase("regrow")
+	return out
+
+
+## "stone", "log", or "copper ore rock".
+static func obstacle_name(o: String) -> String:
+	return "%s rock" % Items.get_def(o).name.to_lower() if o.ends_with("Ore") else o
+
+
+## A rock breaks: stone or ore, and maybe the ladder down that was hiding under it.
+static func _break_rock(state: Dictionary, x: int, y: int, o: String) -> Dictionary:
+	var qty := 1 if o == "stone" or o == "mithrilOre" else 1 + (x + y) % 2
+	var got = add_item(_set_tile(state, x, y, _cleared), o, qty)
+	if got == null:
+		return say(state, "Your bag is full.")
+	var s := say(got, "+%d %s." % [qty, Items.get_def(o).name.to_lower()])
+	if o != "stone":
+		s = discover(s, o)
+	var m = s.get("mine")
+	if m != null and int(m.ladderAt) == y * WorldMap.MINE_W + x:
+		s = Js.with(s, {"mine": Js.with(m, {"buildings": m.buildings + [{"id": "ladder-down", "kind": "ladderDown", "x": x, "y": y, "data": {}}]})})
+		s = say(s, "You found a ladder going down!")
+	return s
+
+
+## One swing of an axe or pickaxe at the obstacle in front of you.
+static func _hit_obstacle(state: Dictionary, x: int, y: int, power: int, verb: String) -> Dictionary:
+	var t: Dictionary = tile_at(state, x, y)
+	var o: String = t.obstacle
+	var hits: int = int(t.get("hits", 0)) + power
+	var hp: int = OBSTACLE_HP[o]
+	if hits < hp:
+		return say(_set_tile(state, x, y, func(tt): return Js.with(tt, {"hits": hits})), "%s! The %s is %s%% broken." % [verb, obstacle_name(o), Js.num(Js.round(float(hits) / hp * 100))])
+	if o in ROCKS:
+		return _break_rock(state, x, y, o)
+	var wood: int = WOOD.get(o, 1)
+	if o == "tree":
+		# A felled tree leaves a stump that sprouts again, unless it's in the garden field.
+		var f: Dictionary = WorldMap.FARM
+		var in_field: bool = x >= f.x0 and x <= f.x1 and y >= f.y0 and y <= f.y1
+		var regrow := day(state) + REGROW_DAYS
+		var got = add_item(_set_tile(state, x, y, func(tt):
+			var out := Js.with(tt, {"obstacle": "stump"})
+			out.erase("hits")
+			out.erase("regrow")
+			if not in_field:
+				out.regrow = regrow
+			return out), "wood", wood)
+		if got == null:
+			return say(state, "Your bag is full.")
+		return discover(say(got, "Timber! +%d wood.%s" % [wood, "" if in_field else " The stump will sprout again unless you chop it out."]), "forest-regrowth")
+	var got = add_item(_set_tile(state, x, y, _cleared), "wood", wood)
+	return say(got, "+%d wood." % wood) if got else say(state, "Your bag is full.")
+
+
 static func apply_tool(state: Dictionary) -> Dictionary:
 	var slot = selected_item(state)
 	if not slot:
@@ -607,14 +735,17 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 	if def.kind != "tool":
 		return interact(state)
 
-	var cost: int = ENERGY.get(slot.item, 1)
+	var use: String = def.tool.use
+	var power: int = int(Data.tiers()[def.tool.tier].power)
 	var b = building_at(state, x, y)
-	var paid = _spend(state, cost)
-	if paid == null:
+	var spent = _spend(state, ENERGY[use])
+	if spent == null:
 		return say(state, "You're too tired. Go home and sleep.")
+	# Every use that does something wears the tool a little.
+	var paid := _wear(spent, int(state.selected))
 	var tillage := Settings.on(state, "tillage")
 
-	match slot.item:
+	match use:
 		"hoe":
 			if t.ground != "farm" and not t.greenhouse:
 				return say(state, "You can only till the garden field or greenhouse beds.")
@@ -654,15 +785,12 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 				return say(got, "Cleared a dead plant (+1 fiber).") if got else state
 			return state
 		"axe":
-			if t.obstacle != "stick" and t.obstacle != "stump" and t.obstacle != "log":
+			if not t.obstacle or t.obstacle in ROCKS:
 				return state
-			var n := 1 if t.obstacle == "stick" else 4
-			var got = add_item(_set_tile(paid, x, y, func(tt): return Js.with(tt, {"obstacle": null})), "wood", n)
-			return say(got, "+%d wood." % n) if got else say(state, "Your bag is full.")
+			return _hit_obstacle(paid, x, y, power, "Chop")
 		"pickaxe":
-			if t.obstacle == "stone":
-				var got = add_item(_set_tile(paid, x, y, func(tt): return Js.with(tt, {"obstacle": null})), "stone", 1)
-				return say(got, "+1 stone.") if got else say(state, "Your bag is full.")
+			if t.obstacle and t.obstacle in ROCKS:
+				return _hit_obstacle(paid, x, y, power, "Crack")
 			if t.tilled and not t.crop:
 				return _set_tile(paid, x, y, func(tt): return Js.with(tt, {"tilled": false}))
 			return state
@@ -814,6 +942,12 @@ static func interact_target(state: Dictionary) -> String:
 			return "board"
 		"chest":
 			return "chest"
+		"mineEntrance":
+			# Once you've been deep enough, the mine cart at the entrance can take you down.
+			if mine_open(state) and int(state.get("deepest", 0)) >= 5:
+				return "mine"
+	if STATIONS.has(b.kind):
+		return "craft"
 	return ""
 
 
@@ -927,9 +1061,25 @@ static func _operate_building(state: Dictionary, b: Dictionary) -> Dictionary:
 			var got = add_item(update.call(Js.with(data, {"ready": 0})), "mulch", hay)
 			return say(got, "Collected %d straw mulch from the barn." % hay) if got != null else say(state, "Your bag is full.")
 		"barn":
-			return say(state, "The Ortegas' barn smells like hay and corn." if data.get("owner") else "Grandma Rosa's old barn. Swallows nest in the rafters.")
+			if data.get("owner"):
+				return say(state, "The Ortegas' barn smells like hay and corn.")
+			if state.get("foundWorkbench"):
+				return say(state, "Grandma Rosa's old barn. Swallows nest in the rafters.")
+			# Under a dusty tarp in the barn: Grandma's workbench.
+			var wb = add_item(state, "kit_workbench", 1)
+			if wb == null:
+				return say(state, "Something big is under a tarp in the barn. Make room in your bag to carry it.")
+			return say(Js.with(wb, {"foundWorkbench": true}), "Under a dusty tarp in the barn you find Grandma Rosa's old workbench! Set it up on the farm to start crafting.")
 		"chest":
 			return say(state, "Grandma Rosa's old chest. Open it to store things or take them out.")
+		"mineEntrance":
+			if not mine_open(state):
+				return say(state, "Old boards cover the mine entrance. Luis might know something about it.")
+			return enter_mine(state, 1)
+		"ladderDown":
+			return enter_mine(state, int(state.mine.floor) + 1)
+		"ladderUp":
+			return leave_mine(state)
 		"silo":
 			return say(state, "A tall silo for storing grain through the winter.")
 		"windmill":
@@ -1069,6 +1219,8 @@ static func place_building(state: Dictionary, slot_index: int, x: int, y: int) -
 	var s = state.inventory[slot_index]
 	if s == null:
 		return state
+	if state.get("mine") != null:
+		return say(state, "Build up on your farm, not in the mine.")
 	var def := Items.get_def(s.item)
 	if not def.get("building"):
 		return state
@@ -1087,14 +1239,21 @@ static func place_building(state: Dictionary, slot_index: int, x: int, y: int) -
 	return discover(next, "greenhouse-effect") if kind == "greenhouse" else next
 
 
+## Things you built yourself can be picked back up (Grandma's chest stays by the house).
+static func can_pick_up(b: Dictionary) -> bool:
+	return not b.kind in WorldMap.TOWN_KINDS and not b.data.get("owner") and b.id != "chest"
+
+
 static func pick_up_building(state: Dictionary, id: String) -> Dictionary:
 	var b = null
 	for o in state.buildings:
 		if o.id == id:
 			b = o
 			break
-	if b == null or b.kind in WorldMap.TOWN_KINDS or b.data.get("owner"):
+	if b == null or not can_pick_up(b):
 		return state
+	if b.kind == "chest" and b.data.get("items", []).any(func(x): return x != null):
+		return say(state, "Empty the chest first.")
 	if b.kind == "greenhouse" and WorldMap.greenhouse_interior(b).any(func(p): return state.tiles[WorldMap.idx(p.x, p.y)].crop != null):
 		return say(state, "Harvest or clear the greenhouse beds first.")
 	var kit: String = "kit_" + b.kind
@@ -1163,6 +1322,98 @@ static func swap_slots(state: Dictionary, a: int, b: int) -> Dictionary:
 	return Js.with(state, {"inventory": inv})
 
 
+# ───────────────────────── crafting ─────────────────────────
+
+## What each crafting station is called.
+const STATIONS := {"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace"}
+
+
+static func recipe(id: String) -> Variant:
+	for r in Data.recipes():
+		if r.id == id:
+			return r
+	return null
+
+
+## How many of a recipe's inputs you have, and whether you can make it: {inputs, ok}.
+static func recipe_status(state: Dictionary, r: Dictionary) -> Dictionary:
+	var inputs := []
+	var ok := true
+	for i in r.inputs:
+		var have := count_item(state, i.item)
+		inputs.append({"item": i.item, "qty": int(i.qty), "have": have})
+		if have < i.qty:
+			ok = false
+	return {"inputs": inputs, "ok": ok}
+
+
+## Make one batch of a recipe at a station.
+static func craft(state: Dictionary, id: String) -> Dictionary:
+	var r = recipe(id)
+	if r == null:
+		return state
+	if not recipe_status(state, r).ok:
+		return say(state, "You don't have everything for that yet.")
+	var s := state
+	for i in r.inputs:
+		s = remove_item(s, i.item, int(i.qty))
+	var got = add_item(s, r.id, int(r.qty))
+	if got == null:
+		return say(state, "Your bag is full.")
+	var made := say(got, "Made %s%s!" % ["%d " % r.qty if r.qty > 1 else "", Items.get_def(r.id).name])
+	if r.id == "bronzeBar":
+		return discover(made, "alloy")
+	if r.station == "furnace":
+		return discover(made, "smelting")
+	return made
+
+
+# ───────────────────────── the mine ─────────────────────────
+
+## Luis's quest unboards the old mine.
+static func mine_open(state: Dictionary) -> bool:
+	return "reopen-mine" in Quests.quest_state(state).done
+
+
+## Floors the mine cart can take you to: the top, and every fifth floor you've reached.
+static func cart_floors(state: Dictionary) -> Array:
+	var out := [1]
+	var f := 5
+	while f <= int(state.get("deepest", 0)):
+		out.append(f)
+		f += 5
+	return out
+
+
+## Climb down to a floor: a fresh cave, with you standing by the ladder up.
+static func enter_mine(state: Dictionary, level: int) -> Dictionary:
+	if not mine_open(state):
+		return state
+	var mine := WorldMap.mine_floor(int(state.seed), level, day(state))
+	var before := int(state.get("deepest", 0))
+	var deepest := maxi(before, level)
+	var s := Js.with(state, {"mine": mine, "deepest": deepest, "player": {"x": WorldMap.MINE_START.x, "y": WorldMap.MINE_START.y + 1, "facing": "down"}})
+	var note := "The old mine. Break rocks with your pickaxe; a ladder down hides under one of them." if level == 1 else "Floor %d." % level
+	if deepest > before and level % 5 == 0:
+		note += " The mine cart can bring you back to this floor."
+	return say(s, note)
+
+
+## Without the mine: you're back up top.
+static func _surface(state: Dictionary) -> Dictionary:
+	var s := state.duplicate()
+	s.erase("mine")
+	return s
+
+
+## Climb out of the mine to the entrance in town.
+static func leave_mine(state: Dictionary) -> Dictionary:
+	if state.get("mine") == null:
+		return state
+	var e: Dictionary = WorldMap.MINE_ENTRANCE
+	return say(Js.with(_surface(state), {"player": {"x": e.x + 1, "y": e.y + 2, "facing": "down"}}), "You climb back out into the daylight.")
+
+
 # ───────────────────────── chests ─────────────────────────
 
 static func _set_chest(state: Dictionary, id: String, items: Array) -> Dictionary:
@@ -1185,11 +1436,23 @@ static func take_from_chest(state: Dictionary, id: String, slot: int) -> Diction
 	if items == null or items[slot] == null:
 		return state
 	var s: Dictionary = items[slot]
-	var got = add_item(state, s.item, int(s.qty), s.get("grade"))
+	var got = _add_slot(state, s)
 	if got == null:
 		return say(state, "Your bag is full.")
 	items[slot] = null
 	return _set_chest(got, id, items)
+
+
+## Put a whole stack in the bag, keeping a tool's wear.
+static func _add_slot(state: Dictionary, s: Dictionary) -> Variant:
+	if s.get("dur") == null:
+		return add_item(state, s.item, int(s.qty), s.get("grade"))
+	var i: int = state.inventory.find(null)
+	if i < 0:
+		return null
+	var inv: Array = state.inventory.duplicate()
+	inv[i] = s.duplicate()
+	return Js.with(state, {"inventory": inv})
 
 
 ## Move everything that fits from a chest into your bag.
@@ -1317,6 +1580,9 @@ static func load_world(raw: String) -> Variant:
 		up = _add_landmarks(up)
 	if up.version < 6:
 		up = _add_chest(up)
+	# Version 7 added the mine entrance past the town.
+	if up.version < 7:
+		up = _add_landmarks(up, 7)
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null
@@ -1330,3 +1596,8 @@ static func _normalize_numbers(s: Dictionary) -> void:
 	s.seed = int(s.seed)
 	s.minute = int(s.minute)
 	s.selected = int(s.selected)
+	if s.get("deepest") != null:
+		s.deepest = int(s.deepest)
+	if s.get("mine") != null:
+		s.mine.floor = int(s.mine.floor)
+		s.mine.ladderAt = int(s.mine.ladderAt)

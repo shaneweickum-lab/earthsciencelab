@@ -17,6 +17,7 @@ import { labelLayer, runtime, useWorld } from "../useWorld";
 import { Buildings } from "./Buildings";
 import { Crops } from "./Crops";
 import { model } from "./models";
+import { MineScene } from "./Mine";
 import { Obstacles, Pond, Terrain } from "./Terrain";
 
 const SPEED = 4.2; // tiles per second
@@ -30,6 +31,7 @@ const tmpColor = new Color();
 function GameLoop() {
   const acc = useRef(0);
   const zoom = useRef(1);
+  const lastPlace = useRef("");
   const { camera, gl } = useThree();
 
   useEffect(() => {
@@ -91,10 +93,15 @@ function GameLoop() {
       }
     }
 
-    // Camera follows the player.
+    // Camera follows the player (and jumps there when you go in or out of the mine).
     const p = runtime.player;
     const z = zoom.current;
     const tx = p.x, ty = 0, tz = p.y + 0.5;
+    const place = w.mine ? `mine-${w.mine.floor}` : "up";
+    if (place !== lastPlace.current) {
+      lastPlace.current = place;
+      camera.position.set(tx, ty + 12 * z, tz + 9.5 * z);
+    }
     camera.position.x += (tx - camera.position.x) * Math.min(1, dt * 5);
     camera.position.y += (ty + 12 * z - camera.position.y) * Math.min(1, dt * 5);
     camera.position.z += (tz + 9.5 * z - camera.position.z) * Math.min(1, dt * 5);
@@ -238,7 +245,8 @@ function Player() {
     while (diff < -Math.PI) diff += Math.PI * 2;
     g.rotation.y += diff * Math.min(1, dt * 14);
     const w = useWorld.getState().world;
-    if (lamp.current && w) lamp.current.intensity = (1 - daylight(w.minute)) * 6;
+    // Your lantern lights up at night, and always underground.
+    if (lamp.current && w) lamp.current.intensity = w.mine ? 9 : (1 - daylight(w.minute)) * 6;
   });
   return (
     <group ref={ref}>
@@ -385,6 +393,21 @@ function Critters({ critters }: { critters: WorldState["critters"] }) {
 }
 
 function World() {
+  const underground = useWorld((s) => !!s.world!.mine);
+  if (underground) {
+    return (
+      <>
+        <MineScene />
+        <Player />
+        <FacingMarker />
+        <GameLoop />
+      </>
+    );
+  }
+  return <Surface />;
+}
+
+function Surface() {
   const tiles = useWorld((s) => s.world!.tiles);
   const buildings = useWorld((s) => s.world!.buildings);
   const critters = useWorld((s) => s.world!.critters);

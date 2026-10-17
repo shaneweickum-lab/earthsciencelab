@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { dayOf, formatDate, seasonLabel, timeOfDay } from "@/world/clock";
-import { HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
+import { durability, HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
 import { formatTemp } from "@/world/settings";
 import { ITEMS } from "@/world/items";
 import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
 import { GRADE_INFO } from "@/world/grades";
 import { WEATHER } from "@/world/weather";
-import { ItemIcon } from "./ItemIcon";
+import { ItemIcon, WearBar } from "./ItemIcon";
 import { useWorld } from "./useWorld";
 
 export function Modal({ title, icon, children, onClose, wide = false }: {
@@ -79,8 +79,8 @@ export function IntroLetter() {
           you&apos;d think. Keep an eye out for the little creatures. Most of them are friends.
         </p>
         <p>
-          My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime. Carrots don&apos;t mind a
-          chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.
+          My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime, and my workbench is somewhere
+          in the barn. Carrots don&apos;t mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.
         </p>
         <p>The folks at Seed &amp; Soil Co. will buy what you grow. Remember, organic produce sells for more.</p>
         <p className="text-right italic">Love, Grandma Rosa 🌻</p>
@@ -233,6 +233,7 @@ export function Bag() {
             }`}
           >
             {s && <ItemIcon id={s.item} grade={s.grade} />}
+            <WearBar slot={s} />
             {s && s.qty > 1 && <span className="absolute bottom-0 right-1 text-[11px] font-black">{s.qty}</span>}
           </button>
         ))}
@@ -247,6 +248,7 @@ export function Bag() {
               </p>
             )}
             <p className="mt-1 text-muted">{ITEMS[shown.item].desc}</p>
+            {durability(shown) && <p className="mt-1 text-xs font-bold">Uses left: {durability(shown)!.left} of {durability(shown)!.max}</p>}
           </>
         ) : (
           <p className="text-muted">Click an item to read about it.</p>

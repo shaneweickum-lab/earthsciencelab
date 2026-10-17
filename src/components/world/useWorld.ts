@@ -9,7 +9,7 @@ import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
 
 export type Screen = "menu" | "setup" | "playing";
 
@@ -36,9 +36,9 @@ interface WorldStore {
   open: (menu: Menu) => void;
   /** Which townsperson you're talking to. */
   talkingTo: string | null;
-  /** The chest that's open. */
+  /** The chest or crafting station that's open. */
   chestId: string | null;
-  openChest: (id: string) => void;
+  openChest: (id: string, menu?: "chest" | "craft") => void;
   /** What they said when you started talking. */
   npcLine: string;
   talkTo: (id: string) => void;
@@ -126,7 +126,7 @@ export const useWorld = create<WorldStore>((set, get) => {
     },
     talkingTo: null,
     chestId: null,
-    openChest: (id) => set({ menu: "chest", chestId: id }),
+    openChest: (id, menu = "chest") => set({ menu, chestId: id }),
     npcLine: "",
     talkTo: (id) => {
       const w = get().world;
@@ -146,3 +146,11 @@ export const useWorld = create<WorldStore>((set, get) => {
     },
   };
 });
+
+// A farm downloaded from the cloud replaced the saved one: go back to the main menu without
+// saving over it, so Continue loads the new farm.
+if (typeof window !== "undefined") {
+  window.addEventListener("earthsciencelab:save-replaced", () => {
+    useWorld.setState({ world: null, menu: null, screen: "menu", saved: readSave() });
+  });
+}

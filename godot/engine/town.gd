@@ -120,6 +120,8 @@ static func npc_pose(state: Dictionary, n: Dictionary, minute: float) -> Diction
 
 ## The NPC standing on the tile you're facing, if any.
 static func npc_in_front(state: Dictionary) -> Variant:
+	if state.get("mine") != null:
+		return null
 	var f := World.facing_tile(state)
 	for n in npcs():
 		var p := npc_pose(state, n, state.minute)

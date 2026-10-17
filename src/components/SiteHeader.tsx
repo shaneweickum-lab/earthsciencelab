@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useElementsPanel } from "@/store/elementsPanel";
+import { AccountChip } from "./AccountChip";
 import { GradeSelector } from "./GradeSelector";
 import { XPBar } from "./XPBar";
 
@@ -62,6 +63,7 @@ export function SiteHeader() {
             </button>
           )}
           <XPBar compact />
+          <AccountChip />
         </div>
       </div>
     </header>

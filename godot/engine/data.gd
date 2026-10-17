@@ -37,6 +37,16 @@ static func shop_unlocks() -> Dictionary:
 	return load_json("items").shopUnlocks
 
 
+## What each crafting station makes: [{id, qty, station, inputs: [{item, qty}]}].
+static func recipes() -> Array:
+	return load_json("items").recipes
+
+
+## Tool tiers: power per swing, durability, and color.
+static func tiers() -> Dictionary:
+	return load_json("items").tiers
+
+
 ## What's in the chest by the house on day one.
 static func starter_chest() -> Array:
 	return load_json("items").starterChest

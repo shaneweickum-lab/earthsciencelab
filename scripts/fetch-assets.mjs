@@ -41,7 +41,7 @@ const PACKS = {
   survival: {
     title: "Survival Kit", url: "https://kenney.nl/media/pages/assets/survival-kit/4065a8185b-1712149243/kenney_survival-kit.zip",
     page: "https://kenney.nl/assets/survival-kit", dir: "Models/GLB format", textures: true,
-    models: ["barrel", "chest", "box-large", "bucket", "signpost", "resource-wood", "tool-hoe", "tool-shovel", "tool-axe", "tool-pickaxe"],
+    models: ["barrel", "chest", "box-large", "bucket", "signpost", "resource-wood", "tool-hoe", "tool-shovel", "tool-axe", "tool-pickaxe", "workbench", "workbench-grind"],
   },
   food: {
     title: "Food Kit", url: "https://kenney.nl/media/pages/assets/food-kit/83086fa91c-1719418518/kenney_food-kit.zip",

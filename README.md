@@ -95,6 +95,29 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
+## Accounts and cloud saves (Supabase)
+
+Without any setup, progress is saved in the browser. With a Supabase project connected:
+
+- **Teachers** sign up at `/account` with an email and make classes at `/teacher`. Each class gets a
+  six-character join code and a progress table (XP, farm day, harvests, journal pages, last played).
+- **Students** never give an email. At `/account` they choose *Join my class*, type the code and a first
+  name or nickname, and get three login words for other computers. A teacher can issue new words.
+- The farm (both the web and Godot games) and site progress sync to the account every 30 seconds and when
+  the tab is hidden. If this device and the account have different farms, the player chooses which to keep.
+  Signing out saves, then clears this computer's copy (for shared classroom computers).
+
+To connect a project:
+
+1. In the Supabase SQL editor, run [`supabase/schema.sql`](supabase/schema.sql) (safe to run again after updates).
+2. Set these environment variables (Vercel → Project → Settings → Environment Variables, and `.env.local` for
+   development; see `.env.example`):
+   - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Project Settings → API; the
+     anon or publishable key)
+   - `SUPABASE_SERVICE_ROLE_KEY` (the service-role or secret key; server only, used to make student accounts)
+3. In Supabase → Authentication → URL Configuration, set the Site URL to the production address and add
+   `https://*.vercel.app/**` to the redirect URLs, so teacher confirmation emails link back to the site.
+
 ## Checks
 
 ```bash

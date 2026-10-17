@@ -5,9 +5,10 @@ import { DEFAULT_SETTINGS } from "./settings";
 import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
   sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding, lockedInShop, putInChest, takeAllFromChest, takeFromChest,
+  WORLD_VERSION, enterMine, leaveMine, isWalkable, buildingAt, cartFloors, craft, recipeStatus, canPickUp,
 } from "./engine";
-import { ITEMS, UPGRADES } from "./items";
-import { idx } from "./map";
+import { ITEMS, RECIPES, UPGRADES } from "./items";
+import { idx, MINE_ENTRANCE, MINE_START, MINE_W, mineFloor } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
 import type { Tile, WeatherId, WorldState } from "./types";
@@ -306,10 +307,188 @@ describe("saves from before the landmarks", () => {
     // The player built a fence where the farm silo goes.
     const fenced = { ...old, buildings: [...old.buildings, { id: "fence-1", kind: "fence" as const, x: 19, y: 5, data: {} }] };
     const up = loadWorld(JSON.stringify(fenced))!;
-    expect(up.version).toBe(6);
+    expect(up.version).toBe(WORLD_VERSION);
     for (const id of landmarks.filter((id) => id !== "farm-silo")) expect(up.buildings.some((b) => b.id === id), id).toBe(true);
     expect(up.buildings.some((b) => b.id === "farm-silo")).toBe(false);
     expect(up.buildings.some((b) => b.id === "fence-1")).toBe(true);
+  });
+});
+
+describe("tools", () => {
+  const swing = (s: WorldState, n: number) => {
+    for (let i = 0; i < n; i++) s = applyTool(s);
+    return s;
+  };
+
+  it("take more swings for bigger obstacles, and fewer with a better tier", () => {
+    let s = setup({ obstacle: "log" }, "axe");
+    s = swing(s, 3);
+    expect(tileAt(s, X, Y)!.obstacle).toBe("log");
+    expect(tileAt(s, X, Y)!.hits).toBe(3);
+    s = applyTool(s);
+    expect(tileAt(s, X, Y)!.obstacle).toBeNull();
+    expect(tileAt(s, X, Y)!.hits).toBeUndefined();
+    expect(countItem(s, "wood")).toBe(4);
+    const iron = applyTool(setup({ obstacle: "log" }, "axe_iron"));
+    expect(tileAt(iron, X, Y)!.obstacle).toBeNull();
+  });
+
+  it("wear out and break", () => {
+    let s = setup({ obstacle: "stone" }, "pickaxe");
+    const i = s.selected;
+    s = { ...s, inventory: s.inventory.map((x, k) => (k === i ? { ...x!, dur: 2 } : x)) };
+    s = applyTool(s);
+    expect(s.inventory[i]?.dur).toBe(1);
+    s = applyTool(s); // the stone breaks, and so does the pickaxe
+    expect(countItem(s, "stone")).toBe(1);
+    expect(countItem(s, "pickaxe")).toBe(4); // select() handed out 5
+    expect(s.messages.some((m) => /wore out/.test(m.text))).toBe(true);
+    // Using a tool on nothing doesn't wear it.
+    let t = setup({ obstacle: null }, "axe");
+    t = applyTool(t);
+    expect(t.inventory[t.selected]?.dur).toBeUndefined();
+  });
+
+  it("fell trees, which sprout again from the stump outside the garden field", () => {
+    const x = 33, y = 4; // north of the field, near the forest
+    let s = newWorld(42);
+    s = withTile(s, x, y, { obstacle: "tree", ground: "grass", weeds: false });
+    s = withTile(s, x, y - 1, { obstacle: null, weeds: false });
+    s = select({ ...s, player: { x, y: y - 1, facing: "down" } }, "axe_mithril");
+    s = applyTool(s);
+    expect(tileAt(s, x, y)!.obstacle).toBe("stump");
+    expect(countItem(s, "wood")).toBe(6);
+    expect(s.journal).toContain("forest-regrowth");
+    for (let d = 0; d < 7; d++) s = sleep(s);
+    expect(tileAt(s, x, y)!.obstacle).toBe("sapling");
+    for (let d = 0; d < 7; d++) s = sleep(s);
+    expect(tileAt(s, x, y)!.obstacle).toBe("tree");
+    expect(tileAt(s, x, y)!.regrow).toBeUndefined();
+  });
+
+  it("keep their wear in a chest", () => {
+    let s = takeAllFromChest(newWorld(42), "chest");
+    const i = s.inventory.findIndex((x) => x?.item === "axe");
+    s = { ...s, inventory: s.inventory.map((x, k) => (k === i ? { ...x!, dur: 7 } : x)) };
+    s = putInChest(s, "chest", i);
+    s = takeAllFromChest(s, "chest");
+    expect(s.inventory.find((x) => x?.item === "axe")?.dur).toBe(7);
+  });
+});
+
+describe("the mine", () => {
+  const open = (s: WorldState): WorldState => ({ ...s, quests: { active: [], done: ["reopen-mine"] } });
+  const atEntrance = (s: WorldState): WorldState => ({ ...s, player: { x: MINE_ENTRANCE.x + 1, y: MINE_ENTRANCE.y + 2, facing: "up" } });
+
+  it("is boarded up until Luis's quest is done", () => {
+    const s = atEntrance(newWorld(42));
+    const r = interact(s);
+    expect(r.mine).toBeUndefined();
+    expect(r.messages.at(-1)!.text).toMatch(/boards/);
+    const inside = interact(open(s));
+    expect(inside.mine?.floor).toBe(1);
+    expect(inside.deepest).toBe(1);
+    expect(isWalkable(inside, inside.player.x, inside.player.y)).toBe(true);
+  });
+
+  it("makes floors with deeper ores the deeper you go, the same for the same day", () => {
+    const ores = (floor: number) => new Set(mineFloor(42, floor, 1).tiles.map((t) => t.obstacle).filter((o) => o && o !== "stone"));
+    expect([...ores(1)].every((o) => o === "copperOre" || o === "tinOre")).toBe(true);
+    const deep = new Set([25, 26, 27, 28, 29].flatMap((f) => [...ores(f)]));
+    expect(deep.has("mithrilOre") || deep.has("goldOre")).toBe(true);
+    expect(mineFloor(42, 3, 1)).toEqual(mineFloor(42, 3, 1));
+    expect(mineFloor(42, 3, 1)).not.toEqual(mineFloor(42, 3, 2));
+    const f = mineFloor(42, 3, 1);
+    expect(f.tiles[f.ladderAt].obstacle).not.toBeNull();
+  });
+
+  it("hides the ladder down under a rock, and climbing out returns you to town", () => {
+    let s = interact(open(atEntrance(newWorld(42))));
+    const m = s.mine!;
+    const lx = m.ladderAt % MINE_W, ly = Math.floor(m.ladderAt / MINE_W);
+    // Stand above the ladder rock (clearing the spot) and break it with a mithril pickaxe.
+    const tiles = [...m.tiles];
+    tiles[(ly - 1) * MINE_W + lx] = { ...tiles[m.ladderAt], ground: "cave", obstacle: null };
+    s = select({ ...s, mine: { ...m, tiles }, player: { x: lx, y: ly - 1, facing: "down" } }, "pickaxe_mithril");
+    s = applyTool(s);
+    expect(buildingAt(s, lx, ly)?.kind).toBe("ladderDown");
+    s = interact(s);
+    expect(s.mine?.floor).toBe(2);
+    expect(s.deepest).toBe(2);
+    s = { ...s, player: { x: MINE_START.x, y: MINE_START.y + 1, facing: "up" } };
+    s = interact(s); // the ladder up
+    expect(s.mine).toBeUndefined();
+    expect(s.player).toMatchObject({ x: MINE_ENTRANCE.x + 1, y: MINE_ENTRANCE.y + 2 });
+    expect(leaveMine(s)).toBe(s);
+  });
+
+  it("gives ore and a journal page, and the farm keeps growing above", () => {
+    let s = enterMine(open(newWorld(42)), 12);
+    const m = s.mine!;
+    const tiles = [...m.tiles];
+    const at = (MINE_START.y + 2) * MINE_W + MINE_START.x;
+    tiles[at] = { ...tiles[at], ground: "cave", obstacle: "ironOre" };
+    s = select({ ...s, mine: { ...m, ladderAt: -1, tiles } }, "pickaxe_mithril");
+    s = applyTool(s);
+    expect(countItem(s, "ironOre")).toBeGreaterThan(0);
+    expect(s.journal).toContain("ironOre");
+    const before = s.tiles;
+    s = tick(s, 120);
+    expect(s.tiles).not.toBe(before); // hourly farm updates still run
+    expect(sleep(s).mine).toBeUndefined();
+  });
+
+  it("remembers every fifth floor for the mine cart", () => {
+    const s = enterMine(open(newWorld(42)), 11);
+    expect(cartFloors(s)).toEqual([1, 5, 10]);
+  });
+});
+
+describe("crafting", () => {
+  it("starts with Grandma's workbench, found in the barn", () => {
+    let s = newWorld(42);
+    const barn = s.buildings.find((b) => b.id === "farm-barn")!;
+    s = { ...s, player: { x: barn.x + 1, y: barn.y + 4, facing: "up" } };
+    s = act(s);
+    expect(countItem(s, "kit_workbench")).toBe(1);
+    expect(s.foundWorkbench).toBe(true);
+    expect(countItem(interact(s), "kit_workbench")).toBe(1); // only once
+  });
+
+  it("turns fiber into rope and wood into sticks", () => {
+    let s = addItem(newWorld(42), "fiber", 24)!;
+    for (let i = 0; i < 8; i++) s = craft(s, "refinedFiber");
+    expect(countItem(s, "fiber")).toBe(0);
+    s = craft(s, "rope");
+    expect(countItem(s, "rope")).toBe(1);
+    expect(countItem(s, "refinedFiber")).toBe(0);
+    s = craft(addItem(s, "wood", 1)!, "sticks");
+    expect(countItem(s, "sticks")).toBe(2);
+    // Not enough: nothing changes.
+    expect(countItem(craft(s, "rope"), "rope")).toBe(1);
+  });
+
+  it("smelts bronze from copper and tin, and makes a bronze axe at the grinder", () => {
+    let s = newWorld(42);
+    for (const [item, n] of [["copperOre", 9], ["tinOre", 6], ["wood", 3], ["sticks", 2], ["rope", 1]] as const) s = addItem(s, item, n)!;
+    for (let i = 0; i < 3; i++) s = craft(s, "bronzeBar");
+    expect(countItem(s, "bronzeBar")).toBe(3);
+    expect(s.journal).toContain("alloy");
+    expect(recipeStatus(s, RECIPES.find((r) => r.id === "axe_bronze")!).ok).toBe(true);
+    s = craft(s, "axe_bronze");
+    expect(countItem(s, "axe_bronze")).toBe(1);
+    expect(countItem(s, "bronzeBar")).toBe(0);
+  });
+
+  it("has every recipe's ingredients and products as real items, and a tool recipe for every tier", () => {
+    for (const r of RECIPES) for (const id of [r.id, ...r.inputs.map((i) => i.item)]) expect(ITEMS[id], id).toBeDefined();
+    for (const t of ["copper", "bronze", "iron", "gold", "mithril"]) expect(RECIPES.some((r) => r.id === `pickaxe_${t}`)).toBe(true);
+  });
+
+  it("lets you pick up a crafted chest, but not Grandma's", () => {
+    const s = newWorld(42);
+    expect(canPickUp(s.buildings.find((b) => b.id === "chest")!)).toBe(false);
+    expect(canPickUp({ id: "chest-9", kind: "chest", x: 3, y: 3, data: {} })).toBe(true);
   });
 });
 
@@ -352,7 +531,7 @@ describe("the starter chest", () => {
     const s = newWorld(42);
     const old = { ...s, version: 5, buildings: s.buildings.filter((b) => b.kind !== "chest") };
     const up = loadWorld(JSON.stringify(old))!;
-    expect(up.version).toBe(6);
+    expect(up.version).toBe(WORLD_VERSION);
     expect(chestOf(up).data.items!.every((x) => x === null)).toBe(true);
     for (const id of ["shovel", "ring", "labKit"]) expect(lockedInShop(up, id), id).toBe(false);
   });

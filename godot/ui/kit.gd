@@ -341,3 +341,24 @@ static func modal(title_text: String, icon: String, on_close: Variant = null, wi
 	root.set_meta("scroll", scroll)
 	root.set_meta("card", card)
 	return {"root": root, "body": body, "scroll": scroll}
+
+
+## A worn tool's uses left, as a little bar along the bottom of its slot (null while it's like new).
+static func wear_bar(slot: Variant, width: float, y: float) -> Control:
+	if slot == null:
+		return null
+	var d = World.durability(slot)
+	if d == null or d.left >= d.max:
+		return null
+	var f: float = float(d.left) / d.max
+	var back := ColorRect.new()
+	back.color = Color(0, 0, 0, 0.2)
+	back.position = Vector2(4, y)
+	back.size = Vector2(width - 8, 4)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bar := ColorRect.new()
+	bar.color = Color("#4f9a45") if f > 0.5 else (Color("#e0a030") if f > 0.2 else Color("#b8432f"))
+	bar.size = Vector2(maxf(2, (width - 8) * f), 4)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.add_child(bar)
+	return back

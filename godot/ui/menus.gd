@@ -13,6 +13,8 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"store": return store(game_ui)
 		"shipping": return shipping()
 		"chest": return chest()
+		"mine": return mine_cart()
+		"craft": return craft_menu()
 		"journal": return journal(game_ui)
 		"pause": return Screens.pause(game_ui)
 		"npc": return TownMenus.npc_dialog(game_ui)
@@ -33,7 +35,7 @@ static func intro(_game_ui: GameUi) -> Dictionary:
 	for p in [
 		"My dear grandchild, the farm is yours now. I'm sorry to say it's grown wild. Weeds, sticks, and stones are everywhere, and I never did test the soil. Treat it kindly and it will feed you for a lifetime.",
 		"Clear the weeds, test the soil, and feed it with compost and cover crops. Watch the sky, too: the weather decides more than you'd think. Keep an eye out for the little creatures. Most of them are friends.",
-		"My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime. Carrots don't mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.",
+		"My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime, and my workbench is somewhere in the barn. Carrots don't mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.",
 		"The folks at Seed & Soil Co. will buy what you grow. Remember, organic produce sells for more.",
 	]:
 		letter.add_child(Ui.text(p, 15))
@@ -148,6 +150,9 @@ static func bag(game_ui: GameUi) -> Dictionary:
 				var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
 				q.position = Vector2(40, 40)
 				b.add_child(q)
+			var wear := Ui.wear_bar(s, 62, 55)
+			if wear:
+				b.add_child(wear)
 			b.tooltip_text = Items.get_def(s.item).name
 		b.pressed.connect(func():
 			ui.look_slot = i
@@ -176,6 +181,9 @@ static func bag(game_ui: GameUi) -> Dictionary:
 		if shown.get("grade"):
 			info.add_child(Ui.text("Grade %s: sells for ×%s the normal price. Healthier soil and good care grow higher grades." % [shown.grade, Js.num(Grades.info(shown.grade).price)], 13, Ui.INK, 800))
 		info.add_child(Ui.text(def.desc, 14, Ui.MUTED))
+		var d = World.durability(shown)
+		if d != null:
+			info.add_child(Ui.text("Uses left: %d of %d" % [d.left, d.max], 12, Ui.INK, 800))
 	else:
 		info.add_child(Ui.text("Click an item to read about it.", 14, Ui.MUTED))
 	body.add_child(Ui.panel(info, Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
@@ -191,7 +199,7 @@ static func store(game_ui: GameUi) -> Dictionary:
 	var m := Ui.modal("Seed & Soil Co.", "🌱", Game.close, true)
 	var body: VBoxContainer = m.body
 	var tabs := Ui.hbox(6)
-	for t in [["seeds", "🌱 Seeds"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]]:
+	for t in [["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]]:
 		tabs.add_child(Ui.button(t[1], func():
 			ui.tab = t[0]
 			game_ui.refresh(), "soil" if tab == t[0] else "ghost", 14))
@@ -222,12 +230,15 @@ static func store(game_ui: GameUi) -> Dictionary:
 				col.add_child(Ui.text(bits, 12, Ui.MUTED, 800))
 				col.add_child(Ui.text("[b]Takes:[/b] %s [b]Gives back:[/b] %s" % [crop.takes, crop.givesText], 12))
 				return col))
-		"soil":
-			var science := func(i): return (i.kind == "tool" and i.get("price")) or Data.shop_unlocks().has(i.id)
+		"tools":
+			var science := func(i): return Data.shop_unlocks().has(i.id)
+			body.add_child(Ui.text("Tools wear out with use. Buy a new one here, or craft a better one at a workbench.", 14, Ui.MUTED))
+			body.add_child(Ui.heading("Farm tools"))
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "tool" and i.get("price") and not science.call(i)), buy))
 			body.add_child(Ui.heading("Science tools"))
 			body.add_child(_item_list(w, items.filter(science), buy))
-			body.add_child(Ui.heading("For the soil"))
-			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment" and not science.call(i)), buy))
+		"soil":
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "amendment" and not Data.shop_unlocks().has(i.id)), buy))
 			var up: Dictionary = Data.upgrades().bigCan
 			var row := Ui.hbox(10)
 			row.add_child(Ui.item_icon("bigCan", 32))
@@ -290,11 +301,63 @@ static func _item_list(w: Dictionary, items: Array, buy: Callable, extra: Varian
 	return col
 
 
+## A crafting station: what it makes, what each takes, and a button to make one.
+static func craft_menu() -> Dictionary:
+	var w := Game.world
+	var b = null
+	for x in w.buildings:
+		if x.id == Game.chest_id:
+			b = x
+	var station: String = b.kind if b != null else "workbench"
+	var icons := {"workbench": "🪚", "grinder": "⚙️", "spinningWheel": "🧵", "furnace": "🔥"}
+	var m := Ui.modal(World.STATIONS.get(station, "Workbench"), icons.get(station, "🪚"), Game.close, true)
+	var body: VBoxContainer = m.body
+	for r in Data.recipes():
+		if r.station != station:
+			continue
+		var st := World.recipe_status(w, r)
+		var row := Ui.hbox(10)
+		row.add_child(Ui.item_icon(r.id, 32))
+		var info := Ui.vbox(2)
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(Ui.text("%s%s" % [Items.get_def(r.id).name, " ×%d" % r.qty if r.qty > 1 else ""], 15, Ui.INK, 900))
+		var needs := Ui.hbox(10)
+		for i in st.inputs:
+			var short: bool = i.have < i.qty
+			var chip := Ui.hbox(3)
+			chip.add_child(Ui.item_icon(i.item, 18))
+			chip.add_child(Ui.text("%s %d/%d" % [Items.get_def(i.item).name, mini(i.have, i.qty), i.qty], 12, Ui.DANGER if short else Ui.MUTED, 900 if short else 600, false))
+			needs.add_child(chip)
+		info.add_child(needs)
+		row.add_child(info)
+		var id: String = r.id
+		row.add_child(Ui.button("Make", func(): Game.update(func(s): return World.craft(s, id)), "primary", 13, not st.ok))
+		body.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+	return m
+
+
+## The mine cart at the entrance: ride down to the top or any fifth floor you've reached.
+static func mine_cart() -> Dictionary:
+	var w := Game.world
+	var m := Ui.modal("The old mine", "⛏️", Game.close)
+	var body: VBoxContainer = m.body
+	body.add_child(Ui.text("Climb down the ladder, or ride the mine cart to a floor you've already reached.", 14, Ui.MUTED))
+	var g := Ui.grid(4, 8)
+	for f in World.cart_floors(w):
+		var label := "🪜 Floor 1" if f == 1 else "🛒 Floor %d" % f
+		g.add_child(Ui.button(label, func():
+			Game.update(func(s): return World.enter_mine(s, f))
+			Game.close(), "ghost" if f == 1 else "primary", 14))
+	body.add_child(g)
+	body.add_child(Ui.small("Deepest floor reached: %d" % int(w.get("deepest", 0))))
+	return m
+
+
 ## A storage chest: click something in the chest to take it, or in your bag to put it away.
 static func chest() -> Dictionary:
 	var w := Game.world
 	var id := Game.chest_id
-	var m := Ui.modal("Grandma Rosa's chest", "🧰", Game.close, true)
+	var m := Ui.modal("Grandma Rosa's chest" if id == "chest" else "Storage chest", "🧰", Game.close, true)
 	var body: VBoxContainer = m.body
 	var b = null
 	for x in w.buildings:
@@ -339,6 +402,9 @@ static func _slot_grid(slots: Array, hotbar: int, pick: Callable) -> Control:
 				var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
 				q.position = Vector2(40, 40)
 				b.add_child(q)
+			var wear := Ui.wear_bar(s, 62, 55)
+			if wear:
+				b.add_child(wear)
 			b.tooltip_text = Items.get_def(s.item).name
 			b.pressed.connect(func(): pick.call(i))
 		g.add_child(b)

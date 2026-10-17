@@ -223,6 +223,7 @@ export function npcPose(state: WorldState, npc: Npc, minute: number): NpcPose {
 
 /** The NPC standing on the tile you're facing, if any. */
 export function npcInFront(state: WorldState): Npc | null {
+  if (state.mine) return null;
   const f = facingTile(state);
   for (const npc of NPCS) {
     const p = npcPose(state, npc, state.minute);

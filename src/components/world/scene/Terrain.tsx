@@ -22,6 +22,8 @@ function groundColor(t: Tile, i: number, season: Season): string {
     case "path": return hash(i) > 0.5 ? "#d9c49a" : "#d2bc90";
     case "sand": return "#e6d3a3";
     case "water": return "#3f7fae";
+    case "cave": return "#5a4e44";
+    case "caveWall": return "#3b342e";
     case "farm":
       if (t.tilled) return t.moisture > 45 ? "#4a2f1c" : "#7a5233";
       return t.greenhouse ? "#8a6a45" : season === "Winter" ? "#c9c3b4" : "#9c8458";
@@ -110,6 +112,10 @@ function ProceduralObstacles({ tiles, season }: { tiles: Tile[]; season: Season 
         case "stick": sticks.push({ x, y: 0.05, z, ry: r * 6, rz: 0.1 }); break;
         case "stump": stumps.push({ x, y: 0.15, z, s: 0.9 + r * 0.3 }); break;
         case "log": logs.push({ x, y: 0.18, z, ry: r * 3, rz: Math.PI / 2 }); break;
+        case "sapling":
+          trunks.push({ x, y: 0.15, z, s: 0.35 });
+          canopy.push({ x, y: 0.42, z, s: 0.35, ry: r * 6, color: leaf[0] });
+          break;
       }
       if (t.weeds) {
         for (let k = 0; k < 9; k++) {
@@ -201,6 +207,7 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
         case "stump": lowE.push([n(r2 > 0.5 ? "stump_round" : "stump_old"), { x, z, s: 2, ry }]); break;
         case "log": lowE.push([n(r2 > 0.5 ? "log" : "log_large"), { x, z, s: 1.4, ry }]); break;
         case "stick": sticksL.push({ x, y: 0.05, z, ry, rz: 0.1 }); break;
+        case "sapling": lowE.push([n(pick(LEAFY, r2) + LEAF_SUFFIX[season]), { x, z, s: 0.45, ry }]); break;
       }
       if (t.weeds) {
         for (let k = 0; k < 3; k++) {

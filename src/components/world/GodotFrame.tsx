@@ -33,9 +33,15 @@ export function GodotFrame() {
         }
       }
     };
+    // A farm downloaded from the cloud: restart the game so it loads the new save.
+    const onReplaced = () => frame.current?.contentWindow?.location.reload();
     window.addEventListener("message", onMessage);
+    window.addEventListener("earthsciencelab:save-replaced", onReplaced);
     sendGrade();
-    return () => window.removeEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("earthsciencelab:save-replaced", onReplaced);
+    };
   }, [grade]);
 
   if (built === false) {
