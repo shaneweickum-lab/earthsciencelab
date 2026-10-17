@@ -11,7 +11,8 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
 const CACHE = path.join(ROOT, ".asset-cache");
 const MODELS = path.join(ROOT, "public/models");
 const ICONS = path.join(ROOT, "public/icons");
-const BUDGET_BYTES = 4.5 * 1024 * 1024;
+// The Kenney nature models stay until the web game is replaced by the Godot version (which uses Quaternius's).
+const BUDGET_BYTES = 9 * 1024 * 1024;
 
 const PACKS = {
   nature: {
@@ -118,18 +119,40 @@ for (const [key, pack] of Object.entries(PACKS)) {
   }
 }
 
-// ── Quaternius Ultimate Crops: OBJ source art in assets-src, converted to GLB ──
-const QUATERNIUS = path.join(ROOT, "assets-src/quaternius-crops");
+// ── Quaternius packs: OBJ source art in assets-src, converted to GLB ──
 const QUATERNIUS_STAGES = ["1", "2", "3", "4", "Crop"];
 const QUATERNIUS_CROPS = ["Carrot", "Corn", "Pumpkin", "Tomato", "Wheat"];
-// Files that didn't make it into the upload: use the nearest stage instead.
-const QUATERNIUS_FALLBACK = { Pumpkin_2: "Pumpkin_1", Tomato_3: "Tomato_2" };
+const SEASON = ["", "_Autumn", "_Snow"];
+const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
+/** Source folder, output folder, and which models the game uses (with fallbacks for files that didn't upload). */
+const OBJ_PACKS = [
+  {
+    title: "Ultimate Crops", src: "quaternius-crops", out: "crops", page: "https://quaternius.com/packs/ultimatecrops.html",
+    models: QUATERNIUS_CROPS.flatMap((c) => QUATERNIUS_STAGES.map((st) => `${c}_${st}`)),
+    fallback: { Pumpkin_2: "Pumpkin_1", Tomato_3: "Tomato_2" },
+  },
+  {
+    // Trees, rocks, stumps, and logs in every season (autumn leaves, snow), plus bushes, grass, and plants.
+    title: "Ultimate Nature", src: "quaternius-nature", out: "qnature", page: "https://quaternius.com/packs/ultimatenature.html",
+    models: [
+      ...["CommonTree", "PineTree", "BirchTree"].flatMap((t) => SEASON.flatMap((s) => range(3).map((n) => `${t}${s}_${n}`))),
+      "CommonTree_Dead_1", "CommonTree_Dead_Snow_1", "BirchTree_Dead_1", "BirchTree_Dead_Snow_1",
+      ...range(4).flatMap((n) => [`Rock_${n}`, `Rock_Snow_${n}`]), "Rock_Moss_1", "Rock_Moss_2",
+      ...["TreeStump", "WoodLog"].flatMap((t) => [t, `${t}_Moss`, `${t}_Snow`]),
+      "Bush_1", "Bush_2", "Bush_Snow_1", "BushBerries_1", "Grass", "Grass_2", "Grass_Short", "Flowers", "Plant_1", "Plant_2", "Plant_3", "Lilypad",
+    ],
+  },
+  {
+    title: "Farm Buildings", src: "quaternius-farm-buildings", out: "qbuildings", page: "https://quaternius.com",
+    models: ["Barn", "BigBarn", "ChickenCoop", "Silo", "SmallBarn", "WaterTower", "Well", "Windmill"],
+  },
+];
 
-/** Every material in the pack. Quaternius reuses the same plain colors, so missing .mtl files can be rebuilt. */
-function quaterniusPalette() {
+/** Every material in a pack. Quaternius reuses the same plain colors, so missing .mtl files can be rebuilt. */
+function quaterniusPalette(dir) {
   const blocks = new Map();
-  for (const f of readdirSync(QUATERNIUS).filter((x) => x.endsWith(".mtl"))) {
-    for (const block of readFileSync(path.join(QUATERNIUS, f), "utf8").split(/^(?=newmtl )/m)) {
+  for (const f of readdirSync(dir).filter((x) => x.endsWith(".mtl"))) {
+    for (const block of readFileSync(path.join(dir, f), "utf8").split(/^(?=newmtl )/m)) {
       const name = block.match(/^newmtl (\S+)/)?.[1];
       if (name && !blocks.has(name)) blocks.set(name, block.trim());
     }
@@ -137,38 +160,38 @@ function quaterniusPalette() {
   return blocks;
 }
 
-async function convertQuaternius() {
-  if (!existsSync(QUATERNIUS)) return;
+async function convertObjPack(pack) {
+  const src = path.join(ROOT, "assets-src", pack.src);
+  if (!existsSync(src)) return;
   const { default: obj2gltf } = await import("obj2gltf");
-  const palette = quaterniusPalette();
-  const out = path.join(MODELS, "crops");
-  const work = path.join(CACHE, "quaternius-work");
+  const palette = quaterniusPalette(src);
+  const out = path.join(MODELS, pack.out);
+  const work = path.join(CACHE, `${pack.src}-work`);
   mkdirSync(out, { recursive: true });
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work, { recursive: true });
-  for (const crop of QUATERNIUS_CROPS) {
-    for (const stage of QUATERNIUS_STAGES) {
-      const name = `${crop}_${stage}`;
-      const source = existsSync(path.join(QUATERNIUS, `${name}.obj`)) ? name : QUATERNIUS_FALLBACK[name];
-      if (!source || !existsSync(path.join(QUATERNIUS, `${source}.obj`))) throw new Error(`Quaternius crops: missing ${name}.obj`);
-      const obj = readFileSync(path.join(QUATERNIUS, `${source}.obj`), "utf8");
-      const used = [...new Set([...obj.matchAll(/^usemtl (\S+)/gm)].map((m) => m[1]))];
-      const mtlFile = path.join(QUATERNIUS, `${source}.mtl`);
-      const mtl = existsSync(mtlFile)
-        ? readFileSync(mtlFile, "utf8")
-        : used.map((m) => palette.get(m) ?? `newmtl ${m}\nKd 0.4 0.6 0.3`).join("\n\n");
-      writeFileSync(path.join(work, `${name}.obj`), obj.replace(/^mtllib .*$/m, `mtllib ${name}.mtl`));
-      writeFileSync(path.join(work, `${name}.mtl`), mtl);
-      const glb = await obj2gltf(path.join(work, `${name}.obj`), { binary: true });
-      // Shrink: merge duplicate vertices and data, then store positions and normals in fewer bits.
-      const doc = await io.readBinary(new Uint8Array(glb));
-      await doc.transform(dedup(), weld(), quantize());
-      writeFileSync(path.join(out, `${name}.glb`), await io.writeBinary(doc));
-    }
+  for (const name of pack.models) {
+    const source = existsSync(path.join(src, `${name}.obj`)) ? name : pack.fallback?.[name];
+    if (!source || !existsSync(path.join(src, `${source}.obj`))) throw new Error(`${pack.title}: missing ${name}.obj`);
+    const obj = readFileSync(path.join(src, `${source}.obj`), "utf8");
+    const used = [...new Set([...obj.matchAll(/^usemtl (\S+)/gm)].map((m) => m[1]))];
+    const mtlFile = path.join(src, `${source}.mtl`);
+    const mtl = existsSync(mtlFile)
+      ? readFileSync(mtlFile, "utf8")
+      : used.map((m) => palette.get(m) ?? `newmtl ${m}\nKd 0.4 0.6 0.3`).join("\n\n");
+    writeFileSync(path.join(work, `${name}.obj`), obj.replace(/^mtllib .*$/m, `mtllib ${name}.mtl`));
+    writeFileSync(path.join(work, `${name}.mtl`), mtl);
+    const glb = await obj2gltf(path.join(work, `${name}.obj`), { binary: true });
+    // Shrink: merge duplicate vertices and data, then store positions and normals in fewer bits.
+    const doc = await io.readBinary(new Uint8Array(glb));
+    await doc.transform(dedup(), weld(), quantize());
+    writeFileSync(path.join(out, `${name}.glb`), await io.writeBinary(doc));
   }
-  copyFileSync(path.join(QUATERNIUS, "License.txt"), path.join(out, "License.txt"));
+  const license = readdirSync(src).find((f) => /^license/i.test(f));
+  if (license) copyFileSync(path.join(src, license), path.join(out, "License.txt"));
 }
-await convertQuaternius();
+
+for (const pack of OBJ_PACKS) await convertObjPack(pack);
 
 function sizeOf(dir) {
   return readdirSync(dir).reduce((n, f) => {
@@ -186,7 +209,7 @@ All models in this folder (and the item icons in \`public/icons\`, rendered from
 | Folder | Pack | Author | Source |
 | --- | --- | --- | --- |
 ${Object.entries(PACKS).map(([k, p]) => `| \`${k}/\` | ${p.title} | Kenney | ${p.page} |`).join("\n")}
-| \`crops/\` | Ultimate Crops (converted from OBJ in \`assets-src/quaternius-crops\`) | Quaternius | https://quaternius.com/packs/ultimatecrops.html |
+${OBJ_PACKS.map((p) => `| \`${p.out}/\` | ${p.title} (converted from OBJ in \`assets-src/${p.src}\`) | Quaternius | ${p.page} |`).join("\n")}
 
 Credit is not required by CC0, but we're grateful. Regenerate this folder with \`npm run assets\`.
 `);

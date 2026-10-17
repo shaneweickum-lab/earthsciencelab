@@ -145,6 +145,25 @@ func _fancy(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 		"prop":
 			if b.data.get("model"):
 				_m(root, b.data.model)
+		# Quaternius farm buildings, scaled to their footprints.
+		"barn":
+			_m(root, "qbuildings/BigBarn" if b.data.get("owner") else "qbuildings/Barn", Vector3.ZERO, 0, 0.5)
+		"silo":
+			_m(root, "qbuildings/Silo", Vector3.ZERO, 0, 0.5)
+		"windmill":
+			_m(root, "qbuildings/Windmill", Vector3.ZERO, 0, 0.45)
+		"waterTower":
+			_m(root, "qbuildings/WaterTower", Vector3.ZERO, 0, 0.6)
+		"well":
+			_m(root, "qbuildings/Well", Vector3.ZERO, 0, 0.6)
+		"chickenCoop":
+			_m(root, "qbuildings/ChickenCoop", Vector3.ZERO, 0, 0.75)
+			if b.data.get("eggs", 0) > 0 or b.data.get("ready", 0) > 0:
+				_ready_marker(root)
+		"smallBarn":
+			_m(root, "qbuildings/SmallBarn", Vector3.ZERO, 0, 0.45)
+			if b.data.get("ready", 0) > 0:
+				_ready_marker(root)
 		_:
 			_procedural(root, b, w, h)
 

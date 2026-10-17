@@ -44,7 +44,7 @@ func _particles(color: Color, size: Vector3, amount: int, speed: float) -> CPUPa
 	mesh.material = m
 	p.mesh = mesh
 	p.amount = amount
-	p.lifetime = 12.0 / speed
+	p.lifetime = 8.0 / speed
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
 	p.emission_box_extents = Vector3(15, 0.5, 13)
 	p.position.y = 12
@@ -96,5 +96,5 @@ func update(world: Dictionary, player: Dictionary) -> void:
 		_rain.emitting = weather == "rain" or weather == "storm"
 		_rain.amount = 1400 if weather == "storm" else 900
 		_snow.emitting = weather == "snow"
-	_rain.position = Vector3(player.x, 12, player.y)
-	_snow.position = Vector3(player.x, 12, player.y)
+	_rain.position = Vector3(player.x, 8, player.y + 2)
+	_snow.position = Vector3(player.x, 8, player.y + 2)
