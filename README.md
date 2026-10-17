@@ -67,11 +67,13 @@ Soil & Sprout is being ported to [Godot 4](https://godotengine.org) (GDScript) s
 
 | Command | What it does |
 | --- | --- |
-| `npm run godot:fetch` | Downloads the pinned Godot editor and the web export templates into `.godot-cache/` (about 70 MB; the templates are read straight out of the release archive) |
+| `npm run godot:fetch` | Downloads the pinned Godot editor and the web export templates into `node_modules/.cache/godot` (or `.godot-cache/` if it exists; about 150 MB; the templates are read straight out of the release archive) |
 | `npm run godot:test` | Runs the GDScript tests in `godot/tests` headless |
 | `npm run godot:export` | Copies `public/models` into the project, imports it, and exports the web build to `public/godot/` (gitignored) |
 
 The Godot build already plays the whole game: the main menu and new-game setup, the farm and town in 3D, tools, crops, weather, the HUD and tile inspector, the bag, shop, shipping bin, house and weather TV, the Nature Journal (at the site's grade level), the pause menu with every science setting, and the townsfolk, gifts, quests, and notice board. Its UI is in `godot/ui`, built with the site's colors and the Nunito font. Godot's web build has no emoji font, so `node scripts/godot-assets.mjs` downloads the emoji the game uses as pictures (Google's Noto emoji, Apache 2.0) into `godot/assets/emoji`; a test fails if one is missing.
+
+**Deploys:** on Vercel, `npm run vercel-build` exports the Godot build before `next build` (Vercel runs it instead of `build`). Godot and its web templates are cached in `node_modules/.cache/godot`, which Vercel keeps between builds; the editor download is checked against its published SHA-512. If the Godot export fails, the deploy still succeeds and the preview page says the build isn't there. To playtest before the Godot version replaces /soil/game, see `godot/PLAYTEST.md`.
 
 The game engine is ported to GDScript in `godot/engine` (one module per TS file, working on the same JSON-shaped world as the save). The TypeScript engine in `src/world` is the reference while the port is under way: `src/world/godot-golden.test.ts` writes fixtures to `godot/tests/golden/`, and the GDScript tests must reproduce them exactly. Besides unit fixtures (weather, maps, grades, critters, NPC routes, the notice board), four seeded playthroughs record every step of a bot playing the game (tools, planting, nights, shopping, quests, gifts) and Godot must match each step. The game's tables (crops, items, journal, NPCs, quests) are exported to `godot/data/` the same way. Regenerate with `GOLDEN=1 npx vitest run godot-golden`; `npm test` fails if they're stale. Saves written by the Godot tests are loaded back by `src/world/godot-roundtrip.test.ts`. Site ↔ game messages are documented in `godot/autoload/Site.gd`.
 
