@@ -187,6 +187,38 @@ const Procedural = memo(function Procedural({ b }: { b: Building }) {
           ))}
         </group>
       );
+    case "barn":
+    case "smallBarn":
+    case "chickenCoop":
+      return (
+        <group>
+          <Cottage w={w} h={h} wall={b.kind === "chickenCoop" ? "#fbf6ef" : "#a8382c"} roof="#3a3a3a" trim="#fbf6ef" />
+          {(b.data.ready ?? 0) > 0 || (b.data.eggs ?? 0) > 0 ? <Ready /> : null}
+        </group>
+      );
+    case "silo":
+    case "waterTower":
+      return (
+        <group>
+          <mesh position={[0, 1.6, 0]} castShadow><cylinderGeometry args={[0.7, 0.7, 3.2, 12]} /><Mat color={b.kind === "silo" ? "#c0603b" : "#9a6b3f"} /></mesh>
+          <mesh position={[0, 3.45, 0]} castShadow><coneGeometry args={[0.75, 0.5, 12]} /><Mat color="#8f948f" /></mesh>
+        </group>
+      );
+    case "windmill":
+      return (
+        <group>
+          <mesh position={[0, 1.6, 0]} castShadow><cylinderGeometry args={[0.5, 0.8, 3.2, 8]} /><Mat color="#b08458" /></mesh>
+          <mesh position={[0, 3, 0.85]} rotation-z={Math.PI / 4}><boxGeometry args={[2.6, 0.25, 0.05]} /><Mat color="#fbf6ef" /></mesh>
+          <mesh position={[0, 3, 0.85]} rotation-z={-Math.PI / 4}><boxGeometry args={[2.6, 0.25, 0.05]} /><Mat color="#fbf6ef" /></mesh>
+        </group>
+      );
+    case "well":
+      return (
+        <group>
+          <mesh position={[0, 0.3, 0]} castShadow><cylinderGeometry args={[0.4, 0.42, 0.6, 12]} /><Mat color="#b9b2a4" /></mesh>
+          <mesh position={[0, 1.05, 0]} rotation-y={Math.PI / 4}><coneGeometry args={[0.6, 0.35, 4]} /><Mat color="#a8382c" /></mesh>
+        </group>
+      );
     default:
       // Simple stand-in while a model loads.
       return (
@@ -298,6 +330,31 @@ function Fancy({ b }: { b: Building }) {
           {[-2, -1, 0, 1, 2].flatMap((c) => [-1, 0, 1].map((r) => (
             <Model key={`${c},${r}`} url={model("crops", "Corn_4")} position={[c, 0.03, r]} scale={0.5} rotation-y={(c * 3 + r) * 1.3} />
           )))}
+        </group>
+      );
+    // Quaternius's farm buildings; the scales match the Godot version (godot/scene/buildings_view.gd).
+    case "barn":
+      return <Model url={model("qbuildings", b.data.owner ? "BigBarn" : "Barn")} scale={0.5} />;
+    case "silo":
+      return <Model url={model("qbuildings", "Silo")} scale={0.5} />;
+    case "windmill":
+      return <Model url={model("qbuildings", "Windmill")} scale={0.45} />;
+    case "waterTower":
+      return <Model url={model("qbuildings", "WaterTower")} scale={0.6} />;
+    case "well":
+      return <Model url={model("qbuildings", "Well")} scale={0.6} />;
+    case "chickenCoop":
+      return (
+        <group>
+          <Model url={model("qbuildings", "ChickenCoop")} scale={0.75} />
+          {(b.data.ready ?? 0) > 0 || (b.data.eggs ?? 0) > 0 ? <Ready /> : null}
+        </group>
+      );
+    case "smallBarn":
+      return (
+        <group>
+          <Model url={model("qbuildings", "SmallBarn")} scale={0.45} />
+          {(b.data.ready ?? 0) > 0 ? <Ready /> : null}
         </group>
       );
     case "prop":
