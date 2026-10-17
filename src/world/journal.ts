@@ -32,6 +32,8 @@ const NRCS = { org: "USDA Natural Resources Conservation Service, Soil Health", 
 const PRIMER = { org: "Soil Biology Primer (Soil and Water Conservation Society / USDA NRCS)", url: "https://www.nrcs.usda.gov/conservation-basics/natural-resource-concerns/soils/soil-health" };
 const CORNELL = { org: "Cornell Lab of Ornithology, All About Birds", url: "https://www.allaboutbirds.org" };
 const NOAA = { org: "NOAA National Weather Service, JetStream", url: "https://www.weather.gov/jetstream/" };
+const USGS = { org: "U.S. Geological Survey, Water Science School", url: "https://www.usgs.gov/special-topics/water-science-school" };
+const PSU = { org: "Penn State Extension, Manure and Composting", url: "https://extension.psu.edu" };
 const MUSHROOM = { org: "North American Mycological Association", url: "https://namyco.org" };
 
 export const MUSHROOM_SAFETY = "Never eat a wild mushroom unless an expert identifies it. Some deadly mushrooms look like safe ones.";
@@ -149,7 +151,26 @@ export const JOURNAL: JournalEntry[] = [
     },
   },
 
+  {
+    id: "hen", name: "Hens", icon: "🐔", category: "bird", source: PSU,
+    hint: "Build a chicken coop.",
+    fact: {
+      elementary: "Chickens scratch and peck all day, gobbling up bugs, grubs, and weed seeds. Their droppings become great fertilizer once they are composted.",
+      middle: "Chicken manure is rich in nitrogen, phosphorus, and potassium. Fresh manure can burn plants and may carry germs, so gardeners compost it before spreading it on soil.",
+      high: "Poultry manure has a low carbon-to-nitrogen ratio (roughly 6–10:1), so mixing it with carbon-rich bedding like straw balances a compost pile. The heat of hot composting also kills pathogens such as Salmonella.",
+    },
+  },
+
   // ── Soil science ──
+  {
+    id: "groundwater", name: "Groundwater", icon: "🪣", category: "soil", source: USGS,
+    hint: "Fill your watering can at a well.",
+    fact: {
+      elementary: "When rain soaks into the ground, some of it trickles down until it fills tiny spaces between bits of soil, sand, and rock. That hidden water is groundwater, and a well brings it back up.",
+      middle: "Groundwater fills the pores and cracks in underground layers called aquifers. The top of that soaked zone is the water table. A well works because it reaches below the water table.",
+      high: "Aquifers are recharged when rain and snowmelt infiltrate the soil. Pumping faster than recharge lowers the water table, and nitrate from fertilizer that leaches below the roots can contaminate wells: one more reason to keep nutrients in the soil.",
+    },
+  },
   {
     id: "earthworm", name: "Earthworm", icon: "🪱", category: "soil", lesson: "soil-food-web", source: NRCS,
     hint: "Do a shovel test in living soil.",

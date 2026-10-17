@@ -77,6 +77,8 @@ static func preview_action(state: Dictionary) -> Dictionary:
 				return _r("Refill", "Fill your watering can.", true)
 			if b and b.kind == "rainBarrel":
 				return _r("Refill", "Refill with rainwater.", true)
+			if b and b.kind == "well":
+				return _r("Refill", "Fill your can with groundwater from the well.", true)
 			if state.water <= 0:
 				return _r("Water", "Your can is empty. Refill at the pond.", false)
 			if not t.tilled:
