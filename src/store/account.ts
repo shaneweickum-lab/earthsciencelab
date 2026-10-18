@@ -12,6 +12,8 @@ export interface Profile {
   id: string;
   role: "teacher" | "student";
   display_name: string;
+  /** Students sign in with it (older class-code accounts may not have one yet). */
+  username?: string | null;
 }
 
 type SyncStatus = "off" | "syncing" | "saved" | "error";
@@ -35,6 +37,8 @@ interface AccountStore {
   sync: () => Promise<void>;
   keep: (which: "here" | "cloud") => Promise<void>;
   signOut: () => Promise<void>;
+  /** Read the profile again (after picking a username). */
+  refreshProfile: () => Promise<void>;
 }
 
 const SAVE_COLUMNS = "world, progress, updated_at";
@@ -75,7 +79,7 @@ export const useAccount = create<AccountStore>()((set, get) => {
       if (!session) return;
       const db = supabase();
       if (!db) return;
-      const { data } = await db.from("profiles").select("id, role, display_name").eq("id", session.user.id).maybeSingle();
+      const { data } = await db.from("profiles").select("id, role, display_name, username").eq("id", session.user.id).maybeSingle();
       set({ profile: (data as Profile | null) ?? null });
       await get().sync();
     },
@@ -134,6 +138,14 @@ export const useAccount = create<AccountStore>()((set, get) => {
      * Save to the cloud one last time, then clear this device's copy so the next person who
      * signs in here (a shared classroom computer) starts with their own farm.
      */
+    refreshProfile: async () => {
+      const { session } = get();
+      const db = supabase();
+      if (!db || !session) return;
+      const { data } = await db.from("profiles").select("id, role, display_name, username").eq("id", session.user.id).maybeSingle();
+      set({ profile: (data as Profile | null) ?? null });
+    },
+
     signOut: async () => {
       const db = supabase();
       const { session, conflict } = get();
