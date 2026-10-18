@@ -6,10 +6,11 @@ import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
 import { DEFAULT_SETTINGS, normalizeSettings, PRESETS, presetOf, type GameSettings } from "@/world/settings";
 import { AvatarChoice } from "./Menus";
 import { CalendarPanel, SciencePanel, TimePanel } from "./SettingsPanels";
+import { useMulti } from "@/net/mp";
 import { useWorld } from "./useWorld";
 
 /** Rolling hills and a sunrise behind the menus. */
-function Backdrop({ children }: { children: React.ReactNode }) {
+export function Backdrop({ children }: { children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 overflow-y-auto bg-gradient-to-b from-[#bfe3f2] via-[#f6e7c4] to-[#7fb069]">
       <div className="pointer-events-none absolute left-1/2 top-16 h-40 w-40 -translate-x-1/2 rounded-full bg-[#ffd27a] opacity-80 blur-[2px]" />
@@ -53,6 +54,7 @@ export function MainMenu() {
             )}
           </button>
           <button className="btn btn-ghost text-lg" onClick={openSetup}>✨ New Game</button>
+          <button className="btn btn-ghost text-lg" onClick={() => useWorld.setState({ screen: "lobby" })}>👩‍🌾 Multiplayer</button>
         </div>
         <p className="text-xs text-muted">Your farm is saved in this browser.</p>
       </div>
@@ -131,8 +133,24 @@ export function NewGameSetup() {
 /** In-game pause: resume, change settings, or save and quit. */
 export function PauseMenu() {
   const w = useWorld((s) => s.world!);
+  const multi = useWorld((s) => s.remote !== null);
   const { close, updateSettings, quitToMenu } = useWorld.getState();
   const [tab, setTab] = useState<"science" | "time" | "calendar">("science");
+  // A shared world keeps going while your menu is open, and its settings are the host's.
+  if (multi) {
+    return (
+      <div className="absolute inset-0 z-40 grid place-items-center bg-soil-dark/50 p-3 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Menu">
+        <div className="card w-full max-w-sm space-y-3 p-5 text-center">
+          <h2 className="font-display text-xl font-black">☰ Menu</h2>
+          <p className="text-sm text-muted">The world keeps going while this is open.</p>
+          <div className="grid gap-2">
+            <button className="btn btn-primary" onClick={close}>▶ Back to the farm</button>
+            <button className="btn btn-ghost" onClick={() => void useMulti.getState().leave()}>🚪 Leave this world</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-soil-dark/50 p-3 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Paused">
       <div className="card flex max-h-full w-full max-w-3xl flex-col overflow-hidden">

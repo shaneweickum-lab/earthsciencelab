@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CROPS } from "@/game/crops";
 import { dayOf, seasonOf } from "@/world/clock";
-import { buy, lockedInShop, owns, sellNow, ship } from "@/world/engine";
+import { lockedInShop, owns } from "@/world/engine";
 import { cropDays, ITEMS, sellPrice, SHOP_UNLOCKS, UPGRADES, WORLD_CROPS, type ItemDef } from "@/world/items";
 import { QUEST_BY_ID } from "@/world/quests";
 import { NPC_BY_ID } from "@/world/town";
@@ -16,7 +16,7 @@ import { useWorld } from "./useWorld";
 
 export function StoreMenu() {
   const w = useWorld((s) => s.world!);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const [tab, setTab] = useState<"seeds" | "tools" | "soil" | "build" | "sell">("seeds");
   const season = seasonOf(dayOf(w.minute), w.settings);
@@ -48,7 +48,7 @@ export function StoreMenu() {
                 ? "You have a greenhouse, so every seed is for sale. Out-of-season seeds only grow inside it."
                 : `In stock for ${season}. Build a greenhouse to grow crops in any season!`}
           </p>
-          <ItemList items={seeds} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} extra={(i) => {
+          <ItemList items={seeds} w={w} onBuy={(id, n) => run("buy", id, n)} extra={(i) => {
             const wc = WORLD_CROPS[i.crop!];
             const inSeason = wc.seasons.includes(season);
             return (
@@ -69,14 +69,14 @@ export function StoreMenu() {
         <>
           <p className="mb-2 text-sm text-muted">Tools wear out with use. Buy a new one here, or craft a better one at a workbench.</p>
           <p className="mb-1.5 text-xs font-black uppercase tracking-wider text-muted">Farm tools</p>
-          <ItemList items={farmTools} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+          <ItemList items={farmTools} w={w} onBuy={(id, n) => run("buy", id, n)} />
           <p className="mb-1.5 mt-3 text-xs font-black uppercase tracking-wider text-muted">Science tools</p>
-          <ItemList items={scienceTools} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+          <ItemList items={scienceTools} w={w} onBuy={(id, n) => run("buy", id, n)} />
         </>
       )}
       {tab === "soil" && (
         <>
-          <ItemList items={soil} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+          <ItemList items={soil} w={w} onBuy={(id, n) => run("buy", id, n)} />
           <div className="mt-3 flex items-center gap-3 rounded-xl border border-line p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={UPGRADES.bigCan.image} alt="" aria-hidden className="h-8 w-8 object-contain" draggable={false} />
@@ -87,7 +87,7 @@ export function StoreMenu() {
             <button
               className="btn btn-primary py-1 text-sm"
               disabled={w.canSize >= 40 || w.coins < UPGRADES.bigCan.price}
-              onClick={() => update((s) => buy(s, "bigCan"))}
+              onClick={() => run("buy", "bigCan")}
             >
               {w.canSize >= 40 ? "Owned" : `🪙 ${UPGRADES.bigCan.price}`}
             </button>
@@ -97,7 +97,7 @@ export function StoreMenu() {
       {tab === "build" && (
         <>
           <p className="mb-2 text-sm text-muted">Buy a kit, put it in your hotbar, face an open spot, and press Space to build. Face it and press P to pick it back up.</p>
-          <ItemList items={kits} w={w} onBuy={(id, n) => update((s) => buy(s, id, n))} />
+          <ItemList items={kits} w={w} onBuy={(id, n) => run("buy", id, n)} />
         </>
       )}
       {tab === "sell" && (
@@ -115,8 +115,8 @@ export function StoreMenu() {
                   <ItemIcon id={s!.item} grade={s!.grade} className="text-2xl" />
                   <span className="flex-1 font-bold">{def.name}{s!.grade ? ` (grade ${s!.grade})` : ""} ×{s!.qty}</span>
                   <span className="text-sm text-muted">🪙 {each} each</span>
-                  <button className="btn btn-ghost py-1 text-sm" onClick={() => update((x) => sellNow(x, i, 1))}>Sell 1</button>
-                  <button className="btn btn-primary py-1 text-sm" onClick={() => update((x) => sellNow(x, i, s!.qty))}>All · {each * s!.qty}</button>
+                  <button className="btn btn-ghost py-1 text-sm" onClick={() => run("sellNow", i, 1)}>Sell 1</button>
+                  <button className="btn btn-primary py-1 text-sm" onClick={() => run("sellNow", i, s!.qty)}>All · {each * s!.qty}</button>
                 </li>
               );
             })}
@@ -176,7 +176,7 @@ function ItemList({ items, w, onBuy, extra }: {
 
 export function ShippingMenu() {
   const w = useWorld((s) => s.world!);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const sellable = w.inventory.map((s, i) => ({ s, i })).filter(({ s }) => s && ITEMS[s.item].sell);
   const payout = w.shipping.reduce((n, s) => n + sellPrice(ITEMS[s.item], s.grade, w.organic) * s.qty, 0);
@@ -198,7 +198,7 @@ export function ShippingMenu() {
             <li key={i} className="flex items-center gap-3 rounded-xl border border-line p-2">
               <ItemIcon id={s!.item} grade={s!.grade} className="text-2xl" />
               <span className="flex-1 font-bold">{ITEMS[s!.item].name}{s!.grade ? ` (grade ${s!.grade})` : ""} ×{s!.qty}</span>
-              <button className="btn btn-primary py-1 text-sm" onClick={() => update((x) => ship(x, i))}>Ship all</button>
+              <button className="btn btn-primary py-1 text-sm" onClick={() => run("ship", i)}>Ship all</button>
             </li>
           ))}
         </ul>

@@ -122,6 +122,29 @@ export class HostSession extends Session {
     }
   }
 
+  private clock: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Run the world's clock from the wall clock, so it keeps going (catching up in steps) when the
+   * host's tab is in the background and the browser slows its timers.
+   */
+  startClock(msPerMinute: () => number) {
+    let last = Date.now();
+    let carry = 0;
+    this.clock = setInterval(() => {
+      const now = Date.now();
+      // A laptop waking from sleep shouldn't fast-forward the world by hours.
+      carry += Math.min(now - last, 60_000);
+      last = now;
+      const ms = msPerMinute();
+      const minutes = Math.floor(carry / ms);
+      if (minutes > 0) {
+        carry -= minutes * ms;
+        this.tick(minutes);
+      }
+    }, 250);
+  }
+
   async save() {
     this.flush();
     await this.transport.saveSnapshot(this.seq, this.world);
@@ -150,6 +173,7 @@ export class HostSession extends Session {
   }
 
   close() {
+    if (this.clock) clearInterval(this.clock);
     this.flush();
     this.transport.send({ t: "bye" });
     super.close();

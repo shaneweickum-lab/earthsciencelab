@@ -2,7 +2,7 @@
 
 import { CROPS } from "@/game/crops";
 import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf } from "@/world/clock";
-import { buildingAt, canPickUp, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, pickUpBuilding, soilHealth, tileAt, todayClimate } from "@/world/engine";
+import { buildingAt, canPickUp, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, soilHealth, tileAt, todayClimate } from "@/world/engine";
 import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
 import { expectedGrade } from "@/world/grades";
@@ -63,7 +63,7 @@ function Meter({ label, icon, value, max, color }: { label: string; icon: string
 export function Hotbar() {
   const inv = useWorld((s) => s.world!.inventory);
   const selected = useWorld((s) => s.world!.selected);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const sel = inv[selected];
   return (
     <div className="pointer-events-auto flex flex-col items-center gap-1">
@@ -76,7 +76,7 @@ export function Hotbar() {
             key={i}
             tabIndex={-1}
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => update((w) => ({ ...w, selected: i }))}
+            onClick={() => run("select", i)}
             aria-label={`Slot ${(i + 1) % 10}: ${s ? ITEMS[s.item].name : "empty"}`}
             aria-pressed={i === selected}
             title={s ? `${ITEMS[s.item].name}: ${ITEMS[s.item].desc}` : "Empty"}
@@ -138,7 +138,7 @@ function SoilRow({ label, value, known, unit = "", tip }: { label: string; value
 /** What's in front of you, its hidden soil (until tested), and what your next action will do. */
 export function TileInspector() {
   const w = useWorld((s) => s.world!);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const { x, y } = facingTile(w);
   const t = tileAt(w, x, y);
   if (!t) return null;
@@ -179,7 +179,7 @@ export function TileInspector() {
         </div>
       )}
       {pickable && (
-        <button className="btn btn-ghost w-full py-1 text-xs" onClick={() => update((s) => pickUpBuilding(s, b.id))}>
+        <button className="btn btn-ghost w-full py-1 text-xs" onClick={() => run("pickUp", b.id)}>
           Pick up <kbd className="rounded bg-white px-1 font-mono text-[10px] shadow-sm">P</kbd>
         </button>
       )}
@@ -191,7 +191,7 @@ function labelFor(kind: string) {
   return {
     house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", chest: "Tool Chest", extension: "Extension Office", cottage: "Cottage",
     fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
-    mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down",
+    mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down", gardenGate: "Garden gate", marketStall: "Market stall",
   }[kind] ?? kind;
 }
 

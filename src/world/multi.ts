@@ -2,6 +2,7 @@ import { addItem, buildingAt, faint, facingTile, hourly, newWorld, say, selected
 import { DAY_END, timeOfDay } from "./clock";
 import { ITEMS, sellPrice } from "./items";
 import { createMap, FARM_W, H, idx, TOWN, W } from "./map";
+import { expireCritters } from "./nature";
 import { on, type GameSettings } from "./settings";
 import type { Building, Critter, MineFloor, Slot, Tile, WorldState } from "./types";
 
@@ -412,7 +413,7 @@ export function tickMulti(m: MultiWorld, minutes: number): { world: MultiWorld; 
     const step = Math.min(left, toHour);
     next = { ...next, minute: next.minute + step };
     left -= step;
-    if (step === toHour) next = eachGarden(next, (v) => hourly(v));
+    if (step === toHour) next = eachGarden(next, (v) => expireCritters(hourly(v)));
     if (timeOfDay(next.minute) >= DAY_END) {
       if (on(next, "bedtime")) return { world: next, night: true };
       next = { ...next, minute: next.minute - (timeOfDay(next.minute) - DAY_END) - 1 };

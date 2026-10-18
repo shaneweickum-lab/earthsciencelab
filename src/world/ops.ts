@@ -1,4 +1,4 @@
-import { act, applyTool, buy, buyPlot, craft, enterMine, interact, pickUpBuilding, putInChest, sellNow, ship, sleep, swapSlots, takeAllFromChest, takeFromChest } from "./engine";
+import { HOTBAR_SIZE, act, applyTool, buy, buyPlot, craft, enterMine, interact, pickUpBuilding, putInChest, sellNow, ship, sleep, swapSlots, takeAllFromChest, takeFromChest } from "./engine";
 import { accept, claimLesson, skipTutorial, turnIn, type ActiveQuest } from "./quests";
 import { giveGift, talk } from "./town";
 import type { WorldState } from "./types";
@@ -12,7 +12,7 @@ export const OPS = {
   act,
   applyTool,
   interact,
-  select: (s: WorldState, n: number): WorldState => ({ ...s, selected: n }),
+  select: (s: WorldState, n: number): WorldState => (Number.isInteger(n) && n >= 0 && n < HOTBAR_SIZE ? { ...s, selected: n } : s),
   swap: swapSlots,
   buy: (s: WorldState, id: string, qty = 1) => buy(s, id, qty),
   sellNow,

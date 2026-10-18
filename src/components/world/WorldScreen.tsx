@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
-import { act, buildingAt, facingTile, interact, interactTarget, pickUpBuilding, soilHealth } from "@/world/engine";
+import { useMulti } from "@/net/mp";
+import { buildingAt, facingTile, interactTarget, soilHealth } from "@/world/engine";
 import { actionAnim } from "@/world/preview";
 import { npcInFront } from "@/world/town";
 import { useElementsPanel } from "@/store/elementsPanel";
@@ -12,7 +13,10 @@ import { TutorialCard } from "./Tutorial";
 import { JournalBook } from "./JournalBook";
 import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
 import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
-import { Bag, DaySummary, HomesteadMenu, HouseMenu, IntroLetter, TvForecast } from "./Menus";
+import { Bag, BedWait, DaySummary, HomesteadMenu, HouseMenu, IntroLetter, TvForecast } from "./Menus";
+import { StallMenu } from "./Market";
+import { Lobby } from "./Lobby";
+import { MultiHud } from "./MultiHud";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
@@ -37,6 +41,18 @@ function isTyping(target: EventTarget | null) {
  * Space (or the A button) uses the item in your hand; E always interacts: harvest, observe a critter,
  * or open a building, whatever you're holding.
  */
+// For tests: reach the game's stores from the page (like the Godot build's window.__soil).
+if (typeof window !== "undefined") {
+  (window as unknown as { __soilGame: object }).__soilGame = { useWorld, useMulti, runtime, doAction: (m: "use" | "interact") => doAction(m) };
+}
+
+/** The garden you're visiting in multiplayer (someone else's), or null. */
+function visitingGarden(): number | null {
+  const { world, me } = useMulti.getState();
+  const p = me && world?.players[me.pid];
+  return p && p.area.kind === "garden" && p.area.garden !== p.garden ? p.area.garden : null;
+}
+
 export function doAction(mode: "use" | "interact" = "use") {
   const st = useWorld.getState();
   const w = st.world;
@@ -47,8 +63,17 @@ export function doAction(mode: "use" | "interact" = "use") {
     st.talkTo(npc.id);
     return;
   }
-  const target = interactTarget(here);
-  if (target === "house") st.open("house");
+  let target = interactTarget(here);
+  // Visiting someone's garden: their house, chest, workbench, and plots are theirs (the host
+  // explains when you try).
+  const visiting = visitingGarden();
+  if (visiting && (target === "house" || target === "chest" || target === "craft" || target === "plot")) target = null;
+  if (target === "gate" || target === "stall") {
+    const { x, y } = facingTile(here);
+    const garden = buildingAt(here, x, y)!.data.garden ?? 0;
+    if (target === "gate") st.remote?.("gate", [garden]);
+    else st.openChest(String(garden), "stall");
+  } else if (target === "house") st.open("house");
   else if (target === "board") st.open("board");
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
@@ -62,7 +87,7 @@ export function doAction(mode: "use" | "interact" = "use") {
   } else {
     // E reaches out to touch or collect; Space uses the item in hand.
     runtime.action = { at: performance.now(), anim: mode === "interact" ? "pickup" : actionAnim(here) };
-    st.update(mode === "interact" ? interact : act);
+    st.run(mode === "interact" ? "interact" : "act");
   }
 }
 
@@ -72,7 +97,7 @@ function pickUp() {
   if (!w || st.menu) return;
   const { x, y } = facingTile(w);
   const b = buildingAt(w, x, y);
-  if (b) st.update((s) => pickUpBuilding(s, b.id));
+  if (b) st.run("pickUp", b.id);
 }
 
 function useGameKeys() {
@@ -107,7 +132,7 @@ function useGameKeys() {
       }
       if (/^[0-9]$/.test(k)) {
         const n = k === "0" ? 9 : Number(k) - 1;
-        st.update((w) => ({ ...w, selected: n }));
+        st.run("select", n);
         e.preventDefault();
         return;
       }
@@ -217,6 +242,8 @@ export function WorldScreen() {
     window.addEventListener("pagehide", save);
     return () => {
       useWorld.getState().save();
+      // Leaving the game page leaves a shared world too (the host saves it on the way out).
+      void useMulti.getState().leave();
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", save);
     };
@@ -227,6 +254,7 @@ export function WorldScreen() {
       <div ref={(el) => { labelLayer.current = el; }} className="pointer-events-none absolute inset-0 z-[5]" />
       {screen === "menu" && <MainMenu />}
       {screen === "setup" && <NewGameSetup />}
+      {screen === "lobby" && <Lobby />}
       {ready && <WorldScene />}
       {ready && (
         <>
@@ -240,6 +268,9 @@ export function WorldScreen() {
             </button>
             <TutorialCard />
             <Messages />
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
+            <MultiHud />
           </div>
           <div className="pointer-events-none absolute right-3 top-3 z-10">
             <StatusBar />
@@ -268,6 +299,8 @@ export function WorldScreen() {
           {menu === "craft" && <CraftMenu />}
           {menu === "plot" && <PlotMenu />}
           {menu === "homestead" && <HomesteadMenu />}
+          {menu === "stall" && <StallMenu />}
+          {menu === "bed" && <BedWait />}
           {menu === "journal" && <JournalBook />}
           {menu === "pause" && <PauseMenu />}
           {menu === "npc" && <NpcDialog />}

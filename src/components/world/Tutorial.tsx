@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { claimLesson, skipTutorial, tutorialStep } from "@/world/quests";
+import { tutorialStep } from "@/world/quests";
 import { useWorld } from "./useWorld";
 
 /** Grandma Rosa's note for the lesson you're on: what to do, how, and the reward to claim. */
 export function TutorialCard() {
   const w = useWorld((s) => s.world!);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const [open, setOpen] = useState(true);
   const [skipping, setSkipping] = useState(false);
   const step = tutorialStep(w);
@@ -37,7 +37,7 @@ export function TutorialCard() {
             </div>
           </div>
           {done ? (
-            <button className="btn btn-primary w-full animate-pulse text-sm" onClick={() => update(claimLesson)}>
+            <button className="btn btn-primary w-full animate-pulse text-sm" onClick={() => run("claimLesson")}>
               {step.rewardText ? `Claim: ${step.rewardText}` : "Next lesson"}
             </button>
           ) : step.rewardText ? (
@@ -46,7 +46,7 @@ export function TutorialCard() {
           {skipping ? (
             <div className="flex items-center gap-2 text-xs">
               <span className="flex-1">Skip the lessons and take all of Grandma&apos;s tools now?</span>
-              <button className="btn btn-soil px-2 py-1 text-xs" onClick={() => update(skipTutorial)}>Skip</button>
+              <button className="btn btn-soil px-2 py-1 text-xs" onClick={() => run("skipTutorial")}>Skip</button>
               <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => setSkipping(false)}>Keep going</button>
             </div>
           ) : (

@@ -12,6 +12,8 @@ import { critterIcon, expireCritters } from "@/world/nature";
 import { NPCS, npcPose, type Npc } from "@/world/town";
 import type { WeatherId, WorldState } from "@/world/types";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { multiplayerFrame } from "@/net/mpLoop";
+import { areaKey, useMulti } from "@/net/mp";
 import { DEFAULT_AVATAR } from "@/world/avatars";
 import { labelLayer, runtime, useWorld } from "../useWorld";
 import { Buildings } from "./Buildings";
@@ -75,8 +77,10 @@ function GameLoop() {
       runtime.moving = false;
     }
 
-    // Clock: game time only passes while you're playing.
-    if (!paused) {
+    // Clock: game time only passes while you're playing. (In multiplayer, the host keeps it.)
+    if (multiplayerFrame()) {
+      // Nothing more: the world arrives from the host.
+    } else if (!paused) {
       acc.current += dt * 1000;
       const ms = msPerGameMinute(w.settings.speed);
       const minutes = Math.floor(acc.current / ms);
@@ -238,6 +242,77 @@ function NpcFigure({ npc }: { npc: Npc }) {
         </div>
       </Html>
     </group>
+  );
+}
+
+/** Should a farmer in area `theirs` be drawn for someone in area `mine`? (Town is visible from gardens.) */
+function sameView(mine: string, theirs: string) {
+  if (mine === theirs) return true;
+  return theirs === "town" && mine.startsWith("g");
+}
+
+/** Another farmer in a shared world, gliding to where they last said they were. */
+function OtherFarmer({ pid, avatar, name }: { pid: string; avatar: string; name: string }) {
+  const { scene, animations } = useGLTF(model("characters", `character-${avatar}`));
+  const clone = useMemo(() => {
+    const c = cloneSkinned(scene);
+    c.traverse((o) => (o.castShadow = true));
+    return c;
+  }, [scene]);
+  const group = useRef<Group>(null);
+  const body = useRef<Group>(null);
+  const { actions } = useAnimations(animations, body);
+  const current = useRef("");
+  const ROT = { down: 0, right: Math.PI / 2, up: Math.PI, left: -Math.PI / 2 };
+  useFrame((_, dt) => {
+    const { session, world, me } = useMulti.getState();
+    const g = group.current;
+    if (!g || !session || !world || !me) return;
+    const pos = session.positions.get(pid);
+    const mine = world.players[me.pid];
+    g.visible = !!pos && !!mine && sameView(areaKey(mine.area), pos.area);
+    if (!pos || !g.visible) return;
+    const k = Math.min(1, dt * 12);
+    g.position.x += (pos.pos.x - g.position.x) * k;
+    g.position.z += (pos.pos.y - g.position.z) * k;
+    let diff = ROT[pos.pos.facing] - g.rotation.y;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    g.rotation.y += diff * Math.min(1, dt * 10);
+    const next = pos.anim === "walk" ? "walk" : "idle";
+    if (next !== current.current && actions[next]) {
+      actions[current.current]?.fadeOut(0.2);
+      actions[next]!.reset().fadeIn(0.2).play();
+      current.current = next;
+    }
+  });
+  return (
+    <group ref={group} visible={false}>
+      <group ref={body}>
+        <primitive object={clone} scale={1.35} />
+      </group>
+      <Html position={[0, 1.6, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
+        <div className="whitespace-nowrap rounded-full bg-sky/90 px-2 py-0.5 text-[11px] font-black text-white shadow">{name}</div>
+      </Html>
+    </group>
+  );
+}
+
+/** Everyone else playing in this shared world. */
+function OtherFarmers() {
+  const others = useMulti((s) => {
+    if (!s.world || !s.me || !s.session) return "";
+    const online = new Set(s.session.online.map((p) => p.pid));
+    return Object.values(s.world.players).filter((p) => p.id !== s.me!.pid && online.has(p.id)).map((p) => `${p.id}|${p.avatar ?? DEFAULT_AVATAR}|${p.name}`).join(";");
+  });
+  if (!others) return null;
+  return (
+    <Suspense fallback={null}>
+      {others.split(";").map((o) => {
+        const [pid, avatar, name] = o.split("|");
+        return <OtherFarmer key={pid} pid={pid} avatar={avatar} name={name} />;
+      })}
+    </Suspense>
   );
 }
 
@@ -423,6 +498,7 @@ function World() {
       <>
         <MineScene />
         <Player />
+        <OtherFarmers />
         <FacingMarker />
         <GameLoop />
       </>
@@ -451,6 +527,7 @@ function Surface() {
       <Critters critters={critters} />
       <Player />
       <Townsfolk />
+      <OtherFarmers />
       <FacingMarker />
       <BuildGhost />
       <Precipitation weather={weather} />

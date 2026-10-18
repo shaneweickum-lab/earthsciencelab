@@ -1,6 +1,6 @@
 "use client";
 
-import { craft, recipeStatus, STATIONS } from "@/world/engine";
+import { recipeStatus, STATIONS } from "@/world/engine";
 import { ITEMS, RECIPES, type Station } from "@/world/items";
 import { ItemIcon } from "./ItemIcon";
 import { Modal } from "./Menus";
@@ -12,7 +12,7 @@ const ICONS: Record<Station, string> = { workbench: "🪚", grinder: "⚙️", s
 export function CraftMenu() {
   const w = useWorld((s) => s.world!);
   const id = useWorld((s) => s.chestId);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const b = w.buildings.find((x) => x.id === id);
   if (!b || !(b.kind in STATIONS)) return null;
@@ -37,7 +37,7 @@ export function CraftMenu() {
                   ))}
                 </p>
               </div>
-              <button className="btn btn-primary shrink-0 px-3 py-1 text-sm" disabled={!ok} onClick={() => update((s) => craft(s, r.id))} aria-label={`Make ${out.name}`}>
+              <button className="btn btn-primary shrink-0 px-3 py-1 text-sm" disabled={!ok} onClick={() => run("craft", r.id)} aria-label={`Make ${out.name}`}>
                 Make
               </button>
             </li>
