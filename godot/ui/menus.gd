@@ -36,7 +36,7 @@ static func intro(_game_ui: GameUi) -> Dictionary:
 	for p in [
 		"My dear grandchild, the farm is yours now. I'm sorry to say it's grown wild. Weeds, sticks, and stones are everywhere, and I never did test the soil. Treat it kindly and it will feed you for a lifetime.",
 		"Clear the weeds, test the soil, and feed it with compost and cover crops. Watch the sky, too: the weather decides more than you'd think. Keep an eye out for the little creatures. Most of them are friends.",
-		"My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime, and my workbench is somewhere in the barn. Carrots don't mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.",
+		"My old scythe is in the chest beside the front door. I've left you a note for each thing I learned here, and the rest of my tools go with them, one lesson at a time. My workbench is somewhere in the barn. Save the beans and tomatoes for when the nights stay above freezing.",
 		"The folks at Seed & Soil Co. will buy what you grow. Remember, organic produce sells for more.",
 	]:
 		letter.add_child(Ui.text(p, 15))

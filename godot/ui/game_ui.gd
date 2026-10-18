@@ -106,6 +106,10 @@ func _build_hud() -> void:
 	var menu_btn := Ui.button("⚙️ Menu (Esc)", func(): Game.open("pause"), "flat", 14)
 	menu_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	tl.add_child(menu_btn)
+	var tut = Hud.tutorial(self, w)
+	if tut:
+		tut.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		tl.add_child(tut)
 	tl.add_child(Hud.messages(w))
 	_hud.add_child(tl)
 	# Top right: date, weather, time, coins, energy, water.

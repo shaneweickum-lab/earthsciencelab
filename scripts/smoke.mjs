@@ -121,29 +121,40 @@ async function teleport(x, y, facing, tiles = {}) {
   await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
 }
 const inspector = page.getByLabel("Tile inspector");
-// The bag starts empty: take Grandma Rosa's tools out of the chest beside the house.
+// The bag starts empty: take Grandma Rosa's scythe out of the chest beside the house.
 await teleport(7, 10, "up");
 await page.keyboard.press(" ");
 await page.getByRole("dialog", { name: "Grandma Rosa's chest" }).waitFor();
 await page.getByRole("button", { name: "Take all" }).click();
 await shot("06b-chest");
 await page.keyboard.press("Escape");
+// Grandma's first lesson is done: claim it, and the next one counts the weeds you cut.
+const note = page.getByRole("region", { name: "Grandma's note" });
+await note.getByRole("button", { name: "Next lesson" }).click();
+await note.getByText("Clear the weeds").waitFor();
 const clean = { obstacle: null, weeds: false, crop: null, tilled: false, mulch: false };
 await teleport(10, 13, "down", { [13 * MAP_W + 10]: clean, [14 * MAP_W + 10]: { ...clean, weeds: true } });
 await inspector.getByText("Weeds are growing here.").waitFor();
-await page.keyboard.press("3"); // scythe
+await page.keyboard.press("1"); // scythe
 await page.keyboard.press(" ");
 await page.getByText("Cut weeds (+1 fiber).").waitFor();
-await page.keyboard.press("1"); // hoe
+await note.getByText("1/5").waitFor();
+await shot("06b2-lesson");
+// Skip the rest: every tool still to come lands in the bag.
+await note.getByRole("button", { name: "Skip tutorial" }).click();
+await note.getByRole("button", { name: "Skip", exact: true }).click();
+await note.waitFor({ state: "detached" });
+// The bag now holds: scythe, fiber, hoe, carrot seeds, watering can, compost, lime, axe, pickaxe.
+await page.keyboard.press("3"); // hoe
 await inspector.getByText(/Till:/).waitFor();
 await page.keyboard.press(" ");
 await inspector.getByText("Tilled", { exact: true }).waitFor();
-await page.keyboard.press("6"); // carrot seeds
+await page.keyboard.press("4"); // carrot seeds
 await page.keyboard.press(" ");
 await page.getByText(/^Planted Carrots\./).waitFor();
-await page.keyboard.press("2"); // watering can
+await page.keyboard.press("5"); // watering can
 await page.keyboard.press(" ");
-await page.keyboard.press("7"); // compost
+await page.keyboard.press("6"); // compost
 await page.keyboard.press(" ");
 await page.getByText(/Spread compost/).waitFor();
 await page.waitForTimeout(800);
@@ -196,7 +207,7 @@ await teleport(45, 10, "up");
 await page.keyboard.press("e");
 await page.getByRole("dialog", { name: "Seed & Soil Co." }).waitFor();
 await page.getByRole("button", { name: "Buy Carrot Seeds" }).click();
-await page.getByText("🪙 285").first().waitFor();
+await page.getByText("🪙 435").first().waitFor();
 await page.getByRole("button", { name: /Build/ }).click();
 await page.getByRole("button", { name: "Buy Compost Bin" }).click();
 await shot("07c-store");
@@ -336,7 +347,7 @@ if (existsSync("public/godot/index.html")) {
   await page.evaluate(({ SAVE, MAP_W }) => {
     const w = JSON.parse(localStorage.getItem(SAVE));
     w.player = { x: 12, y: 13, facing: "down" };
-    w.selected = 2; // scythe
+    w.selected = 0; // scythe
     Object.assign(w.tiles[14 * MAP_W + 12], { obstacle: null, weeds: true, crop: null });
     localStorage.setItem(SAVE, JSON.stringify(w));
   }, { SAVE, MAP_W });

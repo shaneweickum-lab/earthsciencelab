@@ -22,7 +22,7 @@ import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
 import { BUILDING_SIZE, FARM, MINE_ENTRANCE, MINE_START, MINE_W, OLD_H, PLOTS, TOWN, W } from "./map";
 import { SPAWNS } from "./nature";
 import { previewAction } from "./preview";
-import { accept, boardRequests, expireBoard, goalLabel, offers, QUESTS, questState, questStatus, rewardText, turnIn } from "./quests";
+import { accept, boardRequests, claimLesson, expireBoard, goalLabel, offers, QUESTS, questState, questStatus, rewardText, skipTutorial, TUTORIAL, turnIn } from "./quests";
 import { DEFAULT_SETTINGS, formatTemp, PRESETS, SCIENCE_FEATURES, speedLabel, type GameSettings } from "./settings";
 import { giveGift, NPCS, npcInFront, npcPose, route, talk } from "./town";
 import type { Dir, Grade, WorldState } from "./types";
@@ -69,7 +69,7 @@ describe("Godot data tables", () => {
     emit("data/weather.json", WEATHER);
     emit("data/journal.json", { entries: JOURNAL, categories: CATEGORY_INFO, mushroomSafety: MUSHROOM_SAFETY });
     emit("data/nature.json", { spawns: SPAWNS });
-    emit("data/town.json", { npcs: NPCS, quests: QUESTS });
+    emit("data/town.json", { npcs: NPCS, quests: QUESTS, tutorial: TUTORIAL });
     emit("data/world.json", { avatars: AVATARS, defaultAvatar: DEFAULT_AVATAR, buildingSize: BUILDING_SIZE });
     emit("data/crop_looks.json", CROP_LOOKS);
   });
@@ -182,8 +182,8 @@ describe("Godot golden fixtures", () => {
       return { seed, seasons, days: Array.from({ length: 40 }, (_, d) => boardRequests({ ...w, minute: startOfDay(d + 1) })) };
     }));
     const texts = {
-      rewards: [...QUESTS.map((q) => q.reward), ...boards.flatMap((b) => b.days.flatMap((d) => d.map((r) => r.board.reward)))].map((r) => [r, rewardText(r)]),
-      labels: [...QUESTS.flatMap((q) => q.steps.map((st) => st.goal)), ...boards.flatMap((b) => b.days.flatMap((d) => d.map((r) => r.board.goal)))].map((g) => [g, goalLabel(g)]),
+      rewards: [...[...QUESTS, ...TUTORIAL].map((q) => q.reward), ...boards.flatMap((b) => b.days.flatMap((d) => d.map((r) => r.board.reward)))].map((r) => [r, rewardText(r)]),
+      labels: [...[...QUESTS, ...TUTORIAL].flatMap((q) => q.steps.map((st) => st.goal)), ...boards.flatMap((b) => b.days.flatMap((d) => d.map((r) => r.board.goal)))].map((g) => [g, goalLabel(g)]),
     };
     golden("town", { routes, poses, boards, texts });
   });
@@ -210,6 +210,8 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "enterMine": return { state: enterMine(s, op.floor as number) };
     case "craft": return { state: craft(s, op.id as string) };
     case "buyPlot": return { state: buyPlot(s, op.id as number) };
+    case "claimLesson": return { state: claimLesson(s) };
+    case "skipTutorial": return { state: skipTutorial(s) };
     case "plots": return { state: { ...s, plots: op.ids as number[] } };
     case "selectItem": return { state: { ...s, selected: Math.max(0, s.inventory.findIndex((x) => x?.item === op.item)) } };
     case "give": return { state: addItem(s, op.item as string, op.qty as number, (op.grade as Grade) ?? undefined) ?? s };
@@ -255,7 +257,7 @@ function summary(s: WorldState, text?: string) {
     preview: previewAction(s), tile: t, growth: t ? growthFactor(s, f.x, f.y) : null, grade: t ? expectedGrade(s, t) : null,
     npc: npcInFront(s)?.id ?? null, quests: s.quests ?? null, friends: s.friends ?? null,
     mine: s.mine ? { floor: s.mine.floor, ladderAt: s.mine.ladderAt, buildings: s.mine.buildings } : null, deepest: s.deepest ?? null,
-    plots: s.plots ?? null,
+    plots: s.plots ?? null, tally: s.tally ?? null,
   };
 }
 
@@ -299,7 +301,7 @@ function farmstead(): Op[] {
   return ops;
 }
 
-function playthrough(seed: number, settings: Partial<GameSettings>, steps: number, prelude: Op[] = [], mine = false) {
+function playthrough(seed: number, settings: Partial<GameSettings>, steps: number, prelude: Op[] = [], mine = false, lessons = false) {
   const r = stream(seed * 31 + 7);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)];
   let s = newWorld(seed, settings);
@@ -318,6 +320,43 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
   };
   // Grandma Rosa's chest holds the starting tools.
   run({ op: "takeAll", id: "chest" });
+  if (lessons) {
+    // Grandma Rosa's lessons, done for real: each one is claimed as soon as it's finished.
+    const P = PLOTS[0];
+    const spot = (k: number, patch: object) => run({ op: "tile", i: (P.y0 + 1) * W + P.x0 + k, patch });
+    const face = (k: number) => run({ op: "player", x: P.x0 + k, y: P.y0, facing: "down" });
+    run({ op: "claimLesson" });
+    run({ op: "claimLesson" }); // too early: nothing happens
+    run({ op: "selectItem", item: "scythe" });
+    for (let k = 0; k < 5; k++) {
+      spot(k, { weeds: true, obstacle: null, crop: null, tilled: false });
+      face(k);
+      run({ op: "applyTool" });
+    }
+    run({ op: "claimLesson" });
+    run({ op: "selectItem", item: "hoe" });
+    for (let k = 0; k < 4; k++) {
+      face(k);
+      run({ op: "applyTool" });
+    }
+    run({ op: "claimLesson" });
+    for (const [item, pours, spots] of [["seed_carrot", 1, 4], ["can", 2, 4], ["compost", 1, 2]] as const) {
+      run({ op: "selectItem", item });
+      for (let k = 0; k < spots; k++) {
+        face(k);
+        for (let n = 0; n < pours; n++) run({ op: "applyTool" });
+      }
+      run({ op: "claimLesson" });
+    }
+    run({ op: "give", item: "wood", qty: 5, grade: null });
+    run({ op: "claimLesson" });
+    run({ op: "give", item: "stone", qty: 5, grade: null });
+    run({ op: "claimLesson" });
+    run({ op: "sleep" });
+    run({ op: "claimLesson" });
+    run({ op: "sellNow", slot: s.inventory.findIndex((x) => x?.item === "fiber"), qty: 1 });
+    run({ op: "claimLesson" });
+  } else run({ op: "skipTutorial" });
   // The farm starts with one plot. Locked land refuses the hoe until you buy it.
   run({ op: "selectItem", item: "hoe" });
   run({ op: "player", x: PLOTS[1].x0 + 1, y: PLOTS[1].y0 - 1, facing: "down" });
@@ -464,7 +503,7 @@ describe("Godot playthroughs", () => {
   ];
   for (const [name, seed, settings] of cases) {
     const farm = name === "classic" || name === "science";
-    it(name, () => golden(`play-${name}`, playthrough(seed, settings, name === "winter" ? 500 : 350, farm ? farmstead() : [], farm)));
+    it(name, () => golden(`play-${name}`, playthrough(seed, settings, name === "winter" ? 500 : 350, farm ? farmstead() : [], farm, name === "classic")));
   }
 
   it("old saves", () => {

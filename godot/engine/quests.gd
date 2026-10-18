@@ -7,7 +7,7 @@ static func all() -> Array:
 
 
 static func by_id(id: String) -> Variant:
-	for q in Data.quests():
+	for q in Data.quests() + Data.tutorial():
 		if q.id == id:
 			return q
 	return null
@@ -104,6 +104,11 @@ static func goal_progress(s: Dictionary, goal: Dictionary) -> Dictionary:
 			return _p(_own_garden(s).filter(func(t): return t.get("boost", 0) > 0).size(), goal.count)
 		"wetSpots":
 			return _p(_own_garden(s).filter(func(t): return t.crop != null and not t.crop.dead and t.moisture >= 60).size(), goal.count)
+		"have":
+			return _p(_count_at_grade(s, goal.item, null), goal.qty)
+		"tally":
+			var t = s.get("tally")
+			return _p(t.get(goal.key, 0) if t is Dictionary else 0, goal.count)
 	return _p(0, 1)
 
 
@@ -133,7 +138,14 @@ static func goal_label(goal: Dictionary) -> String:
 			return "Spread compost or lime on %s garden spots" % Js.num(goal.count)
 		"wetSpots":
 			return "Get %s of your crops' soil damp" % Js.num(goal.count)
+		"have":
+			return "Have %s %s" % [Js.num(goal.qty), Items.get_def(goal.item).name]
+		"tally":
+			return "%s ×%s" % [TALLY_LABEL.get(goal.key, goal.key), Js.num(goal.count)]
 	return ""
+
+
+const TALLY_LABEL := {"weeds": "Cut weeds", "tilled": "Till spots", "slept": "Sleep", "sold": "Sell or ship things"}
 
 
 ## The active quest's current step and progress.
@@ -150,6 +162,9 @@ static func quest_status(s: Dictionary, a: Dictionary) -> Dictionary:
 ## Story quests this NPC can offer right now.
 static func offers(s: Dictionary, npc_id: String) -> Array:
 	var qs := quest_state(s)
+	# Townsfolk wait until Grandma Rosa's lessons are done.
+	if not tutorial_done(s):
+		return []
 	var h := Town.hearts(s, npc_id)
 	return all().filter(func(q):
 		var needs: Dictionary = q.get("needs", {})
@@ -197,14 +212,39 @@ static func _take_items(s: Dictionary, items: Array) -> Dictionary:
 	return Js.with(s, {"inventory": inv})
 
 
+## A reward that doesn't fit in your bag goes into Grandma's chest by the house.
+static func _to_chest(s: Dictionary, item: String, qty: int) -> Dictionary:
+	var buildings: Array = s.buildings.duplicate()
+	for bi in buildings.size():
+		var b: Dictionary = buildings[bi]
+		if b.id != "chest":
+			continue
+		var items: Array = b.data.get("items", []).duplicate()
+		var at := -1
+		for i in items.size():
+			if items[i] != null and items[i].item == item and not items[i].get("grade") and not Items.get_def(item).get("tool"):
+				at = i
+				break
+		if at >= 0:
+			items[at] = Js.with(items[at], {"qty": items[at].qty + qty})
+		else:
+			var free := items.find(null)
+			if free >= 0:
+				items[free] = {"item": item, "qty": qty}
+			else:
+				items.append({"item": item, "qty": qty})
+		buildings[bi] = Js.with(b, {"data": Js.with(b.data, {"items": items})})
+		return Js.with(s, {"buildings": buildings})
+	return s
+
+
 static func _give_reward(s: Dictionary, giver: String, r: Dictionary) -> Dictionary:
 	var next := Js.with(s, {"coins": s.coins + r.get("coins", 0)})
 	if r.get("plots"):
 		next = World.grant_plots(next, int(r.plots))
 	for it in r.get("items", []):
 		var got = World.add_item(next, it.item, int(it.qty))
-		if got != null:
-			next = got
+		next = got if got != null else _to_chest(next, it.item, int(it.qty))
 	var friends: Dictionary = next.get("friends", {}).duplicate() if next.get("friends") is Dictionary else {}
 	var bump := func(id: String, pts: float) -> void:
 		var f: Dictionary = friends.get(id, {"points": 0})
@@ -307,3 +347,44 @@ static func expire_board(s: Dictionary) -> Dictionary:
 	var day := Clock.day_of(s.minute)
 	var active: Array = qs.active.filter(func(a): return not a.get("board") is Dictionary or a.board.expires >= day)
 	return s if active.size() == qs.active.size() else Js.with(s, {"quests": Js.with(qs, {"active": active})})
+
+
+# ───────────────────────── Grandma Rosa's lessons ─────────────────────────
+
+static func tutorial_done(s: Dictionary) -> bool:
+	return World.LESSONS[-1] in quest_state(s).done
+
+
+## The lesson you're on, with its progress, or null once they're done (or skipped).
+static func tutorial_step(s: Dictionary) -> Variant:
+	for a in quest_state(s).active:
+		if a.id in World.LESSONS:
+			var q: Dictionary = by_id(a.id)
+			return Js.with(quest_status(s, a), {"id": a.id, "number": World.LESSONS.find(a.id) + 1, "of": World.LESSONS.size(), "ask": q.ask, "hint": q.get("hint", ""), "rewardText": reward_text(q.reward)})
+	return null
+
+
+## Claim a finished lesson's reward and open the next one.
+static func claim_lesson(s: Dictionary) -> Dictionary:
+	var step = tutorial_step(s)
+	if step == null:
+		return s
+	var r := turn_in(s, step.id)
+	if not r.finished:
+		return s
+	var i := World.LESSONS.find(step.id)
+	var next: Dictionary = accept(r.state, World.LESSONS[i + 1]) if i + 1 < World.LESSONS.size() else r.state
+	return World.say(next, r.text)
+
+
+## Skip the rest of the lessons: every reward still to come is handed over at once.
+static func skip_tutorial(s: Dictionary) -> Dictionary:
+	var qs := quest_state(s)
+	var left := World.LESSONS.filter(func(id): return not id in qs.done)
+	if left.is_empty():
+		return s
+	var next := s
+	for id in left:
+		next = _give_reward(next, "rosa", by_id(id).reward)
+	next = Js.with(next, {"quests": {"active": qs.active.filter(func(a): return not a.id in World.LESSONS), "done": qs.done + left}})
+	return World.say(next, "Grandma's tools are all yours. The folks in town have been asking about you!")

@@ -80,5 +80,10 @@ static func quests() -> Array:
 	return load_json("town").quests
 
 
+## Grandma Rosa's lessons, the tutorial.
+static func tutorial() -> Array:
+	return load_json("town").tutorial
+
+
 static func world() -> Dictionary:
 	return load_json("world")
