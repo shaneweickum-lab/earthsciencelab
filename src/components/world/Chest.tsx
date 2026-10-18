@@ -1,6 +1,6 @@
 "use client";
 
-import { buyPlot, cartFloors, enterMine, HOTBAR_SIZE, nextPlotPrice, ownedPlots, putInChest, takeAllFromChest, takeFromChest } from "@/world/engine";
+import { cartFloors, HOTBAR_SIZE, nextPlotPrice, ownedPlots } from "@/world/engine";
 import { ITEMS } from "@/world/items";
 import { CHEST_SIZE, PLOTS } from "@/world/map";
 import type { Slot } from "@/world/types";
@@ -35,7 +35,7 @@ function Grid({ slots, onPick, hotbar = 0, label }: { slots: (Slot | null)[]; on
 export function ChestMenu() {
   const w = useWorld((s) => s.world!);
   const id = useWorld((s) => s.chestId);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const chest = w.buildings.find((b) => b.id === id);
   if (!chest || !id) return null;
@@ -45,13 +45,13 @@ export function ChestMenu() {
     <Modal title={chest.id === "chest" ? "Grandma Rosa's chest" : "Storage chest"} icon="🧰" onClose={close} wide>
       <div className="mb-2 flex items-center gap-2">
         <p className="flex-1 text-sm text-muted">Click something in the chest to take it. Click something in your bag to put it away.</p>
-        <button className="btn btn-primary py-1.5 text-sm" disabled={empty} onClick={() => update((s) => takeAllFromChest(s, id))}>
+        <button className="btn btn-primary py-1.5 text-sm" disabled={empty} onClick={() => run("takeAll", id)}>
           Take all
         </button>
       </div>
-      <Grid slots={items} label="Take" onPick={(i) => update((s) => takeFromChest(s, id, i))} />
+      <Grid slots={items} label="Take" onPick={(i) => run("take", id, i)} />
       <p className="mt-4 mb-2 text-xs font-black uppercase tracking-wider text-muted">Your bag (the top row is your hotbar)</p>
-      <Grid slots={w.inventory} hotbar={HOTBAR_SIZE} label="Store" onPick={(i) => update((s) => putInChest(s, id, i))} />
+      <Grid slots={w.inventory} hotbar={HOTBAR_SIZE} label="Store" onPick={(i) => run("put", id, i)} />
     </Modal>
   );
 }
@@ -59,10 +59,10 @@ export function ChestMenu() {
 /** The mine cart at the entrance: ride down to the top or any fifth floor you've reached. */
 export function MineCart() {
   const w = useWorld((s) => s.world!);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const go = (floor: number) => {
-    update((s) => enterMine(s, floor));
+    run("enterMine", floor);
     close();
   };
   return (
@@ -84,7 +84,7 @@ export function MineCart() {
 export function PlotMenu() {
   const w = useWorld((s) => s.world!);
   const id = Number(useWorld((s) => s.chestId));
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const plot = PLOTS[id];
   if (!plot) return null;
@@ -99,7 +99,7 @@ export function PlotMenu() {
       <p className="mt-2 text-xs text-muted">Each plot costs a little more than the last. Some quests give you land for free, too.</p>
       <div className="mt-4 flex items-center gap-3">
         <span className="rounded-full bg-paper px-3 py-1 text-sm font-black">🪙 {w.coins.toLocaleString()}</span>
-        <button className="btn btn-primary ml-auto" disabled={w.coins < price} onClick={() => { update((s) => buyPlot(s, id)); close(); }}>
+        <button className="btn btn-primary ml-auto" disabled={w.coins < price} onClick={() => { run("buyPlot", id); close(); }}>
           Buy for 🪙 {price}
         </button>
       </div>

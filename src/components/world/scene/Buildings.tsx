@@ -5,6 +5,8 @@ import { memo, Suspense } from "react";
 import { BUILDING_SIZE } from "@/world/map";
 import type { Building } from "@/world/types";
 import { mineOpen } from "@/world/engine";
+import { ownerOf } from "@/world/multi";
+import { useMulti } from "@/net/mp";
 import { labelLayer, useWorld } from "../useWorld";
 import { Model, model, type Pack } from "./models";
 
@@ -74,6 +76,24 @@ function MineEntrance() {
 const Procedural = memo(function Procedural({ b }: { b: Building }) {
   const [w, h] = BUILDING_SIZE[b.kind];
   switch (b.kind) {
+    case "gardenGate":
+      // A wooden arch on Garden Lane, opening west into someone's garden.
+      return (
+        <group rotation={[0, Math.PI / 2, 0]}>
+          {[-0.45, 0.45].map((x) => (
+            <mesh key={x} position={[x, 0.85, 0]} castShadow><boxGeometry args={[0.14, 1.7, 0.14]} /><Mat color="#7a5636" /></mesh>
+          ))}
+          <mesh position={[0, 1.75, 0]} castShadow><boxGeometry args={[1.15, 0.16, 0.2]} /><Mat color="#6b4423" /></mesh>
+          <mesh position={[0, 1.95, 0]} castShadow><boxGeometry args={[0.9, 0.08, 0.12]} /><Mat color="#8fbf5a" /></mesh>
+        </group>
+      );
+    case "marketStall":
+      return (
+        <group>
+          <mesh position={[0, 0.45, 0]} castShadow><boxGeometry args={[0.9, 0.9, 0.6]} /><Mat color="#a8774f" /></mesh>
+          <mesh position={[0, 1.35, 0]} castShadow><boxGeometry args={[1, 0.08, 0.8]} /><Mat color={(b.data.garden ?? 0) % 2 ? "#c94f3d" : "#4f9a45"} /></mesh>
+        </group>
+      );
     case "house":
       return (
         <group>
@@ -430,12 +450,28 @@ function Fancy({ b }: { b: Building }) {
           {(b.data.ready ?? 0) > 0 ? <Ready /> : null}
         </group>
       );
+    case "marketStall":
+      return <Model url={town((b.data.garden ?? 0) % 2 ? "stall-red" : "stall-green")} scale={0.55} />;
     case "prop":
       if (!b.data.model) return null;
       return <Model url={model(b.data.model.split("/")[0] as Pack, b.data.model.split("/")[1])} />;
     default:
       return <Procedural b={b} />;
   }
+}
+
+/** The name over a garden gate or market stall in a shared world. */
+function GardenSign({ b }: { b: Building }) {
+  const label = useMulti((s) => {
+    const owner = s.world ? ownerOf(s.world, b.data.garden ?? 0) : null;
+    return owner ? (b.kind === "gardenGate" ? `🏡 ${owner.name}` : `🧺 ${owner.name}`) : null;
+  });
+  if (!label) return null;
+  return (
+    <Html position={[0, b.kind === "gardenGate" ? 2.4 : 1.9, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
+      <div className="whitespace-nowrap rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-black shadow">{label}</div>
+    </Html>
+  );
 }
 
 export function Buildings({ buildings }: { buildings: Building[] }) {
@@ -448,6 +484,7 @@ export function Buildings({ buildings }: { buildings: Building[] }) {
             <Suspense fallback={<Procedural b={b} />}>
               <Fancy b={b} />
             </Suspense>
+            {(b.kind === "gardenGate" || b.kind === "marketStall") && <GardenSign b={b} />}
             {b.data.sign && (
               <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
                 <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">

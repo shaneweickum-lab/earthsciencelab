@@ -297,7 +297,8 @@ export function growthFactor(state: WorldState, x: number, y: number): { factor:
   return { factor: Math.min(1.5, f), reasons };
 }
 
-function hourly(state: WorldState): WorldState {
+/** One hour passing: soil dries or soaks, crops grow. (Exported for multiplayer, which runs it per farm.) */
+export function hourly(state: WorldState): WorldState {
   const weather = todayWeather(state);
   const wet = isWet(weather);
   const dry = { sunny: 1.2, cloudy: 0.6, fog: 0.4, heat: 2.4, frost: 0.5, snow: 0.2, rain: 0, storm: 0 }[weather];
@@ -516,7 +517,7 @@ export function sleep(state: WorldState): WorldState {
   };
 }
 
-function faint(state: WorldState): WorldState {
+export function faint(state: WorldState): WorldState {
   const lost = Math.min(100, Math.round(state.coins * 0.1));
   const d = day({ ...state, minute: state.minute - 1 }) + 1;
   const s = surface(startDay({ ...state, minute: startOfDay(d) - 1 }, d));
@@ -820,7 +821,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | "plot" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | "plot" | "gate" | "stall" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -831,6 +832,8 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "shippingBin") return "shipping";
   if (b?.kind === "noticeBoard") return "board";
   if (b?.kind === "chest") return "chest";
+  if (b?.kind === "gardenGate") return "gate";
+  if (b?.kind === "marketStall") return "stall";
   if (!b && plotLocked(state, x, y)) return "plot";
   if (b && b.kind in STATIONS) return "craft";
   // Once you've been deep enough, the mine cart at the entrance can take you down.

@@ -5,14 +5,15 @@ import { create } from "zustand";
 import { loadWorld, newWorld, saveWorld } from "@/world/engine";
 import { DEFAULT_SETTINGS, type GameSettings } from "@/world/settings";
 import { expireBoard } from "@/world/quests";
+import { applyOp, type OpArgs, type OpName } from "@/world/ops";
 import { talk } from "@/world/town";
 import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "homestead" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "homestead" | "stall" | "bed" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
 
-export type Screen = "menu" | "setup" | "playing";
+export type Screen = "menu" | "setup" | "lobby" | "playing";
 
 interface WorldStore {
   world: WorldState | null;
@@ -34,12 +35,16 @@ interface WorldStore {
   updateSettings: (patch: Partial<GameSettings>) => void;
   /** Apply an engine function to the world. */
   update: (fn: (w: WorldState) => WorldState) => void;
+  /** Do something by name (see world/ops.ts): applied here, or sent to the host in multiplayer. */
+  run: <K extends OpName>(op: K, ...args: OpArgs<K>) => void;
+  /** In multiplayer: how ops reach the host. Null in single-player. */
+  remote: ((op: string, args: unknown[]) => void) | null;
   open: (menu: Menu) => void;
   /** Which townsperson you're talking to. */
   talkingTo: string | null;
   /** The chest or crafting station that's open (or, for "plot", the plot's number). */
   chestId: string | null;
-  openChest: (id: string, menu?: "chest" | "craft" | "plot") => void;
+  openChest: (id: string, menu?: "chest" | "craft" | "plot" | "stall") => void;
   /** What they said when you started talking. */
   npcLine: string;
   talkTo: (id: string) => void;
@@ -112,6 +117,12 @@ export const useWorld = create<WorldStore>((set, get) => {
       const w = get().world;
       if (w) set({ world: { ...w, settings: { ...w.settings, ...patch } } });
     },
+    remote: null,
+    run: (op, ...args) => {
+      const remote = get().remote;
+      if (remote) remote(op, args);
+      else get().update((w) => applyOp(w, op, args));
+    },
     update: (fn) => {
       const w = get().world;
       if (!w) return;
@@ -133,12 +144,16 @@ export const useWorld = create<WorldStore>((set, get) => {
       const w = get().world;
       if (!w) return;
       const r = talk(withRuntime(w), id);
-      set({ world: r.state, menu: "npc", talkingTo: id, npcLine: r.text });
+      if (get().remote) {
+        get().run("talk", id);
+        set({ menu: "npc", talkingTo: id, npcLine: r.text });
+      } else set({ world: r.state, menu: "npc", talkingTo: id, npcLine: r.text });
     },
     close: () => set({ menu: null }),
     save: () => {
       const w = get().world;
-      if (!w) return;
+      // Multiplayer worlds are saved by their host, not in this browser.
+      if (!w || get().remote) return;
       try {
         localStorage.setItem(SAVE_KEY, saveWorld(withRuntime(w)));
       } catch {

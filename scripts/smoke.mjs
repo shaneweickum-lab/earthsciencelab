@@ -378,6 +378,78 @@ if (existsSync("public/godot/index.html")) {
   await frame.waitForFunction(() => window.__soil.menu === "", null, { timeout: 10000 });
 }
 
+// Multiplayer, between two tabs of one browser (?net=local, no Supabase): Ana hosts, Ben joins
+// with the code, walks Garden Lane into Ana's garden and helps, they trade at a stall, and the
+// night passes once both are in bed.
+{
+  const mp = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const open = async (name) => {
+    const p = await mp.newPage();
+    p.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
+    await p.goto(`${BASE}/soil/game?net=local&name=${name}`, { waitUntil: "networkidle" });
+    await p.getByRole("button", { name: /Multiplayer/ }).click();
+    return p;
+  };
+  const game = (p, fn, arg) => p.evaluate(fn, arg);
+  const me = (p) => game(p, () => { const m = window.__soilGame.useMulti.getState(); return { ...m.world.players[m.me.pid], minute: m.world.minute, seq: m.session.seq }; });
+  const until = async (p, fn, what) => {
+    for (let i = 0; i < 40; i++) {
+      if (await fn()) return;
+      await p.waitForTimeout(250);
+    }
+    throw new Error(`Multiplayer: ${what}`);
+  };
+  const ana = await open("Ana");
+  await ana.getByLabel("World name").fill("Smoke Town");
+  await ana.getByRole("button", { name: "Start" }).click();
+  await ana.getByRole("toolbar", { name: "Hotbar" }).waitFor({ timeout: 60000 });
+  const code = await game(ana, () => window.__soilGame.useMulti.getState().info.code);
+  const ben = await open("Ben");
+  await ben.getByLabel("World code").fill(code);
+  await ben.getByRole("button", { name: "Join" }).first().click();
+  await ben.getByRole("toolbar", { name: "Hotbar" }).waitFor({ timeout: 60000 });
+  await until(ana, async () => (await game(ana, () => window.__soilGame.useMulti.getState().session.online.length)) === 2, "Ana should see Ben online");
+  for (const p of [ana, ben]) await game(p, () => { const st = window.__soilGame.useWorld.getState(); st.run("skipTutorial"); st.run("takeAll", "chest"); });
+  // Out of Ben's garden by its road, then through Ana's gate on Garden Lane.
+  await game(ben, () => { window.__soilGame.runtime.player = { x: 37, y: 11, facing: "right" }; });
+  await until(ben, async () => (await me(ben)).area.kind === "town", "Ben should come out on Garden Lane");
+  await game(ben, () => { const { runtime, useWorld } = window.__soilGame; runtime.player = { x: 40, y: 4, facing: "left" }; useWorld.setState((s) => ({ world: { ...s.world, player: runtime.player } })); });
+  await game(ben, () => window.__soilGame.doAction("interact"));
+  await until(ben, async () => (await me(ben)).area.garden === 0, "Ben should be in Ana's garden");
+  await ben.getByText("Visiting Ana's garden").waitFor();
+  // Ben cuts a weed in Ana's garden, and Ana's copy of the world shows it.
+  const weed = await game(ben, () => {
+    const farm = window.__soilGame.useMulti.getState().world.farms[0];
+    for (let y = 13; y <= 16; y++) for (let x = 10; x <= 15; x++) if (farm.tiles[y * 38 + x].weeds && !farm.tiles[y * 38 + x].obstacle) return { x, y };
+    return null;
+  });
+  await game(ben, ({ x, y }) => {
+    const { runtime, useWorld } = window.__soilGame;
+    runtime.player = { x, y: y - 1, facing: "down" };
+    useWorld.getState().run("select", useWorld.getState().world.inventory.findIndex((s) => s?.item === "scythe"));
+  }, weed);
+  await ben.waitForTimeout(400);
+  await game(ben, () => window.__soilGame.doAction("use"));
+  await until(ana, () => game(ana, ({ x, y }) => !window.__soilGame.useMulti.getState().world.farms[0].tiles[y * 38 + x].weeds, weed), "Ben's weeding should reach Ana's garden");
+  await ben.screenshot({ path: `${OUT}/40-multiplayer-visit.png` });
+  // Ben puts his fiber on his stall; Ana buys it there.
+  await game(ben, () => { const { useWorld } = window.__soilGame; useWorld.getState().remote("stock", [useWorld.getState().world.inventory.findIndex((s) => s?.item === "fiber"), 1, 7]); });
+  await game(ana, () => window.__soilGame.useWorld.getState().remote("leaveGarden", []));
+  await until(ana, async () => (await me(ana)).area.kind === "town", "Ana should be in town");
+  await game(ana, () => { const { runtime, useWorld } = window.__soilGame; runtime.player = { x: 54, y: 17, facing: "down" }; useWorld.setState((s) => ({ world: { ...s.world, player: runtime.player } })); });
+  await game(ana, () => window.__soilGame.doAction("interact"));
+  await ana.getByRole("dialog", { name: "Ben's market stall" }).getByRole("button", { name: "Buy 1" }).click();
+  await until(ben, async () => (await me(ben)).coins === 457, "Ben should be paid for his fiber");
+  await ana.screenshot({ path: `${OUT}/41-multiplayer-stall.png` });
+  await ana.keyboard.press("Escape");
+  // Bedtime: the night waits for both.
+  const night = (await me(ana)).minute;
+  for (const p of [ana, ben]) await game(p, () => window.__soilGame.useWorld.getState().remote("bed", [true]));
+  await until(ben, async () => (await me(ben)).minute > night + 600, "The night should pass for everyone");
+  if ((await me(ana)).seq !== (await me(ben)).seq) throw new Error("Multiplayer: Ana and Ben should be in step");
+  await mp.close();
+}
+
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1500);

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ITEMS } from "@/world/items";
-import { accept, boardRequests, goalLabel, offers, QUEST_BY_ID, questState, questStatus, rewardText, turnIn, type ActiveQuest } from "@/world/quests";
+import { boardRequests, goalLabel, offers, QUEST_BY_ID, questState, questStatus, rewardText, turnIn, type ActiveQuest } from "@/world/quests";
 import { canGift, friendship, giftReaction, giveGift, hearts, MAX_HEARTS, NPC_BY_ID, npcPose } from "@/world/town";
 import type { WorldState } from "@/world/types";
 import { ItemIcon } from "./ItemIcon";
@@ -23,7 +23,7 @@ export function Hearts({ value }: { value: number }) {
 export function NpcDialog() {
   const id = useWorld((s) => s.talkingTo)!;
   const w = useWorld((s) => s.world!);
-  const { update, close, open } = useWorld.getState();
+  const { run, close, open } = useWorld.getState();
   const npc = NPC_BY_ID[id];
   const [text, setText] = useState(useWorld.getState().npcLine);
   const pose = npcPose(w, npc, w.minute);
@@ -33,7 +33,7 @@ export function NpcDialog() {
   const give = () => {
     const r = giveGift(useWorld.getState().world!, id);
     setText(r.text);
-    update(() => r.state);
+    run("gift", id);
   };
   return (
     <Modal title={npc.name} icon="💬" onClose={close}>
@@ -75,7 +75,7 @@ function reactionHint(r: ReturnType<typeof giftReaction>, h: number) {
 /** Requests this person has for you, and ones you can hand in. */
 function NpcQuests({ npcId, onSay }: { npcId: string; onSay: (text: string) => void }) {
   const w = useWorld((s) => s.world!);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const qs = questState(w);
   const offered = offers(w, npcId);
   const mine = qs.active.filter((a) => questStatus(w, a).giver === npcId);
@@ -94,7 +94,7 @@ function NpcQuests({ npcId, onSay }: { npcId: string; onSay: (text: string) => v
                 onClick={() => {
                   const r = turnIn(useWorld.getState().world!, a.id);
                   onSay(r.text);
-                  update(() => r.state);
+                  run("turnIn", a.id);
                 }}
               >
                 ✅ {st.step.goal.kind === "deliver" ? "Hand over" : "Done!"}{st.last ? ` · ${rewardText(st.reward)}` : ""}
@@ -112,7 +112,7 @@ function NpcQuests({ npcId, onSay }: { npcId: string; onSay: (text: string) => v
             className="btn btn-soil mt-2 py-1 text-sm"
             onClick={() => {
               onSay("Wonderful, thank you! Come find me when it's done.");
-              update((s) => accept(s, q.id));
+              run("accept", q.id);
             }}
           >
             Accept
@@ -144,7 +144,7 @@ function QuestStep({ w, a }: { w: WorldState; a: ActiveQuest }) {
 /** The town notice board: today's delivery requests and the community project. */
 export function NoticeBoard() {
   const w = useWorld((s) => s.world!);
-  const { update, close } = useWorld.getState();
+  const { run, close } = useWorld.getState();
   const [said, setSaid] = useState("");
   const qs = questState(w);
   const requests = boardRequests(w);
@@ -174,7 +174,7 @@ export function NoticeBoard() {
                       onClick={() => {
                         const res = turnIn(useWorld.getState().world!, r.id);
                         setSaid(res.text);
-                        update(() => res.state);
+                        run("turnIn", r.id);
                       }}
                     >
                       ✅ Deliver
@@ -182,7 +182,7 @@ export function NoticeBoard() {
                   )}
                 </>
               ) : (
-                <button className="btn btn-soil mt-2 py-1 text-sm" onClick={() => update((s) => accept(s, r.id, r.board))}>Take this request</button>
+                <button className="btn btn-soil mt-2 py-1 text-sm" onClick={() => run("accept", r.id, r.board)}>Take this request</button>
               )}
             </div>
           );

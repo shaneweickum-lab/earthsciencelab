@@ -1,9 +1,10 @@
 "use client";
 
 import { HomesteadOverlay } from "@/components/homestead/HomesteadOverlay";
+import { useMulti } from "@/net/mp";
 import { useState } from "react";
 import { dayOf, formatDate, seasonLabel, timeOfDay } from "@/world/clock";
-import { durability, HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
+import { durability, HOTBAR_SIZE, todayClimate, tomorrowClimate } from "@/world/engine";
 import { formatTemp } from "@/world/settings";
 import { ITEMS } from "@/world/items";
 import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
@@ -36,8 +37,8 @@ export function Modal({ title, icon, children, onClose, wide = false }: {
 /** Pick how your farmer looks, for the farm you're playing. */
 export function AvatarPicker() {
   const avatar = useWorld((s) => s.world!.avatar ?? DEFAULT_AVATAR);
-  const update = useWorld((s) => s.update);
-  return <AvatarChoice value={avatar} onChange={(a) => update((w) => ({ ...w, avatar: a }))} />;
+  const run = useWorld((s) => s.run);
+  return <AvatarChoice value={avatar} onChange={(a) => run("avatar", a)} />;
 }
 
 export function AvatarChoice({ value: avatar, onChange }: { value: string; onChange: (avatar: string) => void }) {
@@ -61,10 +62,10 @@ export function AvatarChoice({ value: avatar, onChange }: { value: string; onCha
 }
 
 export function IntroLetter() {
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const start = () => {
-    update((w) => ({ ...w, introSeen: true }));
+    run("introSeen");
     close();
   };
   return (
@@ -117,11 +118,18 @@ function Tip({ k, text }: { k: string; text: string }) {
 }
 
 export function HouseMenu() {
-  const { update, open, close, save } = useWorld.getState();
+  const { run, open, close, save } = useWorld.getState();
   const minute = useWorld((s) => s.world!.minute);
   const h = timeOfDay(minute) / 60;
+  const multi = useWorld((s) => s.remote !== null);
   const goToBed = () => {
-    update(sleep);
+    // In a shared world, the night waits until everyone playing is in bed.
+    if (multi) {
+      useWorld.getState().remote?.("bed", [true]);
+      open("bed");
+      return;
+    }
+    run("sleep");
     save();
     open("summary");
   };
@@ -133,12 +141,12 @@ export function HouseMenu() {
         </button>
         <button className="btn btn-ghost justify-start" onClick={() => open("tv")}>📺 Watch the weather channel</button>
         <button className="btn btn-ghost justify-start" onClick={() => open("journal")}>📓 Read your Nature Journal</button>
-        <button className="btn btn-ghost justify-start" onClick={() => open("homestead")}>🏡 My Homestead: decorate your room and yard</button>
+        {!multi && <button className="btn btn-ghost justify-start" onClick={() => open("homestead")}>🏡 My Homestead: decorate your room and yard</button>}
         <details className="rounded-xl border border-line px-3 py-2 text-sm">
           <summary className="cursor-pointer font-bold">👕 Change your look</summary>
           <div className="mt-2"><AvatarPicker /></div>
         </details>
-        <p className="px-1 text-xs text-muted">Your farm saves itself every in-game hour and whenever you sleep.</p>
+        <p className="px-1 text-xs text-muted">{multi ? "The host saves this world as you play." : "Your farm saves itself every in-game hour and whenever you sleep."}</p>
         <button className="btn btn-ghost justify-start" onClick={() => open("pause")}>⚙️ Game settings &amp; main menu</button>
       </div>
     </Modal>
@@ -208,7 +216,7 @@ export function DaySummary() {
 /** Your bag. Click one slot, then another, to swap them. The top row is your hotbar. */
 export function Bag() {
   const inv = useWorld((s) => s.world!.inventory);
-  const update = useWorld((s) => s.update);
+  const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
   const [held, setHeld] = useState<number | null>(null);
   const [look, setLook] = useState<number | null>(null);
@@ -218,7 +226,7 @@ export function Bag() {
       if (inv[i]) setHeld(i);
       return;
     }
-    if (held !== i) update((w) => swapSlots(w, held, i));
+    if (held !== i) run("swap", held, i);
     setHeld(null);
   };
   const shown = look !== null ? inv[look] : null;
@@ -267,4 +275,25 @@ export function HomesteadMenu() {
   const update = useWorld((s) => s.update);
   const close = useWorld((s) => s.close);
   return <HomesteadOverlay world={w} update={update} onClose={() => { useWorld.getState().save(); close(); }} />;
+}
+
+/** In bed in a shared world, waiting for the others. The morning summary opens when the night passes. */
+export function BedWait() {
+  const close = useWorld((s) => s.close);
+  const world = useMulti((s) => s.world);
+  const session = useMulti((s) => s.session);
+  if (!world || !session) return null;
+  const awake = session.online.filter((p) => world.players[p.pid] && !world.players[p.pid].asleep);
+  const getUp = () => {
+    useWorld.getState().remote?.("bed", [false]);
+    close();
+  };
+  return (
+    <Modal title="Sweet dreams" icon="🛏️" onClose={getUp}>
+      <p className="text-sm">The night passes when everyone playing is in bed.</p>
+      {awake.length > 0 && <p className="mt-2 text-sm font-bold">Still up: {awake.map((p) => p.name).join(", ")}</p>}
+      <p className="mt-2 text-xs text-muted">At 2 AM, anyone still up faints, and the day ends for everyone.</p>
+      <button className="btn btn-ghost mt-4" onClick={getUp}>Get up again</button>
+    </Modal>
+  );
 }
