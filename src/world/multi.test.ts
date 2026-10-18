@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyTool, interact, newWorld, takeAllFromChest } from "./engine";
 import { FARM_W, idx, MINE_ENTRANCE, PLOTS, TOWN, W } from "./map";
 import {
-  absorb, addPlayer, asPlayer, atGardenExit, buyFromStall, enterGate, everyoneAsleep, GATE_ROWS, helperBlock, leaveGarden, MAX_PLAYERS,
+  absorb, addPlayer, CHAT_KEEP, hideChat, reportChat, reportedChat, sayInChat, setChatOff, asPlayer, atGardenExit, buyFromStall, enterGate, everyoneAsleep, GATE_ROWS, helperBlock, leaveGarden, MAX_PLAYERS,
   newMultiWorld, nightMulti, ownerOf, setAsleep, stallOf, stockStall, tickMulti, unstockStall, viewFor, type MultiWorld,
 } from "./multi";
 import { skipTutorial } from "./quests";
@@ -206,5 +206,32 @@ describe("multiplayer worlds", () => {
     const v = viewFor(m, "guest");
     expect(v.buildings.filter((b) => b.x < FARM_W).every((b) => m.farms[1].buildings.includes(b))).toBe(true);
     expect(v.tiles.length).toBe(W * (v.tiles.length / W));
+  });
+
+  it("keep a cleaned, capped chat log the host can moderate", () => {
+    let m = world();
+    m = sayInChat(m, "guest", "  hi Ana, visit www.example.com  ");
+    expect(m.chat).toHaveLength(1);
+    expect(m.chat![0]).toMatchObject({ id: 1, pid: "guest", name: "Ben", text: "hi Ana, visit ***" });
+    expect(sayInChat(m, "guest", "   ")).toBe(m);
+    expect(sayInChat(m, "stranger", "hello")).toBe(m);
+    for (let i = 0; i < CHAT_KEEP + 10; i++) m = sayInChat(m, "host", `message ${i}`);
+    expect(m.chat).toHaveLength(CHAT_KEEP);
+    expect(m.chat!.at(-1)!.id).toBe(CHAT_KEEP + 11);
+    // Only the host turns chat off; then nothing gets through.
+    expect(setChatOff(m, "guest", true)).toBe(m);
+    const off = setChatOff(m, "host", true);
+    expect(sayInChat(off, "guest", "anyone?")).toBe(off);
+    // Reports: once per farmer, never your own; the host hides or dismisses.
+    const id = m.chat!.at(-1)!.id;
+    let r = reportChat(m, "guest", id);
+    expect(reportChat(r, "guest", id)).toBe(r);
+    expect(reportChat(r, "host", id)).toBe(r);
+    expect(reportedChat(r).map((c) => c.id)).toEqual([id]);
+    expect(hideChat(r, "guest", id)).toBe(r);
+    r = hideChat(r, "host", id);
+    expect(r.chat!.at(-1)!.hidden).toBe(true);
+    expect(reportedChat(r)).toEqual([]);
+    expect(reportedChat(hideChat(reportChat(m, "guest", id), "host", id, false))).toEqual([]);
   });
 });

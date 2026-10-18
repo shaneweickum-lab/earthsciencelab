@@ -2,7 +2,7 @@
 
 import { Html, useAnimations, useGLTF } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { BufferAttribute, Color, LoopOnce, type AmbientLight, type DirectionalLight, type Group, type Mesh, type PointLight, type Points } from "three";
 import { daylight, dayOf, msPerGameMinute, seasonOf, timeOfDay } from "@/world/clock";
 import { canPlace, DIRS, facingTile, movePlayer, placementFor, tick, todayWeather } from "@/world/engine";
@@ -14,6 +14,7 @@ import type { WeatherId, WorldState } from "@/world/types";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { multiplayerFrame } from "@/net/mpLoop";
 import { areaKey, useMulti } from "@/net/mp";
+import { cleanChat } from "@/world/chatFilter";
 import { DEFAULT_AVATAR } from "@/world/avatars";
 import { labelLayer, runtime, useWorld } from "../useWorld";
 import { Buildings } from "./Buildings";
@@ -251,6 +252,36 @@ function sameView(mine: string, theirs: string) {
   return theirs === "town" && mine.startsWith("g");
 }
 
+/** What a farmer just said in chat, over their head for a few seconds (unless you've muted them). */
+function ChatBubble({ pid }: { pid: string }) {
+  const [, tick] = useState(0);
+  // The latest thing they said, as "id|arrived" (a string, so the hook only re-renders on a new message).
+  const key = useMulti((s) => {
+    if (!s.world || s.muted.includes(pid)) return "";
+    const c = (s.world.chat ?? []).findLast((m) => m.pid === pid && !m.hidden);
+    return c && Date.now() - (s.chatSeen[c.id] ?? 0) < BUBBLE_MS ? `${c.id}|${s.chatSeen[c.id]}` : "";
+  });
+  const said = useMemo(() => {
+    if (!key) return null;
+    const [id, at] = key.split("|").map(Number);
+    const c = useMulti.getState().world?.chat?.find((m) => m.id === id);
+    return c ? { id, at, text: cleanChat(c.text) } : null;
+  }, [key]);
+  useEffect(() => {
+    if (!said) return;
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, BUBBLE_MS - (Date.now() - said.at)) + 50);
+    return () => clearTimeout(t);
+  }, [said]);
+  if (!said || Date.now() - said.at >= BUBBLE_MS) return null;
+  return (
+    <Html position={[0, 2.05, 0]} center zIndexRange={[31, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
+      <div className="max-w-[220px] rounded-2xl border-2 border-soil-dark/20 bg-white px-2.5 py-1 text-center text-xs font-bold shadow-lg">{said.text}</div>
+    </Html>
+  );
+}
+
+const BUBBLE_MS = 5000;
+
 /** Another farmer in a shared world, gliding to where they last said they were. */
 function OtherFarmer({ pid, avatar, name }: { pid: string; avatar: string; name: string }) {
   const { scene, animations } = useGLTF(model("characters", `character-${avatar}`));
@@ -294,6 +325,7 @@ function OtherFarmer({ pid, avatar, name }: { pid: string; avatar: string; name:
       <Html position={[0, 1.6, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
         <div className="whitespace-nowrap rounded-full bg-sky/90 px-2 py-0.5 text-[11px] font-black text-white shadow">{name}</div>
       </Html>
+      <ChatBubble pid={pid} />
     </group>
   );
 }
@@ -328,6 +360,13 @@ function Townsfolk() {
   );
 }
 
+/** Your own chat bubble, in a shared world. */
+function MyBubble() {
+  const me = useMulti((s) => s.me?.pid);
+  const playing = useMulti((s) => s.session !== null);
+  return me && playing ? <ChatBubble pid={me} /> : null;
+}
+
 function Player() {
   const ref = useRef<Group>(null);
   const lamp = useRef<PointLight>(null);
@@ -353,6 +392,7 @@ function Player() {
         <Farmer avatar={avatar} />
       </Suspense>
       <pointLight ref={lamp} position={[0, 1.6, 0.3]} color="#ffcf8a" distance={7} decay={1.6} intensity={0} />
+      <MyBubble />
     </group>
   );
 }

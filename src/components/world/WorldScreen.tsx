@@ -17,6 +17,7 @@ import { Bag, BedWait, DaySummary, HomesteadMenu, HouseMenu, IntroLetter, TvFore
 import { StallMenu } from "./Market";
 import { Lobby } from "./Lobby";
 import { MultiHud } from "./MultiHud";
+import { ChatPanel } from "./ChatPanel";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
@@ -280,6 +281,9 @@ export function WorldScreen() {
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
             <Hotbar />
+          </div>
+          <div className="pointer-events-none absolute bottom-36 left-3 z-20">
+            <ChatPanel />
           </div>
           <div className="pointer-events-auto absolute bottom-24 left-3 z-10 hidden gap-1.5 md:flex">
             <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("bag")}>🎒 Bag <kbd className="text-xs text-muted">I</kbd></button>

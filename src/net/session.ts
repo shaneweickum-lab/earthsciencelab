@@ -5,6 +5,10 @@ import type { Presence, Transport } from "./transport";
 
 /** How often the host lets the clients check they still match it (in entries). */
 const PRINT_EVERY = 40;
+/** Chat rate limit: the gap between messages, and how many in a burst. */
+const CHAT_GAP_MS = 1500;
+const CHAT_WINDOW_MS = 10_000;
+const CHAT_BURST = 5;
 /** How long the host batches entries before sending them. */
 const FLUSH_MS = 40;
 
@@ -107,7 +111,26 @@ export class HostSession extends Session {
     this.act({ ...intent, pid: this.me.pid });
   }
 
+  /** When each farmer last chatted, for the rate limit. */
+  private chatTimes = new Map<string, number[]>();
+
+  /** One message every 1.5 seconds, and no more than 5 in 10 seconds. */
+  private chatAllowed(pid: string, now = Date.now()): boolean {
+    const recent = (this.chatTimes.get(pid) ?? []).filter((t) => now - t < CHAT_WINDOW_MS);
+    if ((recent.length && now - recent[recent.length - 1] < CHAT_GAP_MS) || recent.length >= CHAT_BURST) {
+      this.chatTimes.set(pid, recent);
+      return false;
+    }
+    this.chatTimes.set(pid, [...recent, now]);
+    return true;
+  }
+
   private act(intent: Intent) {
+    if (intent.op === "slowDown") return;
+    if (intent.op === "chat" && !this.chatAllowed(intent.pid)) {
+      this.sequence({ kind: "op", pid: intent.pid, op: "slowDown", args: [] });
+      return;
+    }
     this.sequence({ kind: "op", ...intent });
     if (intent.op === "bed") this.checkNight();
   }

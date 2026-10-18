@@ -1,5 +1,5 @@
 import {
-  addPlayer, asPlayer, buyFromStall, enterGate, everyoneAsleep, helperBlock, leaveGarden, nightMulti, setAsleep, setPosition, stockStall,
+  addPlayer, asPlayer, buyFromStall, hideChat, reportChat, sayInChat, setChatOff, enterGate, everyoneAsleep, helperBlock, leaveGarden, nightMulti, setAsleep, setPosition, stockStall,
   tickMulti, unstockStall, type MultiWorld,
 } from "@/world/multi";
 import { say } from "@/world/engine";
@@ -21,9 +21,14 @@ export type WorldOp =
   | { op: "stock"; args: [slot: number, qty: number, price: number] }
   | { op: "unstock"; args: [listing: number] }
   | { op: "buyStall"; args: [garden: number, listing: number, qty: number] }
-  | { op: "bed"; args: [asleep: boolean] };
+  | { op: "bed"; args: [asleep: boolean] }
+  | { op: "chat"; args: [text: string] }
+  | { op: "chatOff"; args: [off: boolean] }
+  | { op: "report"; args: [message: number] }
+  | { op: "hideChat"; args: [message: number, hide: boolean] }
+  | { op: "slowDown"; args: [] };
 
-const WORLD_OPS = new Set(["gate", "leaveGarden", "stock", "unstock", "buyStall", "bed"]);
+const WORLD_OPS = new Set(["gate", "leaveGarden", "stock", "unstock", "buyStall", "bed", "chat", "chatOff", "report", "hideChat", "slowDown"]);
 
 /** What a farmer asks the host to do. */
 export interface Intent {
@@ -77,6 +82,11 @@ function applyWorldOp(m: MultiWorld, pid: string, w: WorldOp): MultiWorld {
     case "unstock": return unstockStall(m, pid, Number(a[0]));
     case "buyStall": return buyFromStall(m, pid, Number(a[0]), Number(a[1]), Number(a[2]));
     case "bed": return setAsleep(m, pid, Boolean(w.args[0]));
+    case "chat": return sayInChat(m, pid, String(w.args[0] ?? ""));
+    case "chatOff": return setChatOff(m, pid, Boolean(w.args[0]));
+    case "report": return reportChat(m, pid, Number(a[0]));
+    case "hideChat": return hideChat(m, pid, Number(a[0]), w.args[1] !== false);
+    case "slowDown": return asPlayer(m, pid, (v) => say(v, "Slow down a little: one chat message at a time."));
   }
 }
 

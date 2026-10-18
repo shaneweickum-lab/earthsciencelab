@@ -111,4 +111,18 @@ describe("multiplayer sessions", () => {
     await settle();
     expect(ben.stopped).toBe("hostLeft");
   });
+
+  it("carry chat to everyone in the same order, and slow down floods", async () => {
+    const { host, ben } = await setup();
+    host.submit({ op: "chat", args: ["Hi Ben!"] });
+    await new Promise((r) => setTimeout(r, 1600));
+    ben.submit({ op: "chat", args: ["Hi Ana!"] });
+    ben.submit({ op: "chat", args: ["spam"] });
+    await settle();
+    host.flush();
+    await settle();
+    expect(ben.world.chat!.map((c) => `${c.name}: ${c.text}`)).toEqual(["Ana: Hi Ben!", "Ben: Hi Ana!"]);
+    expect(host.world.chat).toEqual(ben.world.chat);
+    expect(ben.world.players.ben.messages.at(-1)!.text).toMatch(/Slow down/);
+  });
 });

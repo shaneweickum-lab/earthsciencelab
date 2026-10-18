@@ -3,6 +3,7 @@ import { DAY_END, timeOfDay } from "./clock";
 import { ITEMS, sellPrice } from "./items";
 import { createMap, FARM_W, H, idx, TOWN, W } from "./map";
 import { expireCritters } from "./nature";
+import { cleanChat } from "./chatFilter";
 import { on, type GameSettings } from "./settings";
 import type { Building, Critter, MineFloor, Slot, Tile, WorldState } from "./types";
 
@@ -64,10 +65,31 @@ export interface Listing {
   price: number;
 }
 
+/** A chat message, as everyone sees it (already cleaned by the chat filter). */
+export interface ChatMessage {
+  id: number;
+  pid: string;
+  name: string;
+  text: string;
+  minute: number;
+  /** Hidden for everyone by the host (after a report). */
+  hidden?: boolean;
+  /** Who reported it. */
+  reports?: string[];
+}
+
+/** How many chat messages a world keeps. */
+export const CHAT_KEEP = 100;
+
 export interface MultiWorld {
   version: 1;
   id: string;
   name: string;
+  /** The farmer who hosts the world (and can turn chat off). */
+  hostId?: string;
+  chat?: ChatMessage[];
+  /** The host has turned chat off. */
+  chatOff?: boolean;
   seed: number;
   minute: number;
   weather: WorldState["weather"];
@@ -141,7 +163,7 @@ function wilds(seed: number): FarmPart {
 export function newMultiWorld(id: string, name: string, seed: number, settings: GameSettings | undefined, host: { id: string; name: string; avatar?: string }): MultiWorld {
   const base = newWorld(seed, settings);
   const m: MultiWorld = {
-    version: 1, id, name, seed, minute: base.minute, weather: base.weather, settings: base.settings,
+    version: 1, id, name, hostId: host.id, chat: [], seed, minute: base.minute, weather: base.weather, settings: base.settings,
     town: multiTown(seed), farms: {}, players: {}, mines: {}, stalls: {},
   };
   return addPlayer(m, host.id, host.name, host.avatar)!;
@@ -441,3 +463,45 @@ export function nightMulti(m: MultiWorld, awake: string[] = []): MultiWorld {
   const players = Object.fromEntries(Object.values(next.players).map((p) => [p.id, { ...p, asleep: false, area: { kind: "garden", garden: p.garden } as Area }]));
   return { ...next, players };
 }
+
+// ───────────────────────── chat ─────────────────────────
+
+/** Say something to everyone in the world. Dropped if chat is off or nothing's left after cleaning. */
+export function sayInChat(m: MultiWorld, pid: string, raw: string): MultiWorld {
+  const p = m.players[pid];
+  if (!p || m.chatOff) return m;
+  const text = cleanChat(raw);
+  if (!text) return m;
+  const chat = m.chat ?? [];
+  const id = (chat.at(-1)?.id ?? 0) + 1;
+  return { ...m, chat: [...chat, { id, pid, name: p.name, text, minute: m.minute }].slice(-CHAT_KEEP) };
+}
+
+/** The host turns chat off (or back on) for everyone. */
+export function setChatOff(m: MultiWorld, pid: string, off: boolean): MultiWorld {
+  if (pid !== m.hostId || !!m.chatOff === off) return m;
+  return { ...m, chatOff: off };
+}
+
+function updateMessage(m: MultiWorld, id: number, fn: (c: ChatMessage) => ChatMessage): MultiWorld {
+  const chat = m.chat ?? [];
+  const i = chat.findIndex((c) => c.id === id);
+  if (i < 0) return m;
+  const next = fn(chat[i]);
+  return next === chat[i] ? m : { ...m, chat: chat.map((c, k) => (k === i ? next : c)) };
+}
+
+/** Report a message to the host (once per farmer; not your own). */
+export function reportChat(m: MultiWorld, pid: string, id: number): MultiWorld {
+  if (!m.players[pid]) return m;
+  return updateMessage(m, id, (c) => (c.pid === pid || c.reports?.includes(pid) ? c : { ...c, reports: [...(c.reports ?? []), pid] }));
+}
+
+/** The host hides a message for everyone, or (with `hide` false) dismisses its reports. */
+export function hideChat(m: MultiWorld, pid: string, id: number, hide = true): MultiWorld {
+  if (pid !== m.hostId) return m;
+  return updateMessage(m, id, (c) => (hide ? { ...c, hidden: true } : { ...c, reports: [] }));
+}
+
+/** Messages the host still needs to look at. */
+export const reportedChat = (m: MultiWorld) => (m.chat ?? []).filter((c) => !c.hidden && (c.reports?.length ?? 0) > 0);
