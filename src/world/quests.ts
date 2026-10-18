@@ -1,7 +1,7 @@
 import { nextRandom } from "@/game/rng";
 import type { CropId } from "@/game/crops";
 import { dayOf, seasonOf } from "./clock";
-import { addItem } from "./engine";
+import { addItem, grantPlots } from "./engine";
 import { GRADES } from "./grades";
 import { ITEMS, sellPrice, WORLD_CROPS } from "./items";
 import { FARM_W, TOWN, W } from "./map";
@@ -28,6 +28,8 @@ export interface Reward {
   friendship?: number;
   /** Friendship points with everyone in town. */
   everyone?: number;
+  /** Farm plots unlocked for free. */
+  plots?: number;
 }
 
 export interface QuestDef {
@@ -54,7 +56,7 @@ export const QUESTS: QuestDef[] = [
     ask: "Grandma Rosa's tools still work? Good. Get some seeds in the ground: plant 6 crops on your farm, then come tell me.",
     thanks: "Nice rows! But the real action is under the plants. Mei just got shovels in. Dig a test hole and look for worms and soil crumbs. This should cover one.",
     steps: [{ goal: { kind: "farmPlanted", count: 6 }, label: "Plant 6 crops on your farm" }],
-    reward: { coins: 60, friendship: 40 },
+    reward: { coins: 60, friendship: 40, plots: 1 },
   },
   {
     id: "feed-the-soil", giver: "amara", title: "Feed the soil",
@@ -83,8 +85,16 @@ export const QUESTS: QuestDef[] = [
     ask: "My grandfather dug copper and tin in the old mine past town. It's been boarded up for years. Bring me 20 wood for timbers and 10 stone, and we'll shore it up together.",
     thanks: "There! The tunnel's safe again. Watch for ladders hidden under the rocks; the deeper you go, the better the ore. And bring a good pickaxe.",
     steps: [{ goal: { kind: "deliver", items: [{ item: "wood", qty: 20 }, { item: "stone", qty: 10 }] }, label: "Bring Luis 20 wood and 10 stone" }],
-    reward: { coins: 50, friendship: 60 },
+    reward: { coins: 50, friendship: 60, plots: 1 },
     needs: { quests: ["dig-deeper"] },
+  },
+  {
+    id: "room-to-grow", giver: "luis", title: "Room to grow",
+    ask: "Your field's filling up! There's good land south of the woods that nobody's farmed in years. Bring me 30 wood for fence posts and 10 stone, and I'll help you claim it.",
+    thanks: "There's a path through the trees now, and two plots down there are yours. That's rich bottomland, so treat it well.",
+    steps: [{ goal: { kind: "deliver", items: [{ item: "wood", qty: 30 }, { item: "stone", qty: 10 }] }, label: "Bring Luis 30 wood and 10 stone" }],
+    reward: { friendship: 80, plots: 2 },
+    needs: { hearts: 2, quests: ["first-carrots"] },
   },
   {
     id: "first-carrots", giver: "luis", title: "A neighborly trade",
@@ -145,7 +155,7 @@ export const QUESTS: QuestDef[] = [
     ask: "My abuela grew corn, beans, and squash together. The corn holds up the beans, the beans feed the soil, and the squash shades out weeds. Bring me 3 of each, grade C or better, and I'll show you her recipe.",
     thanks: "Just like Abuela's garden. You understand this land now.",
     steps: [{ goal: { kind: "deliver", items: [{ item: "crop_corn", qty: 3, minGrade: "C" }, { item: "crop_beans", qty: 3, minGrade: "C" }, { item: "crop_squash", qty: 3, minGrade: "C" }] }, label: "Bring 3 corn, 3 beans, and 3 squash (grade C+)" }],
-    reward: { coins: 350, friendship: 120 },
+    reward: { coins: 350, friendship: 120, plots: 1 },
     needs: { hearts: 3, quests: ["first-carrots"] },
   },
   {
@@ -165,7 +175,7 @@ export const QUESTS: QuestDef[] = [
       { goal: { kind: "deliver", items: [{ item: "compost", qty: 6 }] }, label: "Bring Dr. Okafor 6 compost for the garden" },
       { goal: { kind: "gardenPlanted", crop: "clover", count: 6 }, label: "Plant clover on 6 community garden spots" },
     ],
-    reward: { coins: 500, everyone: 100, items: [{ item: "kit_composter", qty: 1 }] },
+    reward: { coins: 500, everyone: 100, items: [{ item: "kit_composter", qty: 1 }], plots: 2 },
     needs: { quests: ["soil-check"] },
   },
 ];
@@ -316,6 +326,7 @@ function takeItems(s: WorldState, items: { item: string; qty: number; minGrade?:
 
 function giveReward(s: WorldState, giver: string, r: Reward): WorldState {
   let next: WorldState = { ...s, coins: s.coins + (r.coins ?? 0) };
+  if (r.plots) next = grantPlots(next, r.plots);
   for (const it of r.items ?? []) next = addItem(next, it.item, it.qty) ?? next;
   const friends = { ...(next.friends ?? {}) };
   const bump = (id: string, pts: number) => {
@@ -333,6 +344,7 @@ export function rewardText(r: Reward): string {
   for (const it of r.items ?? []) parts.push(`${ITEMS[it.item].icon} ${it.qty} ${ITEMS[it.item].name}`);
   if (r.friendship) parts.push(`❤️ +${Math.round(r.friendship / POINTS_PER_HEART * 10) / 10} heart${r.friendship === POINTS_PER_HEART ? "" : "s"}`);
   if (r.everyone) parts.push("❤️ friendship with everyone");
+  if (r.plots) parts.push(`🌱 ${r.plots} farm plot${r.plots > 1 ? "s" : ""}`);
   return parts.join(" · ");
 }
 

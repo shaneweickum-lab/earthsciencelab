@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addItem, applyTool, countItem, harvest, loadWorld, newWorld, saveWorld, sellNow, ship, sleep, WORLD_VERSION } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount } from "./grades";
-import { idx } from "./map";
+import { idx, OLD_H, PLOTS, W } from "./map";
 import { DEFAULT_SETTINGS, PRESETS, type FeatureId } from "./settings";
 import type { Grade, Tile, WorldState } from "./types";
 
@@ -9,7 +9,7 @@ const X = 15, Y = 20;
 
 function world(cropGrades: boolean, extra: Partial<Record<FeatureId, boolean>> = {}): WorldState {
   const s = newWorld(5, { ...DEFAULT_SETTINGS, science: { ...PRESETS.classic.science, cropGrades, ...extra } });
-  return withTile({ ...s, player: { x: X, y: Y - 1, facing: "down" } }, X, Y, { obstacle: null, weeds: false, tilled: true, crop: null, boost: 0 });
+  return withTile({ ...s, plots: PLOTS.map((p) => p.id), player: { x: X, y: Y - 1, facing: "down" } }, X, Y, { obstacle: null, weeds: false, tilled: true, crop: null, boost: 0 });
 }
 
 function withTile(s: WorldState, x: number, y: number, patch: Partial<Tile>): WorldState {
@@ -102,7 +102,7 @@ describe("crop grades", () => {
 
   it("older saves load with no amendment points or stress", () => {
     const s = world(true);
-    const old = { ...s, version: 2, tiles: s.tiles.map((t) => ({ ...t, boost: undefined })) };
+    const old = { ...s, version: 2, tiles: s.tiles.slice(0, W * OLD_H).map((t) => ({ ...t, boost: undefined })) };
     const up = loadWorld(JSON.stringify(old))!;
     expect(up.version).toBe(WORLD_VERSION);
     expect(expectedGrade(up, up.tiles[idx(X, Y)]).grade).toBeDefined();

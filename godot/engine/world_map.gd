@@ -3,11 +3,57 @@ class_name WorldMap
 ## east of the forest strip.
 
 const W := 76
-const H := 36
+const H := 64
 const FARM_W := 38
+## The map was 36 rows tall before the South Fields were added below the forest belt.
+const OLD_H := 36
 
 ## The farm field the player clears and plants.
 const FARM := {"x0": 10, "y0": 13, "x1": 27, "y1": 28}
+## More farmland south of the forest belt, opened plot by plot.
+const SOUTH := {"x0": 10, "y0": 37, "x1": 33, "y1": 60}
+
+
+static var _plots := []
+
+
+## The farmland in 6×4-tile plots: 12 in the field by the house, 24 in the South Fields. A new
+## farm owns only plot 0 (nearest the house); the rest are bought or earned from quests.
+static func plots() -> Array:
+	if _plots.is_empty():
+		for a in [FARM, SOUTH]:
+			var y: int = a.y0
+			while y + 3 <= a.y1:
+				var x: int = a.x0
+				while x + 5 <= a.x1:
+					_plots.append({"id": _plots.size(), "x0": x, "y0": y, "x1": x + 5, "y1": y + 3})
+					x += 6
+				y += 4
+	return _plots
+
+
+
+## The plot a tile is in, or -1 outside the farmland.
+static func plot_at(x: int, y: int) -> int:
+	for p in plots():
+		if x >= p.x0 and x <= p.x1 and y >= p.y0 and y <= p.y1:
+			return p.id
+	return -1
+
+
+## The price of the next plot, rising with how many you own.
+static func plot_price(owned: int) -> int:
+	return 100 + 40 * owned + 3 * owned * owned
+
+
+## The path from beside the field, through the forest belt, and along the top of the South Fields.
+static func south_path() -> Array:
+	var out := []
+	for y in range(29, SOUTH.y0):
+		out.append([9, y])
+	for x in range(10, SOUTH.x1 + 1):
+		out.append([x, SOUTH.y0 - 1])
+	return out
 
 ## The town: its square, the community garden, and where the road runs.
 const TOWN := {
@@ -149,7 +195,18 @@ static func create_map(seed: int) -> Dictionary:
 			var soil := _degraded_soil(r)
 			# Forest around the edges, and a strip between the farm and town with a gap for the road.
 			var strip: bool = x >= FARM_W and x < TOWN.x0 and (y < TOWN.road - 1 or y > TOWN.road + 1)
-			var forest := y < 3 or x < 2 or x > W - 3 or y > H - 3 or (x < 7 and y > 26) or strip
+			# The old south edge is now a forest belt between the field and the South Fields.
+			var belt := y > OLD_H - 3 and y < OLD_H
+			var south := y >= OLD_H
+			var forest := y < 3 or x < 2 or x > W - 3 or y > H - 3 or belt or (x < 7 and y > 26 and not south) or strip or (south and x >= FARM_W)
+			if south and not forest:
+				if x >= SOUTH.x0 and x <= SOUTH.x1 and y >= SOUTH.y0 and y <= SOUTH.y1:
+					var k := r.next()
+					var obstacle: Variant = "stone" if k < 0.07 else ("stick" if k < 0.13 else ("stump" if k < 0.17 else ("log" if k < 0.19 else null)))
+					tiles.append(_tile("farm", soil, obstacle, obstacle == null and r.next() < 0.8))
+				else:
+					tiles.append(_tile("grass", soil, "tree" if r.next() < 0.08 else null))
+				continue
 			if forest:
 				var forest_soil := Js.with(soil, {"om": 55 + Js.round(r.next() * 15), "life": 60})
 				var obstacle: Variant = "tree" if r.next() < 0.55 else ("log" if r.next() < 0.15 else null)
@@ -196,6 +253,9 @@ static func create_map(seed: int) -> Dictionary:
 			path.call(w[0], py)
 	for px in range(45, 48):
 		path.call(px, 26)
+	# Down past the field and through the forest belt to the South Fields.
+	for p in south_path():
+		path.call(p[0], p[1])
 	for px in range(48, sq.x0):
 		path.call(px, 16)
 	for px in range(sq.x1 + 1, 65):

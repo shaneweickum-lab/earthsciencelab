@@ -10,7 +10,7 @@ import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
 
 export type Screen = "menu" | "setup" | "playing";
 
@@ -37,9 +37,9 @@ interface WorldStore {
   open: (menu: Menu) => void;
   /** Which townsperson you're talking to. */
   talkingTo: string | null;
-  /** The chest or crafting station that's open. */
+  /** The chest or crafting station that's open (or, for "plot", the plot's number). */
   chestId: string | null;
-  openChest: (id: string, menu?: "chest" | "craft") => void;
+  openChest: (id: string, menu?: "chest" | "craft" | "plot") => void;
   /** What they said when you started talking. */
   npcLine: string;
   talkTo: (id: string) => void;

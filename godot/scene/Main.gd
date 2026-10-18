@@ -11,6 +11,7 @@ var _terrain := TerrainView.new()
 var _crops := CropsView.new()
 var _buildings := BuildingsView.new()
 var _mine := MineView.new()
+var _plots := PlotsView.new()
 ## Where the camera last was ("up", or "mine-<floor>"), so it can jump when you change places.
 var _place := ""
 var _sky := SkyView.new()
@@ -80,7 +81,7 @@ func _on_screen() -> void:
 
 func _build() -> void:
 	_built = true
-	for n in [_sky, _terrain, _crops, _buildings, _critters, _mine]:
+	for n in [_sky, _terrain, _crops, _buildings, _critters, _mine, _plots]:
 		_world_root.add_child(n)
 	_camera.fov = 40
 	_camera.near = 0.5
@@ -140,7 +141,7 @@ func _refresh() -> void:
 	var w := Game.world
 	# Underground, only the mine floor shows; the farm keeps growing out of sight.
 	var up: bool = w.get("mine") == null
-	for n in [_terrain, _crops, _buildings, _critters]:
+	for n in [_terrain, _crops, _buildings, _critters, _plots]:
 		n.visible = up
 	for a in _npcs:
 		a.visible = up and not "nonpcs" in Site.debug
@@ -148,6 +149,7 @@ func _refresh() -> void:
 	_terrain.refresh(w, _season())
 	_crops.refresh(w)
 	_buildings.refresh(w)
+	_plots.refresh(w)
 	_player.set_avatar(w.get("avatar", Data.world().defaultAvatar))
 	_update_ghost()
 	if not is_same(w.critters, _critter_list):
@@ -304,6 +306,9 @@ func do_action(mode: String) -> void:
 	if target == "chest" or target == "craft":
 		var f := World.facing_tile(here)
 		Game.chest_id = World.building_at(here, f.x, f.y).id
+	if target == "plot":
+		var f := World.facing_tile(here)
+		Game.chest_id = str(WorldMap.plot_at(f.x, f.y))
 	if target != "":
 		Game.open(target)
 		return

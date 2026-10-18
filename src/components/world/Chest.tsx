@@ -1,8 +1,8 @@
 "use client";
 
-import { cartFloors, enterMine, HOTBAR_SIZE, putInChest, takeAllFromChest, takeFromChest } from "@/world/engine";
+import { buyPlot, cartFloors, enterMine, HOTBAR_SIZE, nextPlotPrice, ownedPlots, putInChest, takeAllFromChest, takeFromChest } from "@/world/engine";
 import { ITEMS } from "@/world/items";
-import { CHEST_SIZE } from "@/world/map";
+import { CHEST_SIZE, PLOTS } from "@/world/map";
 import type { Slot } from "@/world/types";
 import { ItemIcon, WearBar } from "./ItemIcon";
 import { Modal } from "./Menus";
@@ -76,6 +76,33 @@ export function MineCart() {
         ))}
       </div>
       <p className="mt-3 text-xs text-muted">Deepest floor reached: {w.deepest ?? 0}</p>
+    </Modal>
+  );
+}
+
+/** A plot of farmland for sale: its price, and a button to buy it. */
+export function PlotMenu() {
+  const w = useWorld((s) => s.world!);
+  const id = Number(useWorld((s) => s.chestId));
+  const update = useWorld((s) => s.update);
+  const close = useWorld((s) => s.close);
+  const plot = PLOTS[id];
+  if (!plot) return null;
+  const price = nextPlotPrice(w);
+  const owned = ownedPlots(w).length;
+  return (
+    <Modal title="Farmland for sale" icon="🌱" onClose={close}>
+      <p className="text-sm">
+        This plot is {plot.x1 - plot.x0 + 1} × {plot.y1 - plot.y0 + 1} tiles of {plot.y0 >= 36 ? "rich South Fields bottomland" : "field by the house"}.
+        You own {owned} of {PLOTS.length} plots.
+      </p>
+      <p className="mt-2 text-xs text-muted">Each plot costs a little more than the last. Some quests give you land for free, too.</p>
+      <div className="mt-4 flex items-center gap-3">
+        <span className="rounded-full bg-paper px-3 py-1 text-sm font-black">🪙 {w.coins.toLocaleString()}</span>
+        <button className="btn btn-primary ml-auto" disabled={w.coins < price} onClick={() => { update((s) => buyPlot(s, id)); close(); }}>
+          Buy for 🪙 {price}
+        </button>
+      </div>
     </Modal>
   );
 }

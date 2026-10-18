@@ -5,7 +5,7 @@ import { dateOf, daysPerYear, formatDate, msPerGameMinute, seasonLabel, seasonOf
 import { addItem, applyTool, growthFactor, knownSoil, loadWorld, newWorld, saveWorld, sleep, tick, WORLD_VERSION } from "./engine";
 import { expectedGrade } from "./grades";
 import { cropDays, tempFactor } from "./items";
-import { idx } from "./map";
+import { idx, OLD_H, PLOTS, W } from "./map";
 import {
   DEFAULT_SETTINGS, FEATURE_IDS, normalizeSettings, PRESETS, presetOf, SCIENCE_FEATURES, type FeatureId, type GameSettings,
 } from "./settings";
@@ -18,7 +18,7 @@ const allOn = PRESETS.science.science;
 function world(science: Partial<Record<FeatureId, boolean>> = {}, extra: Partial<GameSettings> = {}): WorldState {
   let s = newWorld(7, { ...DEFAULT_SETTINGS, ...extra, science: { ...allOn, ...science } });
   s = withTile(s, X, Y - 1, { obstacle: null, weeds: false });
-  return { ...s, player: { x: X, y: Y - 1, facing: "down" } };
+  return { ...s, plots: PLOTS.map((p) => p.id), player: { x: X, y: Y - 1, facing: "down" } };
 }
 
 function withTile(s: WorldState, x: number, y: number, patch: Partial<Tile>): WorldState {
@@ -276,7 +276,7 @@ describe("saving", () => {
   it("keeps settings, and upgrades old saves", () => {
     const s = world({ weeds: false }, { speed: 10, daysPerMonth: 20, units: "C" });
     expect(loadWorld(saveWorld(s))!.settings).toEqual(s.settings);
-    const old = { ...s, version: 1, settings: undefined, weather: { 1: "sunny", 2: "rain" } };
+    const old = { ...s, version: 1, tiles: s.tiles.slice(0, W * OLD_H), settings: undefined, weather: { 1: "sunny", 2: "rain" } };
     const up = loadWorld(JSON.stringify(old))!;
     expect(up.version).toBe(WORLD_VERSION);
     expect(up.settings).toEqual(DEFAULT_SETTINGS);

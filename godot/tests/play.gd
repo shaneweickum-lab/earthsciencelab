@@ -19,6 +19,10 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": Js.with(s, {"selected": int(op.i)})}
 		"enterMine":
 			return {"state": World.enter_mine(s, int(op.floor))}
+		"buyPlot":
+			return {"state": World.buy_plot(s, int(op.id))}
+		"plots":
+			return {"state": Js.with(s, {"plots": op.ids})}
 		"craft":
 			return {"state": World.craft(s, op.id)}
 		"selectItem":
@@ -97,6 +101,7 @@ static func summary(s: Dictionary, text: Variant) -> Dictionary:
 		"npc": npc.id if npc != null else null, "quests": s.get("quests"), "friends": s.get("friends"),
 		"mine": {"floor": s.mine.floor, "ladderAt": s.mine.ladderAt, "buildings": s.mine.buildings} if s.get("mine") != null else null,
 		"deepest": s.get("deepest"),
+		"plots": s.get("plots"),
 	}
 
 

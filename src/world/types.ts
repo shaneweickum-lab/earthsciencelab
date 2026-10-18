@@ -155,6 +155,8 @@ export interface WorldState {
   mine?: MineFloor;
   /** The deepest mine floor reached, for the mine cart at the entrance. */
   deepest?: number;
+  /** The farm plots you own (see PLOTS in map.ts). */
+  plots?: number[];
   /** Grandma Rosa's workbench has been found in the barn. */
   foundWorkbench?: boolean;
   /** Friendship with townsfolk, by NPC id. */

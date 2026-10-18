@@ -13,7 +13,8 @@ import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
 import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
 import { Bag, DaySummary, HouseMenu, IntroLetter, TvForecast } from "./Menus";
 import { ShippingMenu, StoreMenu } from "./Shop";
-import { ChestMenu, MineCart } from "./Chest";
+import { ChestMenu, MineCart, PlotMenu } from "./Chest";
+import { plotAt } from "@/world/map";
 import { CraftMenu } from "./Craft";
 import { labelLayer, runtime, useWorld } from "./useWorld";
 
@@ -51,7 +52,10 @@ export function doAction(mode: "use" | "interact" = "use") {
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
   else if (target === "mine") st.open("mine");
-  else if (target === "chest" || target === "craft") {
+  else if (target === "plot") {
+    const { x, y } = facingTile(here);
+    st.openChest(String(plotAt(x, y)), "plot");
+  } else if (target === "chest" || target === "craft") {
     const { x, y } = facingTile(here);
     st.openChest(buildingAt(here, x, y)!.id, target);
   } else {
@@ -260,6 +264,7 @@ export function WorldScreen() {
           {menu === "chest" && <ChestMenu />}
           {menu === "mine" && <MineCart />}
           {menu === "craft" && <CraftMenu />}
+          {menu === "plot" && <PlotMenu />}
           {menu === "journal" && <JournalBook />}
           {menu === "pause" && <PauseMenu />}
           {menu === "npc" && <NpcDialog />}

@@ -1,5 +1,5 @@
 import { CROPS } from "@/game/crops";
-import { buildingAt, canPlantHere, crittersHere, facingTile, mineOpen, OBSTACLE_HP, obstacleName, ROCKS, selectedItem, STATIONS, tileAt } from "./engine";
+import { buildingAt, canPlantHere, crittersHere, facingTile, mineOpen, nextPlotPrice, OBSTACLE_HP, obstacleName, plotLocked, ROCKS, selectedItem, STATIONS, tileAt } from "./engine";
 import { ITEMS, TIERS, WORLD_CROPS, type ItemDef, type Station } from "./items";
 import { amendmentPoints, MAX_BOOST } from "./grades";
 import { on } from "./settings";
@@ -31,6 +31,10 @@ export function previewAction(state: WorldState): ActionPreview {
   const critter = crittersHere(state).find((c) => c.x === x && c.y === y);
   if (critter) return { label: "Observe", text: "Look closely and add it to your Nature Journal.", ok: true };
 
+  if (!b && plotLocked(state, x, y)) {
+    const price = nextPlotPrice(state);
+    return { label: "Buy", text: `This plot isn't yours yet. Press E to buy it for ${price} coins, or earn it from a quest.`, ok: state.coins >= price };
+  }
   if (b?.kind === "chest") return { label: "Open", text: "Open the chest to take things out or put them away.", ok: true };
   if (b?.kind === "mineEntrance") return mineOpen(state)
     ? { label: "Enter", text: "Climb down into the old mine.", ok: true }

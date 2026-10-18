@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { startOfDay } from "./clock";
 import { addItem, buildingAt, countItem, isWalkable, loadWorld, newWorld, saveWorld, sleep, WORLD_VERSION } from "./engine";
-import { FARM_W, H, idx, TOWN, W } from "./map";
+import { FARM_W, H, idx, OLD_H, TOWN, W } from "./map";
 import { accept, boardRequests, expireBoard, goalProgress, offers, QUEST_BY_ID, questState, questStatus, turnIn } from "./quests";
 import { ITEMS } from "./items";
 import { friendship, giveGift, hearts, NPC_BY_ID, NPCS, npcInFront, npcPose, route, talk } from "./town";
@@ -179,7 +179,7 @@ describe("saves from before the town", () => {
   it("keep the farm and gain the town", () => {
     const s = sleep(newWorld(5));
     const oldW = 40;
-    const oldTiles = Array.from({ length: oldW * H }, (_, i) => {
+    const oldTiles = Array.from({ length: oldW * OLD_H }, (_, i) => {
       const x = i % oldW, y = Math.floor(i / oldW);
       return { ...s.tiles[y * W + x], mulch: x === 20 && y === 20 };
     });
@@ -196,7 +196,7 @@ describe("saves from before the town", () => {
   it("including the very first saves, which had no settings either", () => {
     const s = newWorld(5);
     const oldW = 40;
-    const tiles = Array.from({ length: oldW * H }, (_, i) => s.tiles[Math.floor(i / oldW) * W + (i % oldW)]);
+    const tiles = Array.from({ length: oldW * OLD_H }, (_, i) => s.tiles[Math.floor(i / oldW) * W + (i % oldW)]);
     const v1: Record<string, unknown> = { ...s, version: 1, weather: "sunny", tiles, buildings: s.buildings.filter((b) => b.x < FARM_W) };
     delete v1.settings;
     const up = loadWorld(JSON.stringify(v1))!;
