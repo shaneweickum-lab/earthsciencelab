@@ -28,6 +28,8 @@ export function previewAction(state: WorldState): ActionPreview {
   const t = tileAt(state, x, y);
   if (!t) return { label: "", text: "", ok: false };
   const b = buildingAt(state, x, y);
+  // A shared world's town has a stall (and a garden) for every farmer.
+  const multiplayer = state.buildings.some((o) => o.id === "stall-1");
   const critter = crittersHere(state).find((c) => c.x === x && c.y === y);
   if (critter) return { label: "Observe", text: "Look closely and add it to your Nature Journal.", ok: true };
 
@@ -36,8 +38,15 @@ export function previewAction(state: WorldState): ActionPreview {
     return { label: "Buy", text: `This plot isn't yours yet. Press E to buy it for ${price} coins, or earn it from a quest.`, ok: state.coins >= price };
   }
   if (b?.kind === "chest") return { label: "Open", text: "Open the chest to take things out or put them away.", ok: true };
-  if (b?.kind === "gardenGate") return { label: "Enter", text: "Go through the gate into this farmer's garden. Press E.", ok: true };
-  if (b?.kind === "marketStall") return { label: "Shop", text: "See what's for sale, or stock your own stall. Press E.", ok: true };
+  if (b?.kind === "gardenGate") return multiplayer
+    ? { label: "Enter", text: "Go through the gate into this farmer's garden. Press E.", ok: true }
+    : b.data.garden === 0
+      ? { label: "Enter", text: "Your garden gate. Press E to go home to your farm.", ok: true }
+      : { label: "Enter", text: "Brambles grow over this gate. In a shared world, a friend's garden would be here.", ok: false };
+  if (b?.kind === "marketStall") return multiplayer
+    ? { label: "Shop", text: "See what's for sale, or stock your own stall. Press E.", ok: true }
+    : { label: "Stall", text: "Your market stall. Put things out at your price; townsfolk buy during the day. Press E.", ok: true };
+  if (b?.kind === "stove" || b?.kind === "oven") return { label: "Cook", text: `Cook at the ${STATIONS[b.kind]}. Bring the utensils each dish needs.`, ok: true };
   if (b?.kind === "mineEntrance") return mineOpen(state)
     ? { label: "Enter", text: "Climb down into the old mine.", ok: true }
     : { label: "Enter", text: "The mine is boarded up. Luis might know about it.", ok: false };
@@ -73,7 +82,11 @@ export function previewAction(state: WorldState): ActionPreview {
         return { label: "Apply", text: def.desc + bonus, ok: !t.obstacle };
       }
     case "kit":
-      return { label: "Build", text: `Place a ${def.name}. ${def.desc}`, ok: true };
+      return { label: "Build", text: `Place a ${def.name}. ${def.desc} Press R to turn it.`, ok: true };
+    case "food":
+      return state.energy >= state.maxEnergy && on(state, "energy")
+        ? { label: "Eat", text: "You're full of energy. Save it for later.", ok: false }
+        : { label: "Eat", text: `Eat the ${def.name.toLowerCase()} (+${def.energy} energy).`, ok: true };
     case "tool":
       break;
     default:

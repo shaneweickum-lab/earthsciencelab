@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useMulti } from "@/net/mp";
+import { fairPrice, stallChance } from "@/world/engine";
 import { ITEMS } from "@/world/items";
 import { ownerOf, STALL_SIZE, stallOf, storePrice } from "@/world/multi";
+import type { Listing, Slot } from "@/world/types";
 import { ItemIcon } from "./ItemIcon";
 import { Modal } from "./Menus";
 import { useWorld } from "./useWorld";
@@ -16,7 +18,7 @@ export function StallMenu() {
   const close = useWorld((s) => s.close);
   const world = useMulti((s) => s.world);
   const me = useMulti((s) => s.me);
-  if (!world || !me) return null;
+  if (!world || !me) return <SoloStall />;
   const owner = ownerOf(world, garden);
   const mine = owner?.id === me.pid;
   const title = owner ? (mine ? "Your market stall" : `${owner.name}'s market stall`) : "An empty stall";
@@ -33,9 +35,35 @@ export function StallMenu() {
   );
 }
 
-function Listings({ garden, action }: { garden: number; action: (i: number, qty: number) => React.ReactNode }) {
-  const world = useMulti((s) => s.world)!;
-  const list = stallOf(world, garden);
+/** Your stall in a game of your own: townsfolk stop by during the day. */
+function SoloStall() {
+  const w = useWorld((s) => s.world!);
+  const run = useWorld((s) => s.run);
+  const close = useWorld((s) => s.close);
+  const list = w.stall ?? [];
+  return (
+    <Modal title="Your market stall" icon="🧺" onClose={close} wide>
+      <StockStall
+        list={list}
+        inventory={w.inventory}
+        price={(s) => fairPrice(w, s)}
+        blurb={
+          <>
+            Townsfolk browse the square from 8 AM to 8 PM and buy what you put out. Near the store&apos;s price it sells steadily; a bargain sells
+            fast; ask too much and nobody bites. You can show {STALL_SIZE} kinds of things at once.
+          </>
+        }
+        note={(l) => `${Math.round(stallChance(w, l) * 100)}% chance an hour`}
+        onStock={(slot, qty, price) => run("stock", slot, qty, price)}
+        onUnstock={(i) => run("unstock", i)}
+      />
+    </Modal>
+  );
+}
+
+function Listings({ garden, list: own, action, note }: { garden?: number; list?: Listing[]; action: (i: number, qty: number) => React.ReactNode; note?: (l: Listing) => string }) {
+  const world = useMulti((s) => s.world);
+  const list = own ?? (world && garden !== undefined ? stallOf(world, garden) : []);
   if (!list.length) return <p className="rounded-xl bg-paper p-3 text-sm text-muted">Nothing on the stall right now.</p>;
   return (
     <ul className="grid gap-2 sm:grid-cols-2">
@@ -44,7 +72,7 @@ function Listings({ garden, action }: { garden: number; action: (i: number, qty:
           <ItemIcon id={l.item} grade={l.grade} />
           <span className="mr-auto font-bold">
             {ITEMS[l.item].name} ×{l.qty}
-            <span className="block text-xs font-semibold text-muted">🪙 {l.price} each{l.grade ? ` · grade ${l.grade}` : ""}</span>
+            <span className="block text-xs font-semibold text-muted">🪙 {l.price} each{l.grade ? ` · grade ${l.grade}` : ""}{note ? ` · ${note(l)}` : ""}</span>
           </span>
           {action(i, l.qty)}
         </li>
@@ -57,25 +85,45 @@ function OwnStall({ garden }: { garden: number }) {
   const world = useMulti((s) => s.world)!;
   const me = useMulti((s) => s.me)!;
   const p = world.players[me.pid];
+  return (
+    <StockStall
+      list={stallOf(world, garden)}
+      inventory={p.inventory}
+      price={(s) => storePrice(s.item, s.grade, p.organic)}
+      blurb={<>Other farmers can buy what you put here, even while you&apos;re away. The coins come straight to you. You can show {STALL_SIZE} kinds of things at once.</>}
+      onStock={(slot, qty, price) => send("stock", [slot, qty, price])}
+      onUnstock={(i) => send("unstock", [i])}
+    />
+  );
+}
+
+/** Your own stall: what's on it, and putting things out at your price. */
+function StockStall({ list, inventory, price: storeFor, blurb, note, onStock, onUnstock }: {
+  list: Listing[];
+  inventory: (Slot | null)[];
+  price: (s: Pick<Slot, "item" | "grade">) => number;
+  blurb: React.ReactNode;
+  note?: (l: Listing) => string;
+  onStock: (slot: number, qty: number, price: number) => void;
+  onUnstock: (i: number) => void;
+}) {
   const [pick, setPick] = useState<number | null>(null);
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(0);
-  const sellable = p.inventory.flatMap((s, i) => (s && ITEMS[s.item].sell && !ITEMS[s.item].tool ? [{ s, i }] : []));
-  const chosen = pick !== null ? p.inventory[pick] : null;
+  const sellable = inventory.flatMap((s, i) => (s && ITEMS[s.item].sell && !ITEMS[s.item].tool && ITEMS[s.item].kind !== "utensil" ? [{ s, i }] : []));
+  const chosen = pick !== null ? inventory[pick] : null;
   const choose = (i: number) => {
-    const s = p.inventory[i]!;
+    const s = inventory[i]!;
     setPick(i);
     setQty(s.qty);
-    setPrice(storePrice(s.item, s.grade, p.organic));
+    setPrice(storeFor(s));
   };
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted">
-        Other farmers can buy what you put here, even while you&apos;re away. The coins come straight to you. You can show {STALL_SIZE} kinds of things at once.
-      </p>
+      <p className="text-sm text-muted">{blurb}</p>
       <section>
         <h3 className="mb-2 font-black">On your stall</h3>
-        <Listings garden={garden} action={(i) => <button className="btn btn-ghost py-1 text-xs" onClick={() => send("unstock", [i])}>Take back</button>} />
+        <Listings list={list} note={note} action={(i) => <button className="btn btn-ghost py-1 text-xs" onClick={() => onUnstock(i)}>Take back</button>} />
       </section>
       <section>
         <h3 className="mb-2 font-black">Put something out</h3>
@@ -90,7 +138,7 @@ function OwnStall({ garden }: { garden: number }) {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted">Nothing in your bag to sell. Crops, honey, eggs, wood, and stone all sell.</p>
+          <p className="text-sm text-muted">Nothing in your bag to sell. Crops, food, honey, eggs, wood, and stone all sell.</p>
         )}
         {chosen && (
           <div className="mt-3 flex flex-wrap items-end gap-3 rounded-xl bg-paper p-3 text-sm">
@@ -101,8 +149,8 @@ function OwnStall({ garden }: { garden: number }) {
             <label className="grid gap-0.5 text-xs font-bold">Price each
               <input type="number" min={1} value={price} onChange={(e) => setPrice(Math.max(1, Number(e.target.value) || 1))} className="w-24 rounded-lg border border-line px-2 py-1 text-sm" aria-label="Price each" />
             </label>
-            <span className="text-xs text-muted">The store pays {storePrice(chosen.item, chosen.grade, p.organic)}.</span>
-            <button className="btn btn-primary ml-auto py-1.5 text-sm" onClick={() => { send("stock", [pick, qty, price]); setPick(null); }}>Put on the stall</button>
+            <span className="text-xs text-muted">The store pays {storeFor(chosen)}.</span>
+            <button className="btn btn-primary ml-auto py-1.5 text-sm" onClick={() => { onStock(pick!, qty, price); setPick(null); }}>Put on the stall</button>
           </div>
         )}
       </section>

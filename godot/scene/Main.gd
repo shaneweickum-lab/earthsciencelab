@@ -20,6 +20,7 @@ var _player: Actor
 var _npcs := []
 var _marker := MeshInstance3D.new()
 var _ghost := MeshInstance3D.new()
+var _ghost_arrow := MeshInstance3D.new()
 var _critters := Node3D.new()
 var _critter_list: Array = []
 var _ui: GameUi
@@ -30,6 +31,10 @@ var _zoom := 1.0
 ## The animation for the action just taken ("swing", "use", "pickup"), played on the next frame.
 var _action_anim := ""
 var _publish_at := 0.0
+
+
+## The cookbook (from the bag, C) has no building: knife-only food is made right there.
+const COOKBOOK := "cookbook"
 
 
 func _ready() -> void:
@@ -129,6 +134,16 @@ func _make_marker() -> void:
 	_ghost.material_override = g
 	_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world_root.add_child(_ghost)
+	# An arrow at its front, so you can see which way it will face.
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = 0.18
+	cone.height = 0.3
+	cone.radial_segments = 3
+	_ghost_arrow.mesh = cone
+	_ghost_arrow.rotation.x = PI / 2
+	_ghost_arrow.material_override = m
+	_ghost.add_child(_ghost_arrow)
 
 
 func _season() -> String:
@@ -179,6 +194,9 @@ func _update_ghost() -> void:
 	(_ghost.mesh as BoxMesh).size = Vector3(sz[0] - 0.05, 1, sz[1] - 0.05)
 	_ghost.position = Vector3(o.x + (sz[0] - 1) / 2.0, 0.5, o.y + (sz[1] - 1) / 2.0)
 	(_ghost.material_override as StandardMaterial3D).albedo_color = Color("#5fd16f" if ok else "#e0533d", 0.3)
+	# Which way its front will face (R turns it).
+	_ghost.rotation.y = (int(w.get("placeRot", 0)) if World.rotatable(kind) else 0) * PI / 2
+	_ghost_arrow.position = Vector3(0, -0.42, sz[1] / 2.0 + 0.2)
 
 
 func _process(delta: float) -> void:
@@ -208,6 +226,9 @@ func _process(delta: float) -> void:
 		rt.player = p
 		if Js.round(p.x) != Js.round(before.x) or Js.round(p.y) != Js.round(before.y) or p.facing != before.facing:
 			Game.update(func(s): return Js.with(s, {"player": p}))
+		# The end of your farm's road leads out to your gate on Garden Lane.
+		if w.get("mine") == null and WorldMap.at_garden_exit(p):
+			Game.update(World.leave_farm)
 
 	# Clock: game time only passes while you're playing.
 	if not paused:
@@ -265,7 +286,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	var menu := Game.menu
 	if menu != "":
 		# Escape (or a menu's own key) closes it, except the letter and the morning summary.
-		var toggles := (k == KEY_I and menu == "bag") or (k == KEY_J and menu == "journal") or (k == KEY_Q and menu == "quests")
+		var toggles := (k == KEY_I and menu == "bag") or (k == KEY_J and menu == "journal") or (k == KEY_Q and menu == "quests") \
+			or (k == KEY_C and menu == "craft" and Game.chest_id == COOKBOOK)
 		if (k == KEY_ESCAPE or toggles) and menu != "intro" and menu != "summary":
 			Game.close()
 		return
@@ -286,6 +308,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			var b = World.building_at(Game.world, f.x, f.y)
 			if b:
 				Game.update(func(s): return World.pick_up_building(s, b.id))
+		KEY_R:
+			# Turn what you built, or the next thing you're about to build.
+			var here := Js.with(Game.world, {"player": Game.runtime.player})
+			var f := World.facing_tile(here)
+			var b = World.building_at(here, f.x, f.y)
+			var slot = here.inventory[int(here.selected)]
+			if b != null and World.can_pick_up(b) and here.get("mine") == null:
+				Game.update(World.rotate_building)
+			elif slot != null and Items.get_def(slot.item).kind == "kit":
+				Game.update(World.turn_placing)
+		KEY_C:
+			Game.chest_id = COOKBOOK
+			Game.open("craft")
 		_:
 			if k >= KEY_0 and k <= KEY_9:
 				var n := 9 if k == KEY_0 else k - KEY_1
@@ -303,6 +338,11 @@ func do_action(mode: String) -> void:
 		Game.talk_to(npc.id)
 		return
 	var target := World.interact_target(here)
+	if target == "gate":
+		var f := World.facing_tile(here)
+		var garden := int(World.building_at(here, f.x, f.y).data.get("garden", 0))
+		Game.update(func(s): return World.enter_gate(s, garden))
+		return
 	if target == "chest" or target == "craft":
 		var f := World.facing_tile(here)
 		Game.chest_id = World.building_at(here, f.x, f.y).id

@@ -15,6 +15,7 @@ import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, time
 import {
   act, addItem, applyTool, buy, buyPlot, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
   swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest, enterMine, tileAt, facingTile, craft,
+  eat, enterGate, leaveFarm, rotateBuilding, stockStall, turnPlacing, unstockStall,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
 import { cropDays, ITEMS, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
@@ -208,7 +209,15 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "weather": return { state: { ...s, weather: { ...s.weather, [op.day as number]: op.w as WorldState["weather"][number] } } };
     case "select": return { state: { ...s, selected: op.i as number } };
     case "enterMine": return { state: enterMine(s, op.floor as number) };
-    case "craft": return { state: craft(s, op.id as string) };
+    case "craft": return { state: craft(s, op.id as string, (op.at as string) ?? undefined) };
+    case "eat": return { state: eat(s, op.slot as number) };
+    case "energy": return { state: { ...s, energy: op.n as number } };
+    case "turnPlacing": return { state: turnPlacing(s) };
+    case "rotate": return { state: rotateBuilding(s) };
+    case "stock": return { state: stockStall(s, op.slot as number, op.qty as number, op.price as number) };
+    case "unstock": return { state: unstockStall(s, op.i as number) };
+    case "gate": return { state: enterGate(s, op.garden as number) };
+    case "leaveGarden": return { state: leaveFarm(s) };
     case "buyPlot": return { state: buyPlot(s, op.id as number) };
     case "claimLesson": return { state: claimLesson(s) };
     case "skipTutorial": return { state: skipTutorial(s) };
@@ -258,6 +267,7 @@ function summary(s: WorldState, text?: string) {
     npc: npcInFront(s)?.id ?? null, quests: s.quests ?? null, friends: s.friends ?? null,
     mine: s.mine ? { floor: s.mine.floor, ladderAt: s.mine.ladderAt, buildings: s.mine.buildings } : null, deepest: s.deepest ?? null,
     plots: s.plots ?? null, tally: s.tally ?? null,
+    stall: s.stall ?? null, placeRot: s.placeRot ?? null, turned: s.buildings.flatMap((b) => (b.rot ? [[b.id, b.rot]] : [])),
   };
 }
 
@@ -268,7 +278,8 @@ function finalState(s: WorldState) {
 
 const GIVE = ["seed_carrot", "seed_beans", "seed_tomato", "seed_corn", "seed_clover", "seed_squash", "seed_sunflower", "seed_potato", "seed_wheat", "seed_buckwheat",
   "compost", "mulch", "lime", "biochar", "synthFert", "labKit", "fiber", "kit_composter", "kit_rainBarrel", "kit_beehive", "kit_bugHotel", "kit_flowerBed", "kit_greenhouse", "kit_fence",
-  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato", "axe_copper", "pickaxe_gold"];
+  "kit_well", "kit_chickenCoop", "kit_smallBarn", "kit_well", "crop_carrot", "crop_tomato", "axe_copper", "pickaxe_gold",
+  "carrotSticks", "beanStew", "knife", "kit_stove"];
 const BUY = ["seed_carrot", "seed_beans", "compost", "labKit", "kit_fence", "bigCan", "kit_scarecrow", "honey", "shovel", "ring"];
 const DIRS: Dir[] = ["up", "down", "left", "right"];
 const WEATHERS = [
@@ -298,6 +309,55 @@ function farmstead(): Op[] {
   for (let k = 0; k < 4; k++) ops.push({ op: "applyTool" });
   // Look at the stump after each night, so its sprouting is in the summaries.
   for (let d = 0; d < 14; d++) ops.push({ op: "sleep" }, { op: "player", x: 30, y: 6, facing: "down" });
+  return ops;
+}
+
+/**
+ * A kitchen beside the house: a stove (turned around) and an oven, cooking with and without the
+ * right utensils and stations, eating, then the market stall and Garden Lane. Ops that name a
+ * building get its id from the world as it is when they run.
+ */
+function kitchen(id: (kind: string) => string | undefined, slot: (item: string) => number): (() => Op)[] {
+  const ops: (() => Op)[] = [];
+  const add = (op: Op) => ops.push(() => op);
+  for (let y = 13; y <= 16; y++) for (let x = 3; x <= 7; x++) add({ op: "tile", i: y * W + x, patch: { obstacle: null, weeds: false, crop: null } });
+  for (const [item, qty] of [["kit_stove", 1], ["kit_oven", 1], ["knife", 1], ["pan", 1], ["pot", 1], ["crop_carrot", 4], ["crop_potato", 3], ["crop_beans", 2],
+    ["crop_tomato", 3], ["egg", 3], ["flour", 3], ["crop_squash", 1], ["honey", 1]] as const) add({ op: "give", item, qty, grade: null });
+  add({ op: "selectItem", item: "kit_stove" });
+  add({ op: "player", x: 4, y: 14, facing: "down" });
+  add({ op: "turnPlacing" });
+  add({ op: "turnPlacing" });
+  add({ op: "applyTool" });
+  add({ op: "selectItem", item: "kit_oven" });
+  add({ op: "player", x: 6, y: 14, facing: "down" });
+  add({ op: "applyTool" });
+  add({ op: "player", x: 4, y: 14, facing: "down" });
+  add({ op: "rotate" });
+  add({ op: "craft", id: "carrotSticks" });
+  add({ op: "craft", id: "friedEgg" });
+  ops.push(() => ({ op: "craft", id: "friedEgg", at: id("stove") }));
+  ops.push(() => ({ op: "craft", id: "beanStew", at: id("stove") }));
+  ops.push(() => ({ op: "craft", id: "bakedPotato", at: id("stove") }));
+  ops.push(() => ({ op: "craft", id: "pie", at: id("oven") }));
+  ops.push(() => ({ op: "craft", id: "bread", at: id("stove") }));
+  ops.push(() => ({ op: "craft", id: "pizza", at: id("oven") }));
+  add({ op: "energy", n: 30 });
+  add({ op: "selectItem", item: "beanStew" });
+  add({ op: "player", x: 4, y: 12, facing: "up" });
+  add({ op: "applyTool" });
+  ops.push(() => ({ op: "eat", slot: slot("carrotSticks") }));
+  ops.push(() => ({ op: "eat", slot: slot("friedEgg") }));
+  ops.push(() => ({ op: "stock", slot: slot("crop_tomato"), qty: 2, price: 10 }));
+  ops.push(() => ({ op: "stock", slot: slot("bread"), qty: 1, price: 900 }));
+  ops.push(() => ({ op: "stock", slot: slot("knife"), qty: 1, price: 5 }));
+  add({ op: "tick", n: 600 });
+  add({ op: "unstock", i: 0 });
+  add({ op: "player", x: 40, y: 4, facing: "left" });
+  add({ op: "gate", garden: 3 });
+  add({ op: "gate", garden: 0 });
+  add({ op: "player", x: 37, y: 11, facing: "right" });
+  add({ op: "leaveGarden" });
+  add({ op: "move", dx: -0.35, dy: 0 });
   return ops;
 }
 
@@ -380,6 +440,10 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
   run({ op: "player", x: PLOTS[20].x0, y: PLOTS[20].y0 - 1, facing: "down" });
   run({ op: "applyTool" });
   for (const op of prelude) run(op);
+  for (const op of kitchen(
+    (kind) => s.buildings.find((b) => b.kind === kind)?.id,
+    (item) => s.inventory.findIndex((x) => x?.item === item),
+  )) run(op());
   if (mine) {
     // Open the old mine, then dig down floor by floor, sometimes going straight for the ladder rock.
     run({ op: "give", item: "wood", qty: 20, grade: null });

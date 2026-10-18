@@ -14,13 +14,17 @@ const at = (s: WorldState, hour: number, day = 1) => ({ ...s, minute: startOfDay
 
 describe("the town", () => {
   const s = newWorld(3);
-  it("sits east of the farm, joined by a road through the forest", () => {
+  it("sits east of the farm, past Garden Lane", () => {
     expect(buildingAt(s, 45, 7)?.kind).toBe("store");
     expect(buildingAt(s, 30, 6)).toBeNull(); // the store moved off the farm
-    const road = route(s, [10, 11], [56, 18]);
+    // The farm road runs to the hedge; your gate on the lane leads into town.
+    const farmRoad = route(s, [10, 11], [37, 11]);
+    expect(farmRoad.at(-1)).toEqual([37, 11]);
+    expect(isWalkable(s, 39, 11)).toBe(false);
+    const road = route(s, [40, 4], [56, 18]);
     expect(road.at(-1)).toEqual([56, 18]);
-    expect(road.length).toBeGreaterThan(40);
-    for (const [x, y] of road) expect(isWalkable(s, x, y)).toBe(true);
+    expect(road.length).toBeGreaterThan(20);
+    for (const [x, y] of [...farmRoad, ...road]) expect(isWalkable(s, x, y)).toBe(true);
   });
   it("has the community garden overgrown and waiting", () => {
     const g = TOWN.garden;

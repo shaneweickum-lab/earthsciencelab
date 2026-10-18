@@ -225,6 +225,55 @@ await page.getByText("Built a Compost Bin!").waitFor();
 await page.waitForTimeout(800);
 await shot("07d-built");
 await page.getByLabel("Temperature").first().waitFor();
+// R turns what you built.
+await page.keyboard.press("r");
+await page.waitForFunction(() => window.__soilGame.useWorld.getState().world.buildings.some((b) => b.kind === "composter" && b.rot === 1));
+
+// The kitchen: a knife and carrots from Grandma's recipe card, carrot sticks from the cookbook, then eat them.
+await page.evaluate(() => {
+  const { useWorld } = window.__soilGame;
+  useWorld.getState().update((w) => {
+    const inventory = [...w.inventory];
+    const free = () => inventory.findIndex((s) => !s);
+    inventory[free()] = { item: "knife", qty: 1 };
+    inventory[free()] = { item: "crop_carrot", qty: 2 };
+    return { ...w, inventory, energy: 40 };
+  });
+});
+await page.keyboard.press("c");
+const cookbook = page.getByRole("dialog", { name: "Cookbook" });
+await cookbook.waitFor();
+await cookbook.getByRole("button", { name: "Cook Carrot Sticks" }).click();
+await page.getByText("Cooked Carrot Sticks!").waitFor();
+await shot("07d2-cookbook");
+await page.keyboard.press("Escape");
+await page.keyboard.press("i");
+await bag.getByRole("button", { name: /Carrot Sticks ×1/ }).click();
+await bag.getByRole("button", { name: /Eat/ }).click();
+await page.getByText("Ate Carrot Sticks. +15 energy.").waitFor();
+await page.keyboard.press("Escape");
+
+// Garden Lane: the farm road ends at the hedge and comes out on the lane by your gate; the gate leads home.
+await teleport(36, 11, "right");
+await page.keyboard.down("d");
+await page.waitForFunction(() => window.__soilGame.runtime.player.x >= 39.5, null, { timeout: 20000, polling: 100 });
+await page.keyboard.up("d");
+await teleport(40, 4, "left");
+await inspector.getByText(/Your garden gate/).waitFor();
+await shot("07d3-garden-lane");
+await page.keyboard.press("e");
+await page.getByText("Home sweet home.").waitFor();
+
+// Your market stall in the square: townsfolk buy what you put out.
+await teleport(53, 17, "down");
+await page.keyboard.press("e");
+const stall = page.getByRole("dialog", { name: "Your market stall" });
+await stall.getByText(/Townsfolk browse the square/).waitFor();
+await stall.getByRole("button", { name: /^Sell / }).first().click();
+await stall.getByRole("button", { name: "Put on the stall" }).click();
+await stall.getByText(/chance an hour/).waitFor();
+await shot("07d4-stall");
+await page.keyboard.press("Escape");
 
 // Pause: switch a science feature off mid-game, then save and quit to the main menu.
 await page.keyboard.press("Escape");
@@ -376,6 +425,17 @@ if (existsSync("public/godot/index.html")) {
   await shot("31-godot-bag");
   await page.keyboard.press("Escape");
   await frame.waitForFunction(() => window.__soil.menu === "", null, { timeout: 10000 });
+  // The cookbook (C) and your market stall.
+  await page.keyboard.press("c");
+  await frame.waitForFunction(() => window.__soil.menu === "craft", null, { timeout: 10000 });
+  await page.waitForTimeout(800);
+  await shot("32-godot-cookbook");
+  await page.keyboard.press("Escape");
+  await frame.evaluate(() => window.__soilCommand("open:stall"));
+  await frame.waitForFunction(() => window.__soil.menu === "stall", null, { timeout: 10000 });
+  await page.waitForTimeout(800);
+  await shot("33-godot-stall");
+  await frame.evaluate(() => window.__soilCommand("close"));
 }
 
 // Multiplayer, between two tabs of one browser (?net=local, no Supabase): Ana hosts, Ben joins

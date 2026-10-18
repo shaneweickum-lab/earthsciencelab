@@ -5,9 +5,9 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { BufferAttribute, Color, LoopOnce, type AmbientLight, type DirectionalLight, type Group, type Mesh, type PointLight, type Points } from "three";
 import { daylight, dayOf, msPerGameMinute, seasonOf, timeOfDay } from "@/world/clock";
-import { canPlace, DIRS, facingTile, movePlayer, placementFor, tick, todayWeather } from "@/world/engine";
+import { canPlace, DIRS, facingTile, movePlayer, placementFor, rotatable, tick, todayWeather } from "@/world/engine";
 import { ITEMS } from "@/world/items";
-import { BUILDING_SIZE } from "@/world/map";
+import { atGardenExit, BUILDING_SIZE } from "@/world/map";
 import { critterIcon, expireCritters } from "@/world/nature";
 import { NPCS, npcPose, type Npc } from "@/world/town";
 import type { WeatherId, WorldState } from "@/world/types";
@@ -73,6 +73,8 @@ function GameLoop() {
         if (Math.round(p.x) !== Math.round(before.x) || Math.round(p.y) !== Math.round(before.y) || p.facing !== before.facing) {
           useWorld.setState({ world: { ...w, player: p } });
         }
+        // The end of your farm's road leads out to your gate on Garden Lane. (In multiplayer, see mpLoop.)
+        if (!store.remote && !w.mine && atGardenExit(p)) store.run("leaveGarden");
       }
     } else {
       runtime.moving = false;
@@ -428,11 +430,21 @@ function BuildGhost() {
   const o = placementFor(w, kind, f.x, f.y);
   const ok = canPlace(w, kind, o.x, o.y) === null;
   const [bw, bh] = BUILDING_SIZE[kind];
+  const rot = rotatable(kind) ? (w.placeRot ?? 0) : 0;
   return (
-    <mesh position={[o.x + (bw - 1) / 2, 0.5, o.y + (bh - 1) / 2]}>
-      <boxGeometry args={[bw - 0.05, 1, bh - 0.05]} />
-      <meshBasicMaterial color={ok ? "#5fd16f" : "#e0533d"} transparent opacity={0.3} depthWrite={false} />
-    </mesh>
+    <group position={[o.x + (bw - 1) / 2, 0, o.y + (bh - 1) / 2]}>
+      <mesh position={[0, 0.5, 0]}>
+        <boxGeometry args={[bw - 0.05, 1, bh - 0.05]} />
+        <meshBasicMaterial color={ok ? "#5fd16f" : "#e0533d"} transparent opacity={0.3} depthWrite={false} />
+      </mesh>
+      {/* Which way its front will face (R turns it). */}
+      <group rotation-y={(rot * Math.PI) / 2}>
+        <mesh position={[0, 0.08, bh / 2 + 0.2]} rotation-x={Math.PI / 2}>
+          <coneGeometry args={[0.18, 0.3, 3]} />
+          <meshBasicMaterial color="#fffcf5" transparent opacity={0.85} />
+        </mesh>
+      </group>
+    </group>
   );
 }
 

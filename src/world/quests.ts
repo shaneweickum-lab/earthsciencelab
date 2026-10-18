@@ -143,6 +143,13 @@ export const QUESTS: QuestDef[] = [
     reward: { coins: 100, items: [{ item: "seed_beans", qty: 4 }], everyone: 20 },
   },
   {
+    id: "recipe-card", giver: "mei", title: "Grandma's recipe card",
+    ask: "Your grandma left a box with me before she moved: her old knife, her frying pan, and a recipe card. She said to give it to you once you'd grown something. Bring me 2 carrots and it's yours!",
+    thanks: "Fresh carrots! Here's Rosa's box. The card says: \"Carrot sticks need only a knife. For the rest, you'll want a stove.\" I've got stoves in stock now, and pots too.",
+    steps: [{ goal: { kind: "deliver", items: [{ item: "crop_carrot", qty: 2 }] }, label: "Bring Mei 2 carrots" }],
+    reward: { coins: 40, items: [{ item: "knife", qty: 1 }, { item: "pan", qty: 1 }, { item: "carrotSticks", qty: 2 }], friendship: 40 },
+  },
+  {
     id: "reopen-mine", giver: "luis", title: "The old mine",
     ask: "My grandfather dug copper and tin in the old mine past town. It's been boarded up for years. Bring me 20 wood for timbers and 10 stone, and we'll shore it up together.",
     thanks: "There! The tunnel's safe again. Watch for ladders hidden under the rocks; the deeper you go, the better the ore. And bring a good pickaxe.",

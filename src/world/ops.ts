@@ -1,4 +1,7 @@
-import { HOTBAR_SIZE, act, applyTool, buy, buyPlot, craft, enterMine, interact, pickUpBuilding, putInChest, sellNow, ship, sleep, swapSlots, takeAllFromChest, takeFromChest } from "./engine";
+import {
+  HOTBAR_SIZE, act, applyTool, buy, buyPlot, craft, eat, enterGate, enterMine, interact, leaveFarm, pickUpBuilding, putInChest, rotateBuilding, sellNow, ship, sleep,
+  stockStall, swapSlots, takeAllFromChest, takeFromChest, turnPlacing, unstockStall,
+} from "./engine";
 import { accept, claimLesson, skipTutorial, turnIn, type ActiveQuest } from "./quests";
 import { giveGift, talk } from "./town";
 import type { WorldState } from "./types";
@@ -23,7 +26,15 @@ export const OPS = {
   put: putInChest,
   enterMine,
   buyPlot,
-  craft,
+  craft: (s: WorldState, id: string, at?: string) => craft(s, id, at),
+  eat,
+  turnPlacing,
+  rotate: rotateBuilding,
+  // Garden Lane and the market stall. (In multiplayer the host handles these with its own rules.)
+  gate: enterGate,
+  leaveGarden: leaveFarm,
+  stock: stockStall,
+  unstock: unstockStall,
   sleep,
   avatar: (s: WorldState, avatar: string): WorldState => ({ ...s, avatar }),
   introSeen: (s: WorldState): WorldState => ({ ...s, introSeen: true }),

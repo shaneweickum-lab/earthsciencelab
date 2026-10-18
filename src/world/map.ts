@@ -11,6 +11,21 @@ export const OLD_H = 36;
 export const idx = (x: number, y: number) => y * W + x;
 export const inBounds = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H;
 
+/** Garden Lane runs north-south just inside the town's west edge, with a gate to each garden. */
+export const LANE_X = 40;
+export const GATE_X = 39;
+export const GATE_ROWS = [4, 6, 8, 14, 16, 18, 20, 22];
+/** Where you come out on your farm through its gate, and the tile on its road that leads back to town. */
+export const GARDEN_ENTRY = { x: 36, y: 11, facing: "left" as const };
+export const GARDEN_EXIT_X = 37;
+/** Market stalls stand in a row across the town square; the first one is yours. */
+export const STALL_ROW = 18;
+export const STALL_X0 = 53;
+export const STALL_SIZE = 6;
+
+/** True when a farmer on their farm has walked to the end of its road. */
+export const atGardenExit = (p: { x: number; y: number }) => Math.round(p.x) >= GARDEN_EXIT_X && Math.round(p.x) < FARM_W && Math.abs(Math.round(p.y) - GARDEN_ENTRY.y) <= 1;
+
 /** The farm field the player clears and plants. */
 export const FARM = { x0: 10, y0: 13, x1: 27, y1: 28 };
 /** More farmland south of the forest belt, opened plot by plot. */
@@ -59,7 +74,7 @@ export const BUILDING_SIZE: Record<Building["kind"], [number, number]> = {
   extension: [5, 4], cottage: [4, 4], fountain: [2, 2], noticeBoard: [1, 1], field: [5, 3], lamp: [1, 1], prop: [1, 1],
   barn: [4, 4], silo: [2, 2], windmill: [3, 2], waterTower: [2, 2],
   mineEntrance: [2, 2], ladderUp: [1, 1], ladderDown: [1, 1],
-  workbench: [1, 1], grinder: [1, 1], spinningWheel: [1, 1], furnace: [1, 1],
+  workbench: [1, 1], grinder: [1, 1], spinningWheel: [1, 1], furnace: [1, 1], stove: [1, 1], oven: [1, 1],
   gardenGate: [1, 1], marketStall: [1, 1],
 };
 
@@ -229,12 +244,13 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
   for (const [x, y0, y1] of [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20], [72, 10, 10]] as const)
     for (let y = y0; y <= y1; y++) path(x, y);
   for (let x = 45; x <= 47; x++) path(x, 26);
+  addGardenLane(tiles);
   // Down past the field and through the forest belt to the South Fields.
   for (const [x, y] of SOUTH_PATH) path(x, y);
   for (let x = 48; x < sq.x0; x++) path(x, 16);
   for (let x = sq.x1 + 1; x <= 64; x++) path(x, 16);
 
-  const buildings: Building[] = [...farmBuildings(), ...townBuildings()];
+  const buildings: Building[] = [...farmBuildings(), ...townBuildings(), ...laneBuildings()];
   // Clear land under the buildings.
   for (const b of buildings) {
     const [w, h] = BUILDING_SIZE[b.kind];
@@ -246,6 +262,25 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
     }
   }
   return { tiles, buildings };
+}
+
+/**
+ * The forest strip between farm and town becomes a hedge with Garden Lane running through it,
+ * joined to the road. Every farm, yours included, is reached through its gate on the lane.
+ */
+export function addGardenLane(tiles: Tile[]) {
+  const set = (x: number, y: number, patch: Partial<Tile>) => (tiles[idx(x, y)] = { ...tiles[idx(x, y)], ...patch });
+  for (let y = 3; y < H - 2; y++) for (let x = FARM_W; x < TOWN.x0; x++) set(x, y, { ground: "forest", obstacle: "tree", weeds: false });
+  for (let y = GATE_ROWS[0]; y <= GATE_ROWS[GATE_ROWS.length - 1]; y++) set(LANE_X, y, { ground: "path", obstacle: null, weeds: false });
+  for (let y = TOWN.road - 1; y <= TOWN.road + 1; y++) set(LANE_X + 1, y, { ground: "path", obstacle: null, weeds: false });
+}
+
+/** The gates along Garden Lane, and your market stall in the square. */
+export function laneBuildings(): Building[] {
+  return [
+    ...GATE_ROWS.map((y, k): Building => ({ id: `gate-${k}`, kind: "gardenGate", x: GATE_X, y, data: { garden: k } })),
+    { id: "stall-0", kind: "marketStall", x: STALL_X0, y: STALL_ROW, data: { garden: 0 } },
+  ];
 }
 
 // ───────────────────────── the mine ─────────────────────────

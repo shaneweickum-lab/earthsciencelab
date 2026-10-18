@@ -16,6 +16,7 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"plot": return plot_menu()
 		"mine": return mine_cart()
 		"craft": return craft_menu()
+		"stall": return stall_menu(game_ui)
 		"journal": return journal(game_ui)
 		"pause": return Screens.pause(game_ui)
 		"npc": return TownMenus.npc_dialog(game_ui)
@@ -191,6 +192,8 @@ static func bag(game_ui: GameUi) -> Dictionary:
 		var d = World.durability(shown)
 		if d != null:
 			info.add_child(Ui.text("Uses left: %d of %d" % [d.left, d.max], 12, Ui.INK, 800))
+		if def.get("energy"):
+			info.add_child(Ui.button("Eat · ⚡ +%d" % int(def.energy), func(): Game.update(func(x): return World.eat(x, look)), "primary", 13))
 	else:
 		info.add_child(Ui.text("Click an item to read about it.", 14, Ui.MUTED))
 	body.add_child(Ui.panel(info, Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
@@ -206,7 +209,7 @@ static func store(game_ui: GameUi) -> Dictionary:
 	var m := Ui.modal("Seed & Soil Co.", "🌱", Game.close, true)
 	var body: VBoxContainer = m.body
 	var tabs := Ui.hbox(6)
-	for t in [["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]]:
+	for t in [["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["kitchen", "🍳 Kitchen"], ["sell", "🪙 Sell"]]:
 		tabs.add_child(Ui.button(t[1], func():
 			ui.tab = t[0]
 			game_ui.refresh(), "soil" if tab == t[0] else "ghost", 14))
@@ -218,6 +221,7 @@ static func store(game_ui: GameUi) -> Dictionary:
 	var greenhouse: bool = w.buildings.any(func(b): return b.kind == "greenhouse")
 	var items: Array = Data.items().values()
 	var buy := func(id: String, n: int): Game.update(func(s): return World.buy(s, id, n))
+	var kitchenware := func(i): return i.kind == "utensil" or i.get("building") in ["stove", "oven"]
 	match tab:
 		"seeds":
 			var note := "Every seed is for sale. Cool-season crops like it mild; warm-season crops like it hot."
@@ -238,7 +242,7 @@ static func store(game_ui: GameUi) -> Dictionary:
 				col.add_child(Ui.text("[b]Takes:[/b] %s [b]Gives back:[/b] %s" % [crop.takes, crop.givesText], 12))
 				return col))
 		"tools":
-			var science := func(i): return Data.shop_unlocks().has(i.id)
+			var science := func(i): return Data.shop_unlocks().has(i.id) and not kitchenware.call(i)
 			body.add_child(Ui.text("Tools wear out with use. Buy a new one here, or craft a better one at a workbench.", 14, Ui.MUTED))
 			body.add_child(Ui.heading("Farm tools"))
 			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "tool" and i.get("price") and not science.call(i)), buy))
@@ -258,7 +262,10 @@ static func store(game_ui: GameUi) -> Dictionary:
 			body.add_child(Ui.panel(row, Ui.CARD, 12, 10))
 		"build":
 			body.add_child(Ui.text("Buy a kit, put it in your hotbar, face an open spot, and press Space to build. Face it and press P to pick it back up.", 14, Ui.MUTED))
-			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "kit"), buy))
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "kit" and not kitchenware.call(i)), buy))
+		"kitchen":
+			body.add_child(Ui.text("Cook your harvest into food that gives you energy back. Carry the utensils a recipe needs, and cook at a stove or oven (set them side by side for recipes that need both). Press C for your cookbook.", 14, Ui.MUTED))
+			body.add_child(_item_list(w, items.filter(func(i): return kitchenware.call(i) and i.get("price")), buy))
 		"sell":
 			body.add_child(Ui.text("Sell right now, or use the shipping bin by your house. %s" % ("Your organic produce earns 25% extra!" if w.organic else "Your farm lost its organic certification, so no bonus."), 14, Ui.MUTED))
 			var any := false
@@ -302,44 +309,158 @@ static func _item_list(w: Dictionary, items: Array, buy: Callable, extra: Varian
 		else:
 			row.add_child(info)
 			row.add_child(Ui.button("🪙 %s" % Js.num(price), func(): buy.call(i.id, 1), "primary", 13, w.coins < price))
-			if i.kind != "tool" and (i.kind != "kit" or price < 50):
+			if i.kind != "tool" and i.kind != "utensil" and (i.kind != "kit" or price < 50):
 				row.add_child(Ui.button("×5", func(): buy.call(i.id, 5), "ghost", 13, w.coins < price * 5))
 		col.add_child(Ui.panel(row, Ui.CARD, 12, 8))
 	return col
 
 
-## A crafting station: what it makes, what each takes, and a button to make one.
+const STATION_ICONS := {"workbench": "🪚", "grinder": "⚙️", "spinningWheel": "🧵", "furnace": "🔥", "stove": "🍳", "oven": "🥖"}
+
+
+## A crafting station: what it makes, what each takes, and a button to make one. A stove or oven
+## opens the kitchen (every dish, and what's missing for each); the cookbook (C) does the same,
+## where only knife-only food can be made.
 static func craft_menu() -> Dictionary:
 	var w := Game.world
+	var cooking: Array = Data.recipes().filter(func(r): return World.is_cooking(r))
+	if Game.chest_id == "cookbook":
+		var cm := Ui.modal("Cookbook", "📖", Game.close, true)
+		cm.body.add_child(Ui.text("Carry the utensils a dish needs in your bag. Food with only a knife can be made anywhere; the rest cook at a stove or oven (put them side by side for recipes that need both). Select food and use it to eat it.", 14, Ui.MUTED))
+		for r in cooking:
+			cm.body.add_child(_recipe_row(w, r, ""))
+		return cm
 	var b = null
 	for x in w.buildings:
 		if x.id == Game.chest_id:
 			b = x
 	var station: String = b.kind if b != null else "workbench"
-	var icons := {"workbench": "🪚", "grinder": "⚙️", "spinningWheel": "🧵", "furnace": "🔥"}
-	var m := Ui.modal(World.STATIONS.get(station, "Workbench"), icons.get(station, "🪚"), Game.close, true)
+	var kitchen: bool = station in ["stove", "oven"]
+	var title: String = World.STATIONS.get(station, "Workbench")
+	if kitchen:
+		var names := []
+		for k in World.kitchen_at(w, b.id):
+			names.append(World.STATIONS[k])
+		title = "Kitchen: " + " and ".join(names)
+	var m := Ui.modal(title, STATION_ICONS.get(station, "🪚"), Game.close, true)
 	var body: VBoxContainer = m.body
-	for r in Data.recipes():
-		if r.station != station:
-			continue
-		var st := World.recipe_status(w, r)
+	for r in (cooking if kitchen else Data.recipes().filter(func(x): return x.get("station") == station and not World.is_cooking(x))):
+		body.add_child(_recipe_row(w, r, b.id if b != null else ""))
+	return m
+
+
+static func _recipe_row(w: Dictionary, r: Dictionary, at: String) -> Control:
+	var st := World.recipe_status(w, r, at)
+	var cooking := World.is_cooking(r)
+	var out := Items.get_def(r.id)
+	var row := Ui.hbox(10)
+	row.add_child(Ui.item_icon(r.id, 32))
+	var info := Ui.vbox(2)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_child(Ui.text("%s%s%s" % [out.name, " ×%d" % r.qty if r.qty > 1 else "", "  [color=#3f7d4e]⚡ +%d[/color]" % int(out.energy) if out.get("energy") else ""], 15, Ui.INK, 900))
+	var needs := Ui.hbox(10)
+	for i in st.inputs:
+		var short: bool = i.have < i.qty
+		var chip := Ui.hbox(3)
+		chip.add_child(Ui.item_icon(i.item, 18))
+		chip.add_child(Ui.text("%s %d/%d" % [Items.get_def(i.item).name, mini(i.have, i.qty), i.qty], 12, Ui.DANGER if short else Ui.MUTED, 900 if short else 600, false))
+		needs.add_child(chip)
+	info.add_child(needs)
+	if cooking and (r.get("tools", []).size() or r.get("stations", []).size()):
+		var gear := Ui.hbox(10)
+		for t in r.get("tools", []):
+			var missing: bool = t in st.missingTools
+			var chip := Ui.hbox(3)
+			chip.add_child(Ui.item_icon(t, 18))
+			chip.add_child(Ui.text(Items.get_def(t).name, 12, Ui.DANGER if missing else Ui.MUTED, 900 if missing else 600, false))
+			gear.add_child(chip)
+		for x in r.get("stations", []):
+			var missing: bool = x in st.missingStations
+			gear.add_child(Ui.text("%s %s" % [STATION_ICONS[x], World.STATIONS[x]], 12, Ui.DANGER if missing else Ui.MUTED, 900 if missing else 600, false))
+		info.add_child(gear)
+	row.add_child(info)
+	var id: String = r.id
+	row.add_child(Ui.button("Cook" if cooking else "Make", func(): Game.update(func(s): return World.craft(s, id, at)), "primary", 13, not st.ok))
+	return Ui.panel(row, Ui.CARD, 12, 8)
+
+
+## Your market stall in the square: townsfolk stop by during the day and buy what you put out.
+static func stall_menu(game_ui: GameUi) -> Dictionary:
+	var w := Game.world
+	var ui: Dictionary = game_ui.ui
+	var m := Ui.modal("Your market stall", "🧺", Game.close, true)
+	var body: VBoxContainer = m.body
+	body.add_child(Ui.text("Townsfolk browse the square from 8 AM to 8 PM and buy what you put out. Near the store's price it sells steadily; a bargain sells fast; ask too much and nobody bites. You can show %d kinds of things at once." % WorldMap.STALL_SIZE, 14, Ui.MUTED))
+	body.add_child(Ui.heading("On your stall"))
+	var list := World.stall_listings(w)
+	if list.is_empty():
+		body.add_child(Ui.panel(Ui.text("Nothing on the stall right now.", 14, Ui.MUTED), Ui.PAPER, 12, 12, Color(0, 0, 0, 0), 0))
+	for i in list.size():
+		var l: Dictionary = list[i]
 		var row := Ui.hbox(10)
-		row.add_child(Ui.item_icon(r.id, 32))
+		row.add_child(Ui.item_icon(l.item, 28, l.get("grade")))
 		var info := Ui.vbox(2)
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(Ui.text("%s%s" % [Items.get_def(r.id).name, " ×%d" % r.qty if r.qty > 1 else ""], 15, Ui.INK, 900))
-		var needs := Ui.hbox(10)
-		for i in st.inputs:
-			var short: bool = i.have < i.qty
-			var chip := Ui.hbox(3)
-			chip.add_child(Ui.item_icon(i.item, 18))
-			chip.add_child(Ui.text("%s %d/%d" % [Items.get_def(i.item).name, mini(i.have, i.qty), i.qty], 12, Ui.DANGER if short else Ui.MUTED, 900 if short else 600, false))
-			needs.add_child(chip)
-		info.add_child(needs)
+		info.add_child(Ui.text("%s ×%d" % [Items.get_def(l.item).name, int(l.qty)], 15, Ui.INK, 900))
+		info.add_child(Ui.text("🪙 %d each%s · %d%% chance an hour" % [int(l.price), " · grade %s" % l.grade if l.get("grade") else "", roundi(World.stall_chance(w, l) * 100)], 12, Ui.MUTED, 700))
 		row.add_child(info)
-		var id: String = r.id
-		row.add_child(Ui.button("Make", func(): Game.update(func(s): return World.craft(s, id)), "primary", 13, not st.ok))
+		row.add_child(Ui.button("Take back", func(): Game.update(func(s): return World.unstock_stall(s, i)), "ghost", 13))
 		body.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+	body.add_child(Ui.heading("Put something out"))
+	var picks := Ui.hbox(6)
+	var any := false
+	for i in w.inventory.size():
+		var s = w.inventory[i]
+		if s == null:
+			continue
+		var def := Items.get_def(s.item)
+		if not def.get("sell") or def.get("tool") or def.kind == "utensil":
+			continue
+		any = true
+		var b := Ui.button("", func():
+			ui.stall_pick = i
+			ui.stall_qty = int(s.qty)
+			ui.stall_price = World.fair_price(w, s)
+			game_ui.refresh(), "soil" if ui.get("stall_pick", -1) == i else "ghost", 13)
+		b.custom_minimum_size = Vector2(52, 52)
+		var icon := Ui.item_icon(s.item, 30, s.get("grade"))
+		icon.position = Vector2(11, 8)
+		b.add_child(icon)
+		if s.qty > 1:
+			var q := Ui.text(Js.num(s.qty), 12, Ui.INK, 900, false)
+			q.position = Vector2(34, 32)
+			b.add_child(q)
+		b.tooltip_text = "Sell %s" % def.name
+		picks.add_child(b)
+	if not any:
+		body.add_child(Ui.text("Nothing in your bag to sell. Crops, food, honey, eggs, wood, and stone all sell.", 14, Ui.MUTED))
+	body.add_child(picks)
+	var pick: int = ui.get("stall_pick", -1)
+	var chosen = w.inventory[pick] if pick >= 0 and pick < w.inventory.size() else null
+	if chosen != null:
+		var row := Ui.hbox(10)
+		row.add_child(Ui.text(Items.get_def(chosen.item).name, 15, Ui.INK, 900, false))
+		row.add_child(Ui.text("How many", 12, Ui.INK, 800, false))
+		var qty := SpinBox.new()
+		qty.min_value = 1
+		qty.max_value = int(chosen.qty)
+		qty.value = clampi(int(ui.get("stall_qty", chosen.qty)), 1, int(chosen.qty))
+		qty.value_changed.connect(func(v): ui.stall_qty = int(v))
+		row.add_child(qty)
+		row.add_child(Ui.text("Price each", 12, Ui.INK, 800, false))
+		var price := SpinBox.new()
+		price.min_value = 1
+		price.max_value = 99999
+		price.value = int(ui.get("stall_price", World.fair_price(w, chosen)))
+		price.value_changed.connect(func(v): ui.stall_price = int(v))
+		row.add_child(price)
+		row.add_child(Ui.small("The store pays %d." % World.fair_price(w, chosen)))
+		row.add_child(Ui.button("Put on the stall", func():
+			var n := int(ui.get("stall_qty", chosen.qty))
+			var each := int(ui.get("stall_price", World.fair_price(w, chosen)))
+			ui.erase("stall_pick")
+			Game.update(func(x): return World.stock_stall(x, pick, n, each)), "primary", 13))
+		body.add_child(Ui.panel(row, Ui.PAPER, 12, 10, Color(0, 0, 0, 0), 0))
 	return m
 
 

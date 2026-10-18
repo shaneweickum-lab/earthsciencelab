@@ -1,11 +1,11 @@
 import { addItem, buildingAt, faint, facingTile, hourly, newWorld, say, selectedItem, sleep, tally, tileAt, WORLD_VERSION } from "./engine";
 import { DAY_END, timeOfDay } from "./clock";
 import { ITEMS, sellPrice } from "./items";
-import { createMap, FARM_W, H, idx, TOWN, W } from "./map";
+import { createMap, FARM_W, GARDEN_ENTRY, GATE_ROWS, H, idx, LANE_X, STALL_ROW, STALL_SIZE, STALL_X0, W } from "./map";
 import { expireCritters } from "./nature";
 import { cleanChat } from "./chatFilter";
 import { on, type GameSettings } from "./settings";
-import type { Building, Critter, MineFloor, Slot, Tile, WorldState } from "./types";
+import type { Building, Critter, Listing, MineFloor, Slot, Tile, WorldState } from "./types";
 
 /**
  * Multiplayer: up to 8 farmers in one world. Everyone shares the town, the mine, and the clock;
@@ -20,17 +20,7 @@ export const MAX_PLAYERS = 8;
 /** Width of the town half of the map. */
 const TW = W - FARM_W;
 
-/** Garden Lane runs north-south just inside the town's west edge, with a gate to each garden. */
-export const LANE_X = 40;
-export const GATE_X = 39;
-export const GATE_ROWS = [4, 6, 8, 14, 16, 18, 20, 22];
-/** Where you come out in a garden, and the tile on its road that leads back to town. */
-export const GARDEN_ENTRY = { x: 36, y: TOWN.road, facing: "left" as const };
-export const GARDEN_EXIT_X = 37;
-/** Each farmer's market stall, in a row across the town square. */
-export const STALL_ROW = 18;
-export const STALL_X0 = 53;
-export const STALL_SIZE = 6;
+export { atGardenExit, GARDEN_ENTRY, GARDEN_EXIT_X, GATE_ROWS, GATE_X, LANE_X, STALL_ROW, STALL_SIZE, STALL_X0 } from "./map";
 
 export type Area = { kind: "garden"; garden: number } | { kind: "town" } | { kind: "mine"; floor: number };
 
@@ -45,7 +35,7 @@ export interface FarmPart {
 
 const PLAYER_KEYS = [
   "coins", "organic", "energy", "maxEnergy", "water", "canSize", "player", "inventory", "selected", "shipping", "journal",
-  "harvests", "log", "messages", "introSeen", "quests", "deepest", "tally", "homestead", "friends", "avatar",
+  "harvests", "log", "messages", "introSeen", "quests", "deepest", "tally", "homestead", "friends", "avatar", "placeRot",
 ] as const;
 
 /** One farmer: everything that's theirs rather than the world's. */
@@ -58,12 +48,7 @@ export type PlayerPart = Pick<WorldState, (typeof PLAYER_KEYS)[number]> & {
   asleep?: boolean;
 };
 
-export interface Listing {
-  item: string;
-  qty: number;
-  grade?: Slot["grade"];
-  price: number;
-}
+export type { Listing } from "./types";
 
 /** A chat message, as everyone sees it (already cleaned by the chat filter). */
 export interface ChatMessage {
@@ -121,22 +106,14 @@ function eastHalf<T>(tiles: T[]): T[] {
   return out;
 }
 
-/** The town for a multiplayer world: Garden Lane with its gates, and a row of market stalls. */
+/** The town for a multiplayer world: Garden Lane with its gates, and a market stall for each garden. */
 export function multiTown(seed: number): MultiWorld["town"] {
   const { tiles, buildings } = createMap(seed);
-  const set = (x: number, y: number, patch: Partial<Tile>) => (tiles[idx(x, y)] = { ...tiles[idx(x, y)], ...patch });
-  const woods = { ground: "forest" as const, obstacle: "tree" as const, weeds: false };
-  const path = { ground: "path" as const, obstacle: null, weeds: false };
-  // The forest strip becomes a hedge with the lane running through it, joined to the road.
-  for (let y = 3; y < H - 2; y++) for (let x = FARM_W; x < TOWN.x0; x++) set(x, y, woods);
-  for (let y = GATE_ROWS[0]; y <= GATE_ROWS[GATE_ROWS.length - 1]; y++) set(LANE_X, y, path);
-  for (let y = TOWN.road - 1; y <= TOWN.road + 1; y++) set(LANE_X + 1, y, path);
-  const gates: Building[] = GATE_ROWS.map((y, k) => ({ id: `gate-${k}`, kind: "gardenGate", x: GATE_X, y, data: { garden: k } }));
-  const stalls: Building[] = GATE_ROWS.map((_, k) => ({ id: `stall-${k}`, kind: "marketStall", x: STALL_X0 + k, y: STALL_ROW, data: { garden: k } }));
-  for (const b of [...gates, ...stalls]) set(b.x, b.y, { ground: b.kind === "gardenGate" ? "grass" : "path", obstacle: null, weeds: false });
+  const stalls: Building[] = GATE_ROWS.slice(1).map((_, i) => ({ id: `stall-${i + 1}`, kind: "marketStall", x: STALL_X0 + i + 1, y: STALL_ROW, data: { garden: i + 1 } }));
+  for (const b of stalls) tiles[idx(b.x, b.y)] = { ...tiles[idx(b.x, b.y)], ground: "path", obstacle: null, weeds: false };
   return {
     tiles: eastHalf(tiles),
-    buildings: [...buildings.filter((b) => b.x >= FARM_W), ...gates, ...stalls],
+    buildings: [...buildings.filter((b) => b.x >= FARM_W), ...stalls],
     critters: [],
   };
 }
@@ -308,8 +285,6 @@ export function leaveGarden(m: MultiWorld, pid: string): MultiWorld {
   return { ...m, players: { ...m.players, [pid]: { ...p, area: { kind: "town" }, player: { x: LANE_X, y, facing: "right" } } } };
 }
 
-/** True when a farmer in a garden has walked to the end of its road. */
-export const atGardenExit = (p: { x: number; y: number }) => Math.round(p.x) >= GARDEN_EXIT_X && Math.abs(Math.round(p.y) - TOWN.road) <= 1;
 
 /** Keep a farmer's position (sent often while they walk; the host only stores it). */
 export function setPosition(m: MultiWorld, pid: string, pos: WorldState["player"]): MultiWorld {

@@ -129,6 +129,9 @@ func _build_hud() -> void:
 	bl.add_child(Ui.button("🎒 Bag (I)", func(): Game.open("bag"), "flat", 14))
 	bl.add_child(Ui.button("📓 Journal (J)", func(): Game.open("journal"), "flat", 14))
 	bl.add_child(Ui.button("📜 Quests (Q)", func(): Game.open("quests"), "flat", 14))
+	bl.add_child(Ui.button("📖 Cookbook (C)", func():
+		Game.chest_id = "cookbook"
+		Game.open("craft"), "flat", 14))
 	bl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	bl.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	bl.position.y -= 84

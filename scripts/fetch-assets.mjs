@@ -46,7 +46,8 @@ const PACKS = {
   food: {
     title: "Food Kit", url: "https://kenney.nl/media/pages/assets/food-kit/83086fa91c-1719418518/kenney_food-kit.zip",
     page: "https://kenney.nl/assets/food-kit", dir: "Models/GLB format", textures: true,
-    models: ["tomato", "carrot", "corn", "pumpkin-basic"],
+    // Crops, and the pot and loaf drawn on the stove and oven.
+    models: ["tomato", "carrot", "corn", "pumpkin-basic", "pot-stew", "loaf"],
   },
   furniture: {
     // Homestead decorations. The kit's materials are unlit; we make them lit so they shade like the farm.
@@ -56,7 +57,7 @@ const PACKS = {
       "bedSingle", "bedDouble", "bedBunk", "cabinetBed", "chair", "chairCushion", "chairRounded", "loungeChair", "loungeChairRelax",
       "loungeSofa", "loungeDesignSofa", "loungeSofaOttoman", "table", "tableCoffee", "tableCloth", "sideTable", "desk", "chairDesk",
       "bookcaseOpen", "bookcaseClosedWide", "books", "lampRoundFloor", "lampSquareTable", "rugRectangle", "rugRound", "rugSquare", "rugDoormat",
-      "pottedPlant", "plantSmall1", "plantSmall2", "plantSmall3", "kitchenStove", "kitchenFridge", "kitchenSink", "kitchenCabinet",
+      "pottedPlant", "plantSmall1", "plantSmall2", "plantSmall3", "kitchenStove", "kitchenStoveElectric", "kitchenFridge", "kitchenSink", "kitchenCabinet",
       "kitchenCoffeeMachine", "radio", "televisionVintage", "coatRackStanding", "bathtub", "washer", "trashcan", "cardboardBoxClosed",
       "benchCushion", "bench", "speaker", "laptop", "floorFull", "wall", "wallWindow", "wallDoorway",
     ],

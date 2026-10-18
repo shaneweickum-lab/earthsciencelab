@@ -63,11 +63,13 @@ export type BuildingKind =
   | "greenhouse" | "fence" | "flowerBed" | "pathStone" | "well" | "chickenCoop" | "smallBarn" | "chest"
   // Crafting stations.
   | "workbench" | "grinder" | "spinningWheel" | "furnace"
+  // The kitchen: cook food on the stove, bake it in the oven.
+  | "stove" | "oven"
   // Town buildings, landmarks, and props (not buildable by the player).
   | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower"
   // The mine: its entrance in town, and the ladders on each floor.
   | "mineEntrance" | "ladderUp" | "ladderDown"
-  // Multiplayer towns: the gates along Garden Lane, and each farmer's market stall.
+  // The gates along Garden Lane, and the market stalls in the square.
   | "gardenGate" | "marketStall";
 
 /** Town buildings the player can't build, pick up, or build over. */
@@ -81,12 +83,14 @@ export interface Building {
   kind: BuildingKind;
   x: number;
   y: number;
+  /** Quarter turns (0–3). On odd turns a building's width and depth swap. */
+  rot?: number;
   /** Building-specific data: compost contents, water stored, honey ready, etc. */
   data: {
     fiber?: number; startedDay?: number; ready?: number; water?: number; honeyDay?: number;
     /** Chicken coop: eggs waiting, and the day manure was last composted. */
     eggs?: number; manureDay?: number;
-    /** Multiplayer: the garden a Garden Lane gate or market stall belongs to. */
+    /** The garden a Garden Lane gate or market stall belongs to (yours is 0). */
     garden?: number;
     /** Town buildings: who lives or works here, and the sign over the door. */
     owner?: string; sign?: string;
@@ -171,6 +175,18 @@ export interface WorldState {
   friends?: Record<string, { points: number; talked?: number; gifted?: number; met?: boolean; stories?: number[] }>;
   /** Which farmer model you picked (see avatars.ts). Older saves don't have one. */
   avatar?: string;
+  /** How far the next thing you build is turned (quarter turns). */
+  placeRot?: number;
+  /** What's for sale on your market stall in the town square. */
+  stall?: Listing[];
+}
+
+/** Something for sale on a market stall: how many, and the price for each. */
+export interface Listing {
+  item: string;
+  qty: number;
+  grade?: Grade;
+  price: number;
 }
 
 /** One floor of the mine: a small cave (MINE_W × MINE_H tiles), made fresh each time you go down. */

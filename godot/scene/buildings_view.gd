@@ -20,7 +20,11 @@ func refresh(world: Dictionary) -> void:
 		var sz := WorldMap.size_of(b.kind)
 		var root := Node3D.new()
 		root.position = Vector3(b.x + (sz[0] - 1) / 2.0, 0, b.y + (sz[1] - 1) / 2.0)
+		# Things you build can be turned (quarter turns).
+		root.rotation.y = int(b.get("rot", 0)) * PI / 2
 		_fancy(root, b, sz[0], sz[1])
+		if b.kind in ["gardenGate", "marketStall"] and int(b.data.get("garden", -1)) == 0:
+			_label(root, "Your farm" if b.kind == "gardenGate" else "Your stall", 2.4 if b.kind == "gardenGate" else 1.9)
 		if b.data.get("sign"):
 			var sign := Label3D.new()
 			sign.text = b.data.sign
@@ -34,6 +38,34 @@ func refresh(world: Dictionary) -> void:
 			sign.no_depth_test = true
 			root.add_child(sign)
 		add_child(root)
+
+
+func _label(root: Node3D, text: String, y: float) -> void:
+	var l := Label3D.new()
+	l.text = text
+	l.position = Vector3(0, y, 0)
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.font_size = 32
+	l.pixel_size = 0.006
+	l.outline_size = 12
+	l.modulate = Color("#2a2017")
+	l.outline_modulate = Color("#fffcf5")
+	l.no_depth_test = true
+	root.add_child(l)
+
+
+## A Furniture Kit model (its origin is in a corner), centered on its tile and standing on the
+## ground. Returns how tall it stands, for things set on top.
+func _centered(root: Node3D, name: String, s: float) -> float:
+	var box := AABB()
+	var first := true
+	for p in Models.parts(name):
+		var b: AABB = p.xform * (p.mesh as Mesh).get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	var c := box.get_center()
+	root.add_child(Models.instance(name, Models.xf(Vector3(-c.x * s, -box.position.y * s, -c.z * s), Vector3.ZERO, s)))
+	return box.size.y * s
 
 
 func _m(root: Node3D, name: String, pos := Vector3.ZERO, ry := 0.0, scale: Variant = 1.0) -> void:
@@ -148,6 +180,15 @@ func _fancy(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 			_box(root, Vector3(0.38, 0.33, 0.02), Vector3(0, 0.3, 0.38), "#1a1410")
 			_box(root, Vector3(0.28, 0.1, 0.02), Vector3(0, 0.2, 0.39), "#ff8a2a", Vector3.ZERO, "#ff6a00", 1.2)
 			_cyl(root, 0.13, 0.15, 0.5, Vector3(0.22, 1.2, -0.15), "#7a756d", 8)
+		"stove":
+			# A pot simmering on the stove.
+			var top := _centered(root, "furniture/kitchenStove", 2)
+			_m(root, "food/pot-stew", Vector3(0.12, top, 0.05), 0, 0.32)
+		"oven":
+			var top := _centered(root, "furniture/kitchenStoveElectric", 2)
+			_m(root, "food/loaf", Vector3(0, top, 0), 0, 0.3)
+		"marketStall":
+			_m(root, "town/stall-red" if int(b.data.get("garden", 0)) % 2 else "town/stall-green", Vector3.ZERO, 0, 0.55)
 		"fence":
 			_m(root, "nature/fence_simple", Vector3(0, 0, 0.47), 0, Vector3(1, 1.5, 1))
 		"pathStone":
@@ -204,6 +245,17 @@ func _fancy(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 func _procedural(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 	var data: Dictionary = b.data
 	match b.kind:
+		"gardenGate":
+			# A wooden arch on Garden Lane, opening west into a garden.
+			var arch := Node3D.new()
+			arch.rotation.y = PI / 2
+			root.add_child(arch)
+			for x in [-0.45, 0.45]:
+				_box(arch, Vector3(0.14, 1.7, 0.14), Vector3(x, 0.85, 0), "#7a5636")
+			_box(arch, Vector3(1.15, 0.16, 0.2), Vector3(0, 1.75, 0), "#6b4423")
+			_box(arch, Vector3(0.9, 0.08, 0.12), Vector3(0, 1.95, 0), "#8fbf5a")
+		"stove", "oven":
+			_box(root, Vector3(0.85, 0.9, 0.8), Vector3(0, 0.45, 0), "#e9e4da" if b.kind == "stove" else "#cfc8bb")
 		"composter":
 			_box(root, Vector3(0.8, 0.8, 0.8), Vector3(0, 0.4, 0), "#3d6b3f")
 			_box(root, Vector3(0.85, 0.06, 0.85), Vector3(0, 0.83, 0), "#2c4f2e")

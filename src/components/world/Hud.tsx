@@ -2,7 +2,7 @@
 
 import { CROPS } from "@/game/crops";
 import { dayOf, formatDate, formatTime, seasonLabel, seasonOf, timeOfDay, yearOf } from "@/world/clock";
-import { buildingAt, canPickUp, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, soilHealth, tileAt, todayClimate } from "@/world/engine";
+import { buildingAt, canPickUp, facingTile, growthFactor, HOTBAR_SIZE, knownSoil, OBSTACLE_HP, obstacleName, rotatable, soilHealth, tileAt, todayClimate } from "@/world/engine";
 import { cropDays, ITEMS, WORLD_CROPS } from "@/world/items";
 import { formatTemp, on } from "@/world/settings";
 import { expectedGrade } from "@/world/grades";
@@ -179,9 +179,16 @@ export function TileInspector() {
         </div>
       )}
       {pickable && (
-        <button className="btn btn-ghost w-full py-1 text-xs" onClick={() => run("pickUp", b.id)}>
-          Pick up <kbd className="rounded bg-white px-1 font-mono text-[10px] shadow-sm">P</kbd>
-        </button>
+        <div className="flex gap-1">
+          <button className="btn btn-ghost flex-1 py-1 text-xs" onClick={() => run("pickUp", b.id)}>
+            Pick up <kbd className="rounded bg-white px-1 font-mono text-[10px] shadow-sm">P</kbd>
+          </button>
+          {rotatable(b.kind) && (
+            <button className="btn btn-ghost flex-1 py-1 text-xs" onClick={() => run("rotate")}>
+              Turn <kbd className="rounded bg-white px-1 font-mono text-[10px] shadow-sm">R</kbd>
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -191,7 +198,7 @@ function labelFor(kind: string) {
   return {
     house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", chest: "Tool Chest", extension: "Extension Office", cottage: "Cottage",
     fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
-    mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down", gardenGate: "Garden gate", marketStall: "Market stall",
+    mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down", gardenGate: "Garden gate", marketStall: "Market stall", stove: "Stove", oven: "Oven",
   }[kind] ?? kind;
 }
 

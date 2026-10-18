@@ -7,7 +7,8 @@ const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "
 const LABELS := {
 	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "chest": "Tool Chest", "extension": "Extension Office", "cottage": "Cottage",
 	"mineEntrance": "Old Mine", "ladderUp": "Ladder up", "ladderDown": "Ladder down",
-	"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace",
+	"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace", "stove": "Stove", "oven": "Oven",
+	"gardenGate": "Garden gate", "marketStall": "Market stall",
 	"fountain": "Fountain", "noticeBoard": "Notice board", "field": "Cornfield", "lamp": "Street lamp", "prop": "Market cart",
 }
 
@@ -216,7 +217,11 @@ static func inspector(w: Dictionary) -> Control:
 	if preview.label:
 		col.add_child(Ui.panel(Ui.text("[b]Space · %s:[/b] %s" % [preview.label, preview.text], 12), Ui.LEAF_LIGHT if preview.ok else Ui.PAPER, 10, 7, Color(0, 0, 0, 0), 0))
 	if b and World.can_pick_up(b):
-		col.add_child(Ui.button("Pick up (P)", func(): Game.update(func(s): return World.pick_up_building(s, b.id)), "ghost", 12))
+		var row := Ui.hbox(6)
+		row.add_child(Ui.button("Pick up (P)", func(): Game.update(func(s): return World.pick_up_building(s, b.id)), "ghost", 12))
+		if World.rotatable(b.kind):
+			row.add_child(Ui.button("Turn (R)", func(): Game.update(World.rotate_building), "ghost", 12))
+		col.add_child(row)
 	return Ui.panel(col, Color(Ui.CARD, 0.95), 16, 12, Color(Ui.SOIL_DARK, 0.2), 2)
 
 
