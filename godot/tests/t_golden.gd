@@ -109,7 +109,7 @@ func test_old_saves() -> void:
 	var s := World.sleep(World.new_world(5))
 	var old_w := 40
 	var tiles := []
-	for i in old_w * WorldMap.H:
+	for i in old_w * WorldMap.OLD_H:
 		var x := i % old_w
 		var y := i / old_w
 		tiles.append(Js.with(s.tiles[y * WorldMap.W + x], {"mulch": x == 20 and y == 20}))

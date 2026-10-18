@@ -13,6 +13,7 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"store": return store(game_ui)
 		"shipping": return shipping()
 		"chest": return chest()
+		"plot": return plot_menu()
 		"mine": return mine_cart()
 		"craft": return craft_menu()
 		"journal": return journal(game_ui)
@@ -69,6 +70,12 @@ static func house(game_ui: GameUi) -> Dictionary:
 		Game.open("summary"), "soil", 16))
 	body.add_child(Ui.button("📺 Watch the weather channel", func(): Game.open("tv"), "ghost", 16))
 	body.add_child(Ui.button("📓 Read your Nature Journal", func(): Game.open("journal"), "ghost", 16))
+	if Site.is_web():
+		# My Homestead lives on the website: save, and the page opens it over the game.
+		body.add_child(Ui.button("🏡 My Homestead: decorate your room and yard", func():
+			Game.save()
+			Game.close()
+			Site.post({"type": "soil:openHomestead"}), "ghost", 16))
 	var ui: Dictionary = game_ui.ui
 	body.add_child(Ui.button("👕 Change your look", func():
 		ui.look = not ui.get("look", false)
@@ -378,6 +385,29 @@ static func chest() -> Dictionary:
 	body.add_child(_slot_grid(items, 0, func(i): Game.update(func(s): return World.take_from_chest(s, id, i))))
 	body.add_child(Ui.heading("Your bag (the top row is your hotbar)"))
 	body.add_child(_slot_grid(w.inventory, World.HOTBAR_SIZE, func(i): Game.update(func(s): return World.put_in_chest(s, id, i))))
+	return m
+
+
+## A locked plot of farmland: buy it with coins.
+static func plot_menu() -> Dictionary:
+	var w := Game.world
+	var id := int(Game.chest_id)
+	var m := Ui.modal("Farmland for sale", "🌱", Game.close)
+	var body: VBoxContainer = m.body
+	if id < 0 or id >= WorldMap.plots().size():
+		return m
+	var p: Dictionary = WorldMap.plots()[id]
+	var price := World.next_plot_price(w)
+	body.add_child(Ui.text("This plot is %d × %d tiles of %s. You own %d of %d plots." % [p.x1 - p.x0 + 1, p.y1 - p.y0 + 1, "rich South Fields bottomland" if p.y0 >= WorldMap.OLD_H else "field by the house", World.owned_plots(w).size(), WorldMap.plots().size()], 15))
+	body.add_child(Ui.small("Each plot costs a little more than the last. Some quests give you land for free, too."))
+	var row := Ui.hbox(10)
+	var coins := Ui.text("🪙 %s" % Js.num(w.coins), 15, Ui.INK, 900)
+	coins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(coins)
+	row.add_child(Ui.button("Buy for 🪙 %d" % price, func():
+		Game.update(func(s): return World.buy_plot(s, id))
+		Game.close(), "primary", 15, w.coins < price))
+	body.add_child(row)
 	return m
 
 

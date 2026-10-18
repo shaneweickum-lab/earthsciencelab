@@ -3,14 +3,45 @@ import type { Building, Ground, MineFloor, Obstacle, OreRock, SoilState, Tile } 
 
 /** The farm is the west part of the map (x < 38); the town is east of the forest strip. */
 export const W = 76;
-export const H = 36;
+export const H = 64;
 export const FARM_W = 38;
+/** The map was 36 rows tall before the South Fields were added below the forest belt. */
+export const OLD_H = 36;
 
 export const idx = (x: number, y: number) => y * W + x;
 export const inBounds = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H;
 
 /** The farm field the player clears and plants. */
 export const FARM = { x0: 10, y0: 13, x1: 27, y1: 28 };
+/** More farmland south of the forest belt, opened plot by plot. */
+export const SOUTH = { x0: 10, y0: 37, x1: 33, y1: 60 };
+
+export interface Plot {
+  id: number;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * The farmland in 6×4-tile plots: 12 in the field by the house, 24 in the South Fields. A new
+ * farm owns only plot 0 (nearest the house); the rest are bought or earned from quests.
+ */
+export const PLOTS: Plot[] = [FARM, SOUTH].flatMap((a) => {
+  const out: Omit<Plot, "id">[] = [];
+  for (let y = a.y0; y + 3 <= a.y1; y += 4) for (let x = a.x0; x + 5 <= a.x1; x += 6) out.push({ x0: x, y0: y, x1: x + 5, y1: y + 3 });
+  return out;
+}).map((p, id) => ({ id, ...p }));
+
+/** The plot a tile is in, or null outside the farmland. */
+export function plotAt(x: number, y: number): number | null {
+  for (const p of PLOTS) if (x >= p.x0 && x <= p.x1 && y >= p.y0 && y <= p.y1) return p.id;
+  return null;
+}
+
+/** The price of the next plot, rising with how many you own. */
+export const plotPrice = (owned: number) => 100 + 40 * owned + 3 * owned * owned;
 
 /** The town: its square, the community garden, and where the road runs. */
 export const TOWN = {
@@ -35,6 +66,12 @@ export const BUILDING_SIZE: Record<Building["kind"], [number, number]> = {
 export const MINE_ENTRANCE = { x: 71, y: 8 };
 export const MINE_W = 24;
 export const MINE_H = 18;
+
+/** The path from beside the field, through the forest belt, and along the top of the South Fields. */
+export const SOUTH_PATH: [number, number][] = [
+  ...Array.from({ length: SOUTH.y0 - 29 }, (_, i) => [9, 29 + i] as [number, number]),
+  ...Array.from({ length: SOUTH.x1 - 9 }, (_, i) => [10 + i, SOUTH.y0 - 1] as [number, number]),
+];
 
 /** Slots in a storage chest. */
 export const CHEST_SIZE = 20;
@@ -128,7 +165,19 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
       const soil = degradedSoil(rand);
       // Forest around the edges, and a strip between the farm and town with a gap for the road.
       const strip = x >= FARM_W && x < TOWN.x0 && (y < TOWN.road - 1 || y > TOWN.road + 1);
-      const forest = y < 3 || x < 2 || x > W - 3 || y > H - 3 || (x < 7 && y > 26) || strip;
+      // The old south edge is now a forest belt between the field and the South Fields.
+      const belt = y > OLD_H - 3 && y < OLD_H;
+      const south = y >= OLD_H;
+      const forest = y < 3 || x < 2 || x > W - 3 || y > H - 3 || belt || (x < 7 && y > 26 && !south) || strip || (south && x >= FARM_W);
+      if (south && !forest) {
+        const inSouth = x >= SOUTH.x0 && x <= SOUTH.x1 && y >= SOUTH.y0 && y <= SOUTH.y1;
+        if (inSouth) {
+          const r = rand();
+          const obstacle: Obstacle = r < 0.07 ? "stone" : r < 0.13 ? "stick" : r < 0.17 ? "stump" : r < 0.19 ? "log" : null;
+          tiles.push(tile("farm", soil, obstacle, obstacle === null && rand() < 0.8));
+        } else tiles.push(tile("grass", soil, rand() < 0.08 ? "tree" : null));
+        continue;
+      }
       if (forest) {
         const t = tile("forest", { ...soil, om: 55 + Math.round(rand() * 15), life: 60 }, rand() < 0.55 ? "tree" : rand() < 0.15 ? "log" : null);
         tiles.push(t);
@@ -179,6 +228,8 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
   for (const [x, y0, y1] of [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20], [72, 10, 10]] as const)
     for (let y = y0; y <= y1; y++) path(x, y);
   for (let x = 45; x <= 47; x++) path(x, 26);
+  // Down past the field and through the forest belt to the South Fields.
+  for (const [x, y] of SOUTH_PATH) path(x, y);
   for (let x = 48; x < sq.x0; x++) path(x, 16);
   for (let x = sq.x1 + 1; x <= 64; x++) path(x, 16);
 

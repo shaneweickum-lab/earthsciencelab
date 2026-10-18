@@ -307,6 +307,28 @@ await page.goto(`${BASE}/soil`);
 await page.waitForTimeout(500);
 await shot("10-soil-home-after");
 
+// My Homestead: buy a chair with farm coins and set it down in the farmhouse room.
+await page.evaluate((SAVE) => {
+  const w = JSON.parse(localStorage.getItem(SAVE));
+  w.coins = 500;
+  delete w.homestead;
+  localStorage.setItem(SAVE, JSON.stringify(w));
+}, SAVE);
+await page.goto(`${BASE}/homestead`, { waitUntil: "networkidle" });
+await page.getByRole("button", { name: /Wooden chair/ }).click();
+{
+  const box = await page.locator('canvas[aria-label="Your farmhouse room"], [aria-label="Your farmhouse room"] canvas').first().boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(500);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+await page.waitForFunction((SAVE) => {
+  const w = JSON.parse(localStorage.getItem(SAVE));
+  return w.coins === 470 && w.homestead?.room.some((p) => p.item === "chair");
+}, SAVE, { timeout: 10000 });
+await page.waitForTimeout(1000);
+await shot("22-homestead");
+
 // The Godot port (only when it's been built with npm run godot:export): it shares the farm
 // save and the grade level, and its tools work. Software rendering runs it at a few frames
 // a second, so the player is placed through the save instead of walked there.

@@ -7,7 +7,7 @@ import { Matrix4, Object3D, type BufferGeometry, type InstancedMesh, type Materi
 import type { Inst } from "./Instanced";
 
 /** CC0 models (Kenney, and Quaternius crops, nature and farm buildings) prepared in public/models by `npm run assets`. */
-export type Pack = "nature" | "town" | "survival" | "food" | "crops" | "characters" | "qnature" | "qbuildings";
+export type Pack = "nature" | "town" | "survival" | "food" | "crops" | "characters" | "qnature" | "qbuildings" | "furniture";
 
 export const model = (pack: Pack, name: string) => `/models/${pack}/${name}.glb`;
 

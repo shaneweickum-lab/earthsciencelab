@@ -350,6 +350,9 @@ for (const [id, color] of Object.entries(SEED_COLORS)) {
   ICONS[`crop_${id}`] = PRODUCE[id];
 }
 
+// Homestead decorations (src/world/decor.json): each one's own model.
+for (const d of await (await fetch("/decor.json")).json()) ICONS[`decor_${d.id}`] = () => glb(`/models/${d.pack}/${d.model}.glb`);
+
 // ───────────────────────── rendering ─────────────────────────
 
 const scene = new THREE.Scene();

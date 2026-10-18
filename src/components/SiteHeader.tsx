@@ -62,6 +62,14 @@ export function SiteHeader() {
               <kbd className="hidden rounded border border-line px-1 text-[10px] text-muted lg:inline">E</kbd>
             </button>
           )}
+          <Link
+            href="/homestead"
+            title="My Homestead"
+            className={`flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-sm font-bold ${path === "/homestead" ? "border-soil bg-soil text-white" : "border-line bg-card hover:border-leaf"}`}
+          >
+            <span>🏡</span>
+            <span className="hidden lg:inline">Homestead</span>
+          </Link>
           <XPBar compact />
           <AccountChip />
         </div>

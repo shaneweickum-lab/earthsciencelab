@@ -13,13 +13,13 @@ import { CROP_LOOKS } from "@/components/world/scene/cropLooks";
 import { AVATARS, DEFAULT_AVATAR } from "./avatars";
 import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, timeOfDay, yearFraction, type Calendar } from "./clock";
 import {
-  act, addItem, applyTool, buy, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
+  act, addItem, applyTool, buy, buyPlot, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
   swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest, enterMine, tileAt, facingTile, craft,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
 import { cropDays, ITEMS, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
 import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
-import { BUILDING_SIZE, FARM, H, MINE_ENTRANCE, MINE_START, MINE_W, TOWN, W } from "./map";
+import { BUILDING_SIZE, FARM, MINE_ENTRANCE, MINE_START, MINE_W, OLD_H, PLOTS, TOWN, W } from "./map";
 import { SPAWNS } from "./nature";
 import { previewAction } from "./preview";
 import { accept, boardRequests, expireBoard, goalLabel, offers, QUESTS, questState, questStatus, rewardText, turnIn } from "./quests";
@@ -209,6 +209,8 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "select": return { state: { ...s, selected: op.i as number } };
     case "enterMine": return { state: enterMine(s, op.floor as number) };
     case "craft": return { state: craft(s, op.id as string) };
+    case "buyPlot": return { state: buyPlot(s, op.id as number) };
+    case "plots": return { state: { ...s, plots: op.ids as number[] } };
     case "selectItem": return { state: { ...s, selected: Math.max(0, s.inventory.findIndex((x) => x?.item === op.item)) } };
     case "give": return { state: addItem(s, op.item as string, op.qty as number, (op.grade as Grade) ?? undefined) ?? s };
     case "act": return { state: act(s) };
@@ -253,6 +255,7 @@ function summary(s: WorldState, text?: string) {
     preview: previewAction(s), tile: t, growth: t ? growthFactor(s, f.x, f.y) : null, grade: t ? expectedGrade(s, t) : null,
     npc: npcInFront(s)?.id ?? null, quests: s.quests ?? null, friends: s.friends ?? null,
     mine: s.mine ? { floor: s.mine.floor, ladderAt: s.mine.ladderAt, buildings: s.mine.buildings } : null, deepest: s.deepest ?? null,
+    plots: s.plots ?? null,
   };
 }
 
@@ -315,6 +318,28 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
   };
   // Grandma Rosa's chest holds the starting tools.
   run({ op: "takeAll", id: "chest" });
+  // The farm starts with one plot. Locked land refuses the hoe until you buy it.
+  run({ op: "selectItem", item: "hoe" });
+  run({ op: "player", x: PLOTS[1].x0 + 1, y: PLOTS[1].y0 - 1, facing: "down" });
+  run({ op: "applyTool" });
+  run({ op: "buyPlot", id: 1 });
+  run({ op: "tile", i: PLOTS[1].y0 * W + PLOTS[1].x0 + 1, patch: { obstacle: null, weeds: false } });
+  run({ op: "applyTool" });
+  run({ op: "buyPlot", id: 1 });
+  // Then the whole field, so the random gardening below has room, and a plot in the South Fields.
+  const field = PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id);
+  run({ op: "plots", ids: field });
+  run({ op: "player", x: PLOTS[12].x0 + 2, y: PLOTS[12].y0 - 1, facing: "down" });
+  run({ op: "applyTool" });
+  run({ op: "buyPlot", id: 12 });
+  run({ op: "plots", ids: [...field, 12] });
+  run({ op: "give", item: "seed_carrot", qty: 3, grade: null });
+  run({ op: "tile", i: PLOTS[12].y0 * W + PLOTS[12].x0 + 2, patch: { obstacle: null, weeds: false } });
+  run({ op: "applyTool" });
+  run({ op: "selectItem", item: "seed_carrot" });
+  run({ op: "applyTool" });
+  run({ op: "player", x: PLOTS[20].x0, y: PLOTS[20].y0 - 1, facing: "down" });
+  run({ op: "applyTool" });
   for (const op of prelude) run(op);
   if (mine) {
     // Open the old mine, then dig down floor by floor, sometimes going straight for the ladder rock.
@@ -446,7 +471,7 @@ describe("Godot playthroughs", () => {
     // The GDScript test builds the same old save itself, so only the results are stored here.
     const s = sleep(newWorld(5));
     const oldW = 40;
-    const oldTiles = Array.from({ length: oldW * H }, (_, i) => ({ ...s.tiles[Math.floor(i / oldW) * W + (i % oldW)], mulch: i % oldW === 20 && Math.floor(i / oldW) === 20 }));
+    const oldTiles = Array.from({ length: oldW * OLD_H }, (_, i) => ({ ...s.tiles[Math.floor(i / oldW) * W + (i % oldW)], mulch: i % oldW === 20 && Math.floor(i / oldW) === 20 }));
     const v3 = { ...s, version: 3, tiles: oldTiles, buildings: [...s.buildings.filter((b) => b.x < 38 && b.kind !== "chest"), { id: "store", kind: "store" as const, x: 30, y: 5, data: {} }] };
     const v1: Record<string, unknown> = { ...v3, version: 1, weather: "sunny" };
     delete v1.settings;

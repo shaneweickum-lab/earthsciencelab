@@ -6,9 +6,10 @@ import {
   act, addItem, buy, countItem, day, discover, growthFactor, loadWorld, movePlayer, newWorld, placeBuilding, saveWorld,
   sellNow, ship, sleep, tick, tileAt, applyTool, interact, pickUpBuilding, lockedInShop, putInChest, takeAllFromChest, takeFromChest,
   WORLD_VERSION, enterMine, leaveMine, isWalkable, buildingAt, cartFloors, craft, recipeStatus, canPickUp,
+  plotLocked, buyPlot, nextPlotPrice, grantPlots, interactTarget,
 } from "./engine";
 import { ITEMS, RECIPES, UPGRADES } from "./items";
-import { idx, MINE_ENTRANCE, MINE_START, MINE_W, mineFloor } from "./map";
+import { H, idx, MINE_ENTRANCE, MINE_START, MINE_W, mineFloor, OLD_H, PLOTS, W } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
 import type { Tile, WeatherId, WorldState } from "./types";
@@ -27,7 +28,8 @@ const X = 15, Y = 20;
 
 /** A world with the player standing above (X, Y) and facing it. */
 function setup(patch: Partial<Tile> = {}, item?: string): WorldState {
-  let s = newWorld(42);
+  // Tests farm anywhere in the field, so own every plot.
+  let s: WorldState = { ...newWorld(42), plots: PLOTS.map((p) => p.id) };
   s = withTile(s, X, Y, { obstacle: null, weeds: false, ...patch });
   s = withTile(s, X, Y - 1, { obstacle: null, weeds: false });
   s = { ...s, player: { x: X, y: Y - 1, facing: "down" } };
@@ -489,6 +491,59 @@ describe("crafting", () => {
     const s = newWorld(42);
     expect(canPickUp(s.buildings.find((b) => b.id === "chest")!)).toBe(false);
     expect(canPickUp({ id: "chest-9", kind: "chest", x: 3, y: 3, data: {} })).toBe(true);
+  });
+});
+
+describe("farm plots", () => {
+  const fieldTile = (s: WorldState, plot: number) => ({ x: PLOTS[plot].x0 + 2, y: PLOTS[plot].y0 + 1 });
+
+  it("start with one plot by the house; the rest are locked", () => {
+    const s = newWorld(42);
+    expect(s.plots).toEqual([0]);
+    expect(plotLocked(s, 12, 14)).toBe(false);
+    expect(plotLocked(s, 20, 20)).toBe(true);
+    expect(plotLocked(s, 40, 20)).toBe(false); // not farmland
+    expect(PLOTS).toHaveLength(36);
+    const { x, y } = fieldTile(s, 4);
+    let t = withTile(s, x, y, { obstacle: null, weeds: false, tilled: false });
+    t = select({ ...t, player: { x, y: y - 1, facing: "down" } }, "hoe");
+    const r = applyTool(t);
+    expect(tileAt(r, x, y)!.tilled).toBe(false);
+    expect(r.messages.at(-1)!.text).toMatch(/isn't yours/);
+    expect(interactTarget({ ...t, player: { x, y: y - 1, facing: "down" } })).toBe("plot");
+  });
+
+  it("can be bought, each one costing more", () => {
+    let s = { ...newWorld(42), coins: 1000 };
+    expect(nextPlotPrice(s)).toBe(143);
+    s = buyPlot(s, 5);
+    expect(s.plots).toEqual([0, 5]);
+    expect(s.coins).toBe(1000 - 143);
+    expect(nextPlotPrice(s)).toBeGreaterThan(143);
+    expect(buyPlot(s, 5)).toBe(s);
+    const poor = buyPlot({ ...s, coins: 10 }, 6);
+    expect(poor.plots).toEqual([0, 5]);
+  });
+
+  it("are quest rewards too", () => {
+    const s = grantPlots(newWorld(42), 2);
+    expect(s.plots).toEqual([0, 1, 2]);
+  });
+
+  it("grow the farm south, and older farms keep their whole field", () => {
+    const s = newWorld(42);
+    expect(s.tiles).toHaveLength(W * H);
+    expect(tileAt(s, 20, 45)!.ground).toBe("farm");
+    expect(tileAt(s, 9, 34)!.ground).toBe("path"); // through the forest belt
+    const old = { ...s, version: 7, tiles: s.tiles.slice(0, W * OLD_H).map((t, i) => (i === idx(9, 34) ? { ...t, ground: "forest" as const, obstacle: "tree" as const } : t)) } as WorldState;
+    delete old.plots;
+    const up = loadWorld(JSON.stringify(old))!;
+    expect(up.version).toBe(WORLD_VERSION);
+    expect(up.tiles).toHaveLength(W * H);
+    expect(up.plots).toEqual(PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id));
+    expect(tileAt(up, 9, 34)!.ground).toBe("path");
+    expect(plotLocked(up, 20, 20)).toBe(false);
+    expect(plotLocked(up, 20, 45)).toBe(true);
   });
 });
 

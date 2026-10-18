@@ -7,6 +7,9 @@ extends Node
 ## - Godot posts {type: "soil:ready"} once it starts, {type: "soil:recordFarm", ...} for badges,
 ##   and {type: "soil:setGrade", level} when the player changes the level in the game.
 ##   Godot never writes the site's progress key itself.
+## - From the farmhouse, Godot saves and posts {type: "soil:openHomestead"}; the page shows
+##   My Homestead (which edits the same save) and posts {type: "soil:reload"} when it closes,
+##   so Godot reloads the save and keeps the coins spent and decorations placed there.
 ## Outside a browser (the editor, tests, desktop), the grade level is "middle".
 
 signal grade_changed(level: String)
@@ -56,6 +59,8 @@ func _message(args: Array) -> void:
 	if data is Dictionary and data.get("type") == "grade" and data.get("level") in LEVELS:
 		grade_level = data.level
 		grade_changed.emit(grade_level)
+	if data is Dictionary and data.get("type") == "soil:reload":
+		Game.reload_save()
 
 
 func _event_data(event: JavaScriptObject) -> Variant:

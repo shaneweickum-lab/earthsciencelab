@@ -2,7 +2,7 @@ import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { cropDays, ITEMS, item, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type Recipe, type Station, type ToolUse } from "./items";
-import { BUILDING_SIZE, CHEST_SIZE, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { BUILDING_SIZE, CHEST_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
@@ -10,7 +10,7 @@ import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, typ
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 7;
+export const WORLD_VERSION = 8;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -53,6 +53,7 @@ export function newWorld(seed = Date.now() % 2147483647, settings?: Partial<Game
     critters: [],
     journal: [],
     harvests: 0,
+    plots: [0],
     weather: { 1: weatherFor(seed, 1, cfg), 2: weatherFor(seed, 2, cfg) },
     log: null,
     messages: [],
@@ -144,7 +145,7 @@ export function facingTile(state: WorldState) {
   return { x: p.x + dx, y: p.y + dy };
 }
 
-function say(state: WorldState, text: string): WorldState {
+export function say(state: WorldState, text: string): WorldState {
   return { ...state, messages: [...state.messages, { text, at: state.minute }].slice(-6) };
 }
 
@@ -637,6 +638,7 @@ export function applyTool(state: WorldState): WorldState {
   const { x, y } = facingTile(state);
   const t = tileAt(state, x, y);
   if (!t) return state;
+  if (plotLocked(state, x, y)) return say(state, "This plot isn't yours yet. Press E to see its price.");
 
   if (def.kind === "kit") return placeBuilding(state, state.selected, x, y);
   if (def.kind === "seed") return plant(state, x, y, def.crop!);
@@ -812,7 +814,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | "plot" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -823,6 +825,7 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "shippingBin") return "shipping";
   if (b?.kind === "noticeBoard") return "board";
   if (b?.kind === "chest") return "chest";
+  if (!b && plotLocked(state, x, y)) return "plot";
   if (b && b.kind in STATIONS) return "craft";
   // Once you've been deep enough, the mine cart at the entrance can take you down.
   if (b?.kind === "mineEntrance" && mineOpen(state) && (state.deepest ?? 0) >= 5) return "mine";
@@ -1030,6 +1033,7 @@ export function canPlace(state: WorldState, kind: BuildingKind, x: number, y: nu
     const t = tileAt(state, xx, yy);
     if (!t) return "Too close to the edge.";
     if (xx >= FARM_W) return "Build on your own farm, not in town.";
+    if (plotLocked(state, xx, yy)) return "That plot isn't yours yet.";
     if (t.ground === "water" || t.ground === "forest") return "Can't build on water or in the forest.";
     if (t.obstacle) return `Clear the ${t.obstacle} first.`;
     if (t.crop) return "Something is planted there.";
@@ -1117,6 +1121,35 @@ export function swapSlots(state: WorldState, a: number, b: number): WorldState {
   const inv = [...state.inventory];
   [inv[a], inv[b]] = [inv[b], inv[a]];
   return { ...state, inventory: inv };
+}
+
+// ───────────────────────── farm plots ─────────────────────────
+
+export const ownedPlots = (state: WorldState) => state.plots ?? [0];
+
+/** True on farmland in a plot you don't own yet (the mine and town are never locked). */
+export function plotLocked(state: WorldState, x: number, y: number): boolean {
+  if (state.mine) return false;
+  const p = plotAt(x, y);
+  return p !== null && !ownedPlots(state).includes(p);
+}
+
+/** What the next plot costs. */
+export const nextPlotPrice = (state: WorldState) => plotPrice(ownedPlots(state).length);
+
+/** Buy a plot of farmland. */
+export function buyPlot(state: WorldState, id: number): WorldState {
+  if (!PLOTS[id] || ownedPlots(state).includes(id)) return state;
+  const price = nextPlotPrice(state);
+  if (state.coins < price) return say(state, `This plot costs ${price} coins.`);
+  return say({ ...state, coins: state.coins - price, plots: [...ownedPlots(state), id] }, `You bought a new plot for ${price} coins! Clear it and get planting.`);
+}
+
+/** Unlock the next plots for free (a quest reward), nearest the house first. */
+export function grantPlots(state: WorldState, n: number): WorldState {
+  const owned = ownedPlots(state);
+  const add = PLOTS.map((p) => p.id).filter((id) => !owned.includes(id)).slice(0, n);
+  return add.length ? { ...state, plots: [...owned, ...add] } : state;
 }
 
 // ───────────────────────── crafting ─────────────────────────
@@ -1236,11 +1269,11 @@ export function putInChest(state: WorldState, id: string, invSlot: number): Worl
 
 /** Saves from before the town: keep the farm, rebuild the map at the new size, and add the town. */
 function addTown(old: WorldState): WorldState {
-  const oldW = old.tiles.length / H;
+  const oldW = old.tiles.length / OLD_H;
   const fresh = createMap(old.seed);
   const tiles = fresh.tiles.map((t, i) => {
     const x = i % W, y = Math.floor(i / W);
-    return x < FARM_W && x < oldW ? old.tiles[y * oldW + x] : t;
+    return x < FARM_W && x < oldW && y < OLD_H ? old.tiles[y * oldW + x] : t;
   });
   // The store moved into town; the farm keeps everything you built.
   const farm = old.buildings.filter((b) => b.kind !== "store" && b.x < FARM_W);
@@ -1283,6 +1316,21 @@ function addChest(old: WorldState): WorldState {
   return { ...s, quests: { ...qs, done: [...qs.done, ...unlocks] } };
 }
 
+/**
+ * Version 8 split the farmland into plots and added the South Fields below the old map. Older
+ * farms keep the whole field they had, gain the new rows, and get a path cut through the forest.
+ */
+function addSouthFields(old: WorldState): WorldState {
+  let tiles = old.tiles;
+  if (tiles.length === W * OLD_H) tiles = [...tiles, ...createMap(old.seed).tiles.slice(W * OLD_H)];
+  let s: WorldState = { ...old, version: 8, tiles, plots: PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id) };
+  for (const [x, y] of SOUTH_PATH) {
+    if (buildingAt(s, x, y) || s.tiles[idx(x, y)].crop) continue;
+    s = setTile(s, x, y, (t) => ({ ...unmarked(t), ground: "path", obstacle: null, weeds: false }));
+  }
+  return s;
+}
+
 /** Version 1 saves had no settings and stored weather as a plain label. */
 function migrateV1(old: WorldState): WorldState {
   const settings = normalizeSettings(undefined);
@@ -1307,11 +1355,13 @@ export function loadWorld(raw: string | null): WorldState | null {
     let up = s.version === 1 ? migrateV1(s) : s;
     // Version 4 grew the map east to add the town.
     if (up.version < 4) up = addTown(up);
+    if (up.tiles.length === W * OLD_H) up = { ...up, tiles: [...up.tiles, ...createMap(up.seed).tiles.slice(W * OLD_H)] };
     if (up.tiles.length !== W * H) return null;
     if (up.version < 5) up = addLandmarks(up);
     if (up.version < 6) up = addChest(up);
     // Version 7 added the mine entrance past the town.
     if (up.version < 7) up = addLandmarks(up, 7);
+    if (up.version < 8) up = addSouthFields(up);
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

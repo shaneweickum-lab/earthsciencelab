@@ -20,6 +20,7 @@ import { model } from "./models";
 import { MineScene } from "./Mine";
 import { Obstacles, Pond, Terrain } from "./Terrain";
 import { HeldItem } from "./HeldItem";
+import { LockedPlots } from "./Plots";
 import type { ActionAnim } from "@/world/preview";
 
 const SPEED = 4.2; // tiles per second
@@ -432,6 +433,7 @@ function World() {
 
 function Surface() {
   const tiles = useWorld((s) => s.world!.tiles);
+  const plots = useWorld((s) => s.world!.plots ?? [0]);
   const buildings = useWorld((s) => s.world!.buildings);
   const critters = useWorld((s) => s.world!.critters);
   const season = useWorld((s) => seasonOf(dayOf(s.world!.minute), s.world!.settings));
@@ -445,6 +447,7 @@ function Surface() {
       <Obstacles tiles={tiles} season={season} buildings={buildings} />
       <Crops tiles={tiles} />
       <Buildings buildings={buildings} />
+      <LockedPlots owned={plots} />
       <Critters critters={critters} />
       <Player />
       <Townsfolk />

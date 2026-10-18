@@ -199,6 +199,8 @@ static func _take_items(s: Dictionary, items: Array) -> Dictionary:
 
 static func _give_reward(s: Dictionary, giver: String, r: Dictionary) -> Dictionary:
 	var next := Js.with(s, {"coins": s.coins + r.get("coins", 0)})
+	if r.get("plots"):
+		next = World.grant_plots(next, int(r.plots))
 	for it in r.get("items", []):
 		var got = World.add_item(next, it.item, int(it.qty))
 		if got != null:
@@ -227,6 +229,8 @@ static func reward_text(r: Dictionary) -> String:
 		parts.append("❤️ +%s heart%s" % [Js.num(h), "" if r.friendship == Town.POINTS_PER_HEART else "s"])
 	if r.get("everyone"):
 		parts.append("❤️ friendship with everyone")
+	if r.get("plots"):
+		parts.append("🌱 %s farm plot%s" % [Js.num(r.plots), "s" if r.plots > 1 else ""])
 	return " · ".join(parts)
 
 

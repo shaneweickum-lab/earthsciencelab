@@ -1,5 +1,6 @@
 "use client";
 
+import { HomesteadOverlay } from "@/components/homestead/HomesteadOverlay";
 import { useState } from "react";
 import { dayOf, formatDate, seasonLabel, timeOfDay } from "@/world/clock";
 import { durability, HOTBAR_SIZE, sleep, swapSlots, todayClimate, tomorrowClimate } from "@/world/engine";
@@ -131,6 +132,7 @@ export function HouseMenu() {
         </button>
         <button className="btn btn-ghost justify-start" onClick={() => open("tv")}>📺 Watch the weather channel</button>
         <button className="btn btn-ghost justify-start" onClick={() => open("journal")}>📓 Read your Nature Journal</button>
+        <button className="btn btn-ghost justify-start" onClick={() => open("homestead")}>🏡 My Homestead: decorate your room and yard</button>
         <details className="rounded-xl border border-line px-3 py-2 text-sm">
           <summary className="cursor-pointer font-bold">👕 Change your look</summary>
           <div className="mt-2"><AvatarPicker /></div>
@@ -256,4 +258,12 @@ export function Bag() {
       </div>
     </Modal>
   );
+}
+
+/** My Homestead, opened from the farmhouse: edits the farm you're playing. */
+export function HomesteadMenu() {
+  const w = useWorld((s) => s.world!);
+  const update = useWorld((s) => s.update);
+  const close = useWorld((s) => s.close);
+  return <HomesteadOverlay world={w} update={update} onClose={() => { useWorld.getState().save(); close(); }} />;
 }

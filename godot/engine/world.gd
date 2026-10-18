@@ -2,7 +2,7 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 7
+const WORLD_VERSION := 8
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
@@ -59,6 +59,7 @@ static func new_world(seed: int, settings: Variant = null) -> Dictionary:
 		"critters": [],
 		"journal": [],
 		"harvests": 0,
+		"plots": [0],
 		"weather": {"1": Weather.weather_for(seed, 1, cfg), "2": Weather.weather_for(seed, 2, cfg)},
 		"log": null,
 		"messages": [],
@@ -725,6 +726,8 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 	var t = tile_at(state, x, y)
 	if t == null:
 		return state
+	if plot_locked(state, x, y):
+		return say(state, "This plot isn't yours yet. Press E to see its price.")
 
 	if def.kind == "kit":
 		return place_building(state, int(state.selected), x, y)
@@ -930,7 +933,7 @@ static func interact_target(state: Dictionary) -> String:
 	var f := facing_tile(state)
 	var b = building_at(state, f.x, f.y)
 	if b == null:
-		return ""
+		return "plot" if plot_locked(state, f.x, f.y) else ""
 	match b.kind:
 		"house":
 			return "house"
@@ -1191,6 +1194,8 @@ static func can_place(state: Dictionary, kind: String, x: int, y: int) -> String
 				return "Too close to the edge."
 			if xx >= WorldMap.FARM_W:
 				return "Build on your own farm, not in town."
+			if plot_locked(state, xx, yy):
+				return "That plot isn't yours yet."
 			if t.ground == "water" or t.ground == "forest":
 				return "Can't build on water or in the forest."
 			if t.obstacle:
@@ -1320,6 +1325,45 @@ static func swap_slots(state: Dictionary, a: int, b: int) -> Dictionary:
 	inv[a] = inv[b]
 	inv[b] = tmp
 	return Js.with(state, {"inventory": inv})
+
+
+# ───────────────────────── farm plots ─────────────────────────
+
+static func owned_plots(state: Dictionary) -> Array:
+	var p = state.get("plots")
+	return p if p is Array else [0]
+
+
+## True on farmland in a plot you don't own yet (the mine and town are never locked).
+static func plot_locked(state: Dictionary, x: int, y: int) -> bool:
+	if state.get("mine") != null:
+		return false
+	var p := WorldMap.plot_at(x, y)
+	return p >= 0 and not Js.includes(owned_plots(state), p)
+
+
+static func next_plot_price(state: Dictionary) -> int:
+	return WorldMap.plot_price(owned_plots(state).size())
+
+
+## Buy a plot of farmland.
+static func buy_plot(state: Dictionary, id: int) -> Dictionary:
+	if id < 0 or id >= WorldMap.plots().size() or Js.includes(owned_plots(state), id):
+		return state
+	var price := next_plot_price(state)
+	if state.coins < price:
+		return say(state, "This plot costs %d coins." % price)
+	return say(Js.with(state, {"coins": state.coins - price, "plots": owned_plots(state) + [id]}), "You bought a new plot for %d coins! Clear it and get planting." % price)
+
+
+## Unlock the next plots for free (a quest reward), nearest the house first.
+static func grant_plots(state: Dictionary, n: int) -> Dictionary:
+	var owned := owned_plots(state)
+	var add := []
+	for p in WorldMap.plots():
+		if add.size() < n and not Js.includes(owned, p.id):
+			add.append(p.id)
+	return Js.with(state, {"plots": owned + add}) if add.size() else state
 
 
 # ───────────────────────── crafting ─────────────────────────
@@ -1491,13 +1535,13 @@ static func put_in_chest(state: Dictionary, id: String, inv_slot: int) -> Dictio
 
 ## Saves from before the town: keep the farm, rebuild the map at the new size, and add the town.
 static func _add_town(old: Dictionary) -> Dictionary:
-	var old_w: int = old.tiles.size() / WorldMap.H
+	var old_w: int = old.tiles.size() / WorldMap.OLD_H
 	var fresh := WorldMap.create_map(int(old.seed))
 	var tiles := []
 	for i in WorldMap.W * WorldMap.H:
 		var x := i % WorldMap.W
 		var y := i / WorldMap.W
-		tiles.append(old.tiles[y * old_w + x] if x < WorldMap.FARM_W and x < old_w else fresh.tiles[i])
+		tiles.append(old.tiles[y * old_w + x] if x < WorldMap.FARM_W and x < old_w and y < WorldMap.OLD_H else fresh.tiles[i])
 	# The store moved into town; the farm keeps everything you built.
 	var farm: Array = old.buildings.filter(func(b): return b.kind != "store" and b.x < WorldMap.FARM_W)
 	var town: Array = fresh.buildings.filter(func(b): return not farm.any(func(f): return f.id == b.id))
@@ -1541,6 +1585,25 @@ static func _add_chest(old: Dictionary) -> Dictionary:
 	return Js.with(s, {"quests": Js.with(qs, {"done": done})})
 
 
+## Version 8 split the farmland into plots and added the South Fields below the old map. Older
+## farms keep the whole field they had, gain the new rows, and get a path cut through the forest.
+static func _add_south_fields(old: Dictionary) -> Dictionary:
+	var field := []
+	for p in WorldMap.plots():
+		if p.y1 < WorldMap.OLD_H:
+			field.append(p.id)
+	var s := Js.with(old, {"version": 8, "plots": field})
+	for p in WorldMap.south_path():
+		if building_at(s, p[0], p[1]) != null or s.tiles[WorldMap.idx(p[0], p[1])].crop != null:
+			continue
+		s = _set_tile(s, p[0], p[1], func(t):
+			var out := Js.with(t, {"ground": "path", "obstacle": null, "weeds": false})
+			out.erase("hits")
+			out.erase("regrow")
+			return out)
+	return s
+
+
 ## Version 1 saves had no settings and stored weather as a plain label.
 static func _migrate_v1(old: Dictionary) -> Dictionary:
 	var settings := Settings.normalize(null)
@@ -1574,6 +1637,8 @@ static func load_world(raw: String) -> Variant:
 	# Version 4 grew the map east to add the town.
 	if up.version < 4:
 		up = _add_town(up)
+	if up.tiles.size() == WorldMap.W * WorldMap.OLD_H:
+		up = Js.with(up, {"tiles": up.tiles + WorldMap.create_map(int(up.seed)).tiles.slice(WorldMap.W * WorldMap.OLD_H)})
 	if up.tiles.size() != WorldMap.W * WorldMap.H:
 		return null
 	if up.version < 5:
@@ -1583,6 +1648,8 @@ static func load_world(raw: String) -> Variant:
 	# Version 7 added the mine entrance past the town.
 	if up.version < 7:
 		up = _add_landmarks(up, 7)
+	if up.version < 8:
+		up = _add_south_fields(up)
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null

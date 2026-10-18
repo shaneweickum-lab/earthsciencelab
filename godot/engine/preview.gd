@@ -40,6 +40,9 @@ static func preview_action(state: Dictionary) -> Dictionary:
 		return _r("Craft", "Use the %s." % World.STATIONS[b.kind].to_lower(), true)
 	if World._crit_at(state, x, y) != null:
 		return _r("Observe", "Look closely and add it to your Nature Journal.", true)
+	if b == null and World.plot_locked(state, x, y):
+		var price := World.next_plot_price(state)
+		return _r("Buy", "This plot isn't yours yet. Press E to buy it for %d coins, or earn it from a quest." % price, state.coins >= price)
 	var c = t.crop
 
 	if not slot:
