@@ -255,32 +255,36 @@ function sameView(mine: string, theirs: string) {
 /** What a farmer just said in chat, over their head for a few seconds (unless you've muted them). */
 function ChatBubble({ pid }: { pid: string }) {
   const [, tick] = useState(0);
-  // The latest thing they said, as "id|arrived" (a string, so the hook only re-renders on a new message).
-  const key = useMulti((s) => {
-    if (!s.world || s.muted.includes(pid)) return "";
+  // Their latest message that arrived recently, by id (a number, so the hook only re-renders for a new one).
+  const id = useMulti((s) => {
+    if (!s.world || s.muted.includes(pid)) return 0;
     const c = (s.world.chat ?? []).findLast((m) => m.pid === pid && !m.hidden);
-    return c && Date.now() - (s.chatSeen[c.id] ?? 0) < BUBBLE_MS ? `${c.id}|${s.chatSeen[c.id]}` : "";
+    return c && Date.now() - (s.chatSeen[c.id] ?? 0) < FRESH_MS ? c.id : 0;
   });
-  const said = useMemo(() => {
-    if (!key) return null;
-    const [id, at] = key.split("|").map(Number);
-    const c = useMulti.getState().world?.chat?.find((m) => m.id === id);
-    return c ? { id, at, text: cleanChat(c.text) } : null;
-  }, [key]);
+  // The bubble's time starts when it's first drawn, so a slow computer still shows it in full.
+  const shown = useRef({ id: 0, at: 0 });
+  if (id && shown.current.id !== id) shown.current = { id, at: Date.now() };
+  const text = useMemo(() => {
+    const c = id ? useMulti.getState().world?.chat?.find((m) => m.id === id) : null;
+    return c ? cleanChat(c.text) : "";
+  }, [id]);
   useEffect(() => {
-    if (!said) return;
-    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, BUBBLE_MS - (Date.now() - said.at)) + 50);
+    if (!id) return;
+    const t = setTimeout(() => tick((n) => n + 1), BUBBLE_MS + 50);
     return () => clearTimeout(t);
-  }, [said]);
-  if (!said || Date.now() - said.at >= BUBBLE_MS) return null;
+  }, [id]);
+  if (!id || !text || Date.now() - shown.current.at >= BUBBLE_MS) return null;
   return (
     <Html position={[0, 2.05, 0]} center zIndexRange={[31, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
-      <div className="max-w-[220px] rounded-2xl border-2 border-soil-dark/20 bg-white px-2.5 py-1 text-center text-xs font-bold shadow-lg">{said.text}</div>
+      <div className="w-max max-w-[220px] rounded-2xl border-2 border-soil-dark/20 bg-white px-2.5 py-1 text-center text-xs font-bold shadow-lg">{text}</div>
     </Html>
   );
 }
 
-const BUBBLE_MS = 5000;
+/** Messages older than this when they arrive (or from before you joined) don't pop up. */
+const FRESH_MS = 30_000;
+/** Long enough to read a full message. */
+const BUBBLE_MS = 7000;
 
 /** Another farmer in a shared world, gliding to where they last said they were. */
 function OtherFarmer({ pid, avatar, name }: { pid: string; avatar: string; name: string }) {
