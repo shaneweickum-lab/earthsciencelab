@@ -111,3 +111,16 @@ export function previewAction(state: WorldState): ActionPreview {
   }
   return { label: "", text: "", ok: false };
 }
+
+/** The farmer's animation for pressing Space here: a swing, a careful use, a pick-up, or none. */
+export type ActionAnim = "swing" | "use" | "pickup";
+const ANIMS: Record<string, ActionAnim> = {
+  Till: "swing", Cut: "swing", Clear: "swing", Chop: "swing", Break: "swing", "Un-till": "swing",
+  Water: "use", Refill: "use", Plant: "use", Apply: "use", Test: "use", Build: "use", Dig: "use",
+  Harvest: "pickup", Observe: "pickup", Look: "pickup",
+};
+
+export function actionAnim(state: WorldState): ActionAnim | null {
+  const p = previewAction(state);
+  return p.ok ? ANIMS[p.label] ?? null : null;
+}

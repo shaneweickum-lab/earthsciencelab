@@ -137,3 +137,16 @@ static func preview_action(state: Dictionary) -> Dictionary:
 				return _r("Test", "Test the garden soil.", false)
 			return _r("Test", "Infiltration test: time how fast water soaks in (water holding).", true)
 	return _r("", "", false)
+
+
+## The farmer's animation for pressing Space here: "swing", "use", "pickup", or "" for none.
+const ANIMS := {
+	"Till": "swing", "Cut": "swing", "Clear": "swing", "Chop": "swing", "Break": "swing", "Un-till": "swing",
+	"Water": "use", "Refill": "use", "Plant": "use", "Apply": "use", "Test": "use", "Build": "use", "Dig": "use",
+	"Harvest": "pickup", "Observe": "pickup", "Look": "pickup",
+}
+
+
+static func action_anim(state: Dictionary) -> String:
+	var p := preview_action(state)
+	return ANIMS.get(p.label, "") if p.ok else ""
