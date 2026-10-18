@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { startOfDay } from "./clock";
-import { addItem, buildingAt, countItem, isWalkable, loadWorld, newWorld, saveWorld, sleep, WORLD_VERSION } from "./engine";
+import { addItem, buildingAt, countItem, isWalkable, LESSONS, loadWorld, newWorld as freshFarm, saveWorld, sleep, WORLD_VERSION } from "./engine";
 import { FARM_W, H, idx, OLD_H, TOWN, W } from "./map";
 import { accept, boardRequests, expireBoard, goalProgress, offers, QUEST_BY_ID, questState, questStatus, turnIn } from "./quests";
 import { ITEMS } from "./items";
 import { friendship, giveGift, hearts, NPC_BY_ID, NPCS, npcInFront, npcPose, route, talk } from "./town";
 import type { WorldState } from "./types";
+
+/** A farm that's done Grandma Rosa's lessons, so the townsfolk offer their quests. */
+const newWorld = (seed?: number): WorldState => ({ ...freshFarm(seed), quests: { active: [], done: [...LESSONS] } });
 
 const at = (s: WorldState, hour: number, day = 1) => ({ ...s, minute: startOfDay(day) + (hour - 6) * 60 });
 
@@ -88,10 +91,10 @@ describe("quests", () => {
     expect(offers(s, "amara").map((q) => q.id)).toEqual(["feed-the-soil"]);
     expect(offers(s, "luis").map((q) => q.id)).toEqual(["dig-deeper", "first-carrots"]);
     expect(offers(s, "pip").map((q) => q.id)).toEqual([]); // worms need a shovel; the rainbow needs 2 hearts
-    const tools = { ...s, quests: { active: [], done: ["dig-deeper", "feed-the-soil", "soak-it-up"] } };
+    const tools = { ...s, quests: { active: [], done: [...LESSONS, "dig-deeper", "feed-the-soil", "soak-it-up"] } };
     expect(offers(tools, "amara").map((q) => q.id)).toEqual(["soil-check"]);
     expect(offers(tools, "pip").map((q) => q.id)).toEqual(["pip-worms"]);
-    const done = { ...s, quests: { active: [], done: ["dig-deeper", "feed-the-soil", "soak-it-up", "soil-check"] } };
+    const done = { ...s, quests: { active: [], done: [...LESSONS, "dig-deeper", "feed-the-soil", "soak-it-up", "soil-check"] } };
     expect(offers(done, "amara").map((q) => q.id)).toEqual(["sour-soil", "community-garden"]);
   });
 

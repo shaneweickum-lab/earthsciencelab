@@ -2,7 +2,7 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 8
+const WORLD_VERSION := 9
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
@@ -28,6 +28,17 @@ static func _clamp(v: float) -> float:
 
 
 # ───────────────────────── setup ─────────────────────────
+
+## Grandma Rosa's lessons, the tutorial (see quests.gd). A new farm starts on the first.
+const LESSONS := ["lesson-1", "lesson-2", "lesson-3", "lesson-4", "lesson-5", "lesson-6", "lesson-7", "lesson-8", "lesson-9", "lesson-10"]
+
+
+## Count something the player did, for lessons that ask you to do it a few times.
+static func tally(state: Dictionary, key: String, n := 1) -> Dictionary:
+	var t: Dictionary = state.get("tally", {}).duplicate() if state.get("tally") is Dictionary else {}
+	t[key] = t.get(key, 0) + n
+	return Js.with(state, {"tally": t})
+
 
 static func new_world(seed: int, settings: Variant = null) -> Dictionary:
 	var cfg := Settings.normalize(settings)
@@ -60,6 +71,7 @@ static func new_world(seed: int, settings: Variant = null) -> Dictionary:
 		"journal": [],
 		"harvests": 0,
 		"plots": [0],
+		"quests": {"active": [{"id": LESSONS[0], "accepted": Clock.day_of(Clock.start_of_day(1)), "step": 0}], "done": []},
 		"weather": {"1": Weather.weather_for(seed, 1, cfg), "2": Weather.weather_for(seed, 2, cfg)},
 		"log": null,
 		"messages": [],
@@ -574,7 +586,7 @@ static func _run_night(state: Dictionary) -> Dictionary:
 static func sleep(state: Dictionary) -> Dictionary:
 	var late := Clock.time_of_day(state.minute) >= 24 * 60
 	var d := day(state) + 1
-	var s := _surface(_start_day(_run_night(state), d))
+	var s := _surface(_start_day(_run_night(tally(state, "slept")), d))
 	return Js.with(s, {
 		"energy": Js.round(s.maxEnergy * 0.8) if late else s.maxEnergy,
 		"player": {"x": 10, "y": 9, "facing": "down"},
@@ -760,7 +772,7 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 				return say(state, "Cut the weeds with the scythe first.")
 			if t.tilled:
 				return say(state, "This soil is already tilled.")
-			var tilled := _set_tile(paid, x, y, func(tt):
+			var tilled := _set_tile(tally(paid, "tilled"), x, y, func(tt):
 				var soil: Dictionary = tt.soil
 				if tillage:
 					soil = Js.with(soil, {"structure": _clamp(soil.structure - 2), "om": _clamp(soil.om - 0.5), "life": _clamp(soil.life - 1)})
@@ -781,7 +793,7 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 			return _set_tile(Js.with(paid, {"water": state.water - 1}), x, y, func(tt): return Js.with(tt, {"moisture": _clamp(tt.moisture + 45)}))
 		"scythe":
 			if t.weeds:
-				var got = add_item(_set_tile(paid, x, y, func(tt): return Js.with(tt, {"weeds": false})), "fiber", 1)
+				var got = add_item(_set_tile(tally(paid, "weeds"), x, y, func(tt): return Js.with(tt, {"weeds": false})), "fiber", 1)
 				return say(got, "Cut weeds (+1 fiber).") if got else say(state, "Your bag is full.")
 			if t.crop and t.crop.dead:
 				var got = add_item(_set_tile(paid, x, y, func(tt): return Js.with(tt, {"crop": null})), "fiber", 1)
@@ -1160,7 +1172,7 @@ static func sell_now(state: Dictionary, slot_index: int, qty: int) -> Dictionary
 	inv[slot_index] = Js.with(s, {"qty": s.qty - n}) if s.qty - n > 0 else null
 	var coins := Items.sell_price(def, s.get("grade"), state.organic) * n
 	var grade = s.get("grade")
-	return say(Js.with(state, {"inventory": inv, "coins": state.coins + coins}), "Sold %d %s%s for %s coins." % [n, def.name, " (grade %s)" % grade if grade else "", Js.num(coins)])
+	return say(Js.with(tally(state, "sold"), {"inventory": inv, "coins": state.coins + coins}), "Sold %d %s%s for %s coins." % [n, def.name, " (grade %s)" % grade if grade else "", Js.num(coins)])
 
 
 static func ship(state: Dictionary, slot_index: int) -> Dictionary:
@@ -1178,7 +1190,7 @@ static func ship(state: Dictionary, slot_index: int) -> Dictionary:
 		shipping = state.shipping.map(func(o): return Js.with(o, {"qty": o.qty + s.qty}) if same.call(o) else o)
 	else:
 		shipping = state.shipping + [s.duplicate()]
-	return say(Js.with(state, {"inventory": inv, "shipping": shipping}), "Put %s %s in the shipping bin. You'll be paid overnight." % [Js.num(s.qty), def.name])
+	return say(Js.with(tally(state, "sold"), {"inventory": inv, "shipping": shipping}), "Put %s %s in the shipping bin. You'll be paid overnight." % [Js.num(s.qty), def.name])
 
 
 # ───────────────────────── building ─────────────────────────
@@ -1587,6 +1599,16 @@ static func _add_chest(old: Dictionary) -> Dictionary:
 
 ## Version 8 split the farmland into plots and added the South Fields below the old map. Older
 ## farms keep the whole field they had, gain the new rows, and get a path cut through the forest.
+## Version 9 added Grandma Rosa's lessons. Older farms already know the ropes, so they're done.
+static func _finish_lessons(old: Dictionary) -> Dictionary:
+	var qs: Dictionary = old.get("quests") if old.get("quests") is Dictionary else {"active": [], "done": []}
+	var done: Array = qs.done.duplicate()
+	for l in LESSONS:
+		if not l in done:
+			done.append(l)
+	return Js.with(old, {"version": 9, "quests": Js.with(qs, {"done": done})})
+
+
 static func _add_south_fields(old: Dictionary) -> Dictionary:
 	var field := []
 	for p in WorldMap.plots():
@@ -1650,6 +1672,8 @@ static func load_world(raw: String) -> Variant:
 		up = _add_landmarks(up, 7)
 	if up.version < 8:
 		up = _add_south_fields(up)
+	if up.version < 9:
+		up = _finish_lessons(up)
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null

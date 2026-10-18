@@ -19,6 +19,10 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": Js.with(s, {"selected": int(op.i)})}
 		"enterMine":
 			return {"state": World.enter_mine(s, int(op.floor))}
+		"claimLesson":
+			return {"state": Quests.claim_lesson(s)}
+		"skipTutorial":
+			return {"state": Quests.skip_tutorial(s)}
 		"buyPlot":
 			return {"state": World.buy_plot(s, int(op.id))}
 		"plots":
@@ -102,6 +106,7 @@ static func summary(s: Dictionary, text: Variant) -> Dictionary:
 		"mine": {"floor": s.mine.floor, "ladderAt": s.mine.ladderAt, "buildings": s.mine.buildings} if s.get("mine") != null else null,
 		"deepest": s.get("deepest"),
 		"plots": s.get("plots"),
+		"tally": s.get("tally"),
 	}
 
 

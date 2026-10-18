@@ -216,19 +216,19 @@ export function QuestLog() {
         <ul className="space-y-2">
           {qs.active.map((a) => {
             const st = questStatus(w, a);
-            const who = a.board ? "Notice board" : NPC_BY_ID[st.giver].short;
+            const who = a.board ? "Notice board" : st.giver === "rosa" ? "Grandma Rosa's note" : NPC_BY_ID[st.giver].short;
             return (
               <li key={a.id} className="rounded-xl border border-line p-3 text-sm">
                 <p className="font-black">{st.title} <span className="font-normal text-muted">· {who}</span></p>
                 <QuestStep w={w} a={a} />
-                {st.progress.done && <p className="mt-1 text-xs font-black text-leaf">Ready! Go see {who === "Notice board" ? "the notice board" : who}.</p>}
+                {st.progress.done && <p className="mt-1 text-xs font-black text-leaf">{st.giver === "rosa" ? "Ready! Claim it on Grandma's note." : `Ready! Go see ${who === "Notice board" ? "the notice board" : who}.`}</p>}
                 <p className="mt-1 text-[11px] text-muted">Reward: {rewardText(st.reward)}</p>
               </li>
             );
           })}
         </ul>
       )}
-      <p className="mt-3 text-xs text-muted">Finished: {qs.done.filter((id) => !id.startsWith("board-")).length} story quests, {qs.done.filter((id) => id.startsWith("board-")).length} notice-board requests.</p>
+      <p className="mt-3 text-xs text-muted">Finished: {qs.done.filter((id) => !id.startsWith("board-") && !id.startsWith("lesson-")).length} story quests, {qs.done.filter((id) => id.startsWith("board-")).length} notice-board requests.</p>
     </Modal>
   );
 }

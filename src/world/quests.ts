@@ -1,7 +1,7 @@
 import { nextRandom } from "@/game/rng";
 import type { CropId } from "@/game/crops";
 import { dayOf, seasonOf } from "./clock";
-import { addItem, grantPlots } from "./engine";
+import { addItem, grantPlots, LESSONS, say } from "./engine";
 import { GRADES } from "./grades";
 import { ITEMS, sellPrice, WORLD_CROPS } from "./items";
 import { FARM_W, TOWN, W } from "./map";
@@ -19,7 +19,9 @@ export type Goal =
   | { kind: "gardenPlanted"; crop: CropId; count: number }
   | { kind: "farmPlanted"; count: number }
   | { kind: "fedSpots"; count: number }
-  | { kind: "wetSpots"; count: number };
+  | { kind: "wetSpots"; count: number }
+  | { kind: "have"; item: string; qty: number }
+  | { kind: "tally"; key: string; count: number };
 
 export interface Reward {
   coins?: number;
@@ -47,7 +49,67 @@ export interface QuestDef {
   needs?: { hearts?: number; quests?: string[] };
   /** Community projects change the town when finished. */
   project?: boolean;
+  /** Lessons: a tip on how to do it (which keys, where to go). */
+  hint?: string;
 }
+
+/** Grandma Rosa's lessons: notes she left, each teaching one thing and handing over the next tool. */
+const lesson = (n: number, title: string, ask: string, hint: string, goal: Goal, label: string, thanks: string, reward: Reward): QuestDef => ({
+  id: LESSONS[n - 1], giver: "rosa", title, ask, hint, thanks, steps: [{ goal, label }], reward,
+});
+
+export const TUTORIAL: QuestDef[] = [
+  lesson(1, "Grandma's chest",
+    "Welcome home, sweetheart. My old scythe is in the chest beside the front door. Walk over to it, face it, and open it.",
+    "Walk with WASD or the arrow keys. Face the chest by the front door and press E, then click the scythe to take it.",
+    { kind: "have", item: "scythe", qty: 1 }, "Take the scythe from the chest",
+    "There it is! That scythe has cleared a lot of weeds in its day.", {}),
+  lesson(2, "Clear the weeds",
+    "Weeds steal water and food from your crops. Pick the scythe in your hotbar, face a weedy spot in your plot, and cut it down.",
+    "Press the number key of the scythe's slot, then Space on a weed. Your plot is the open patch by the house; fenced plots aren't yours yet.",
+    { kind: "tally", key: "weeds", count: 5 }, "Cut 5 weeds",
+    "Look at that! Keep the fiber; it's good for compost and rope. Here's my hoe.", { items: [{ item: "hoe", qty: 1 }] }),
+  lesson(3, "Break ground",
+    "Roots need loose soil to grow. Use the hoe on bare, cleared ground to till it.",
+    "The hoe only works on bare soil in your plot. Clear stones and sticks first, and only till where you'll plant: tilling breaks up soil crumbs.",
+    { kind: "tally", key: "tilled", count: 4 }, "Till 4 spots",
+    "Lovely rows. Carrots don't mind a chilly spring night, so here are some seeds.", { items: [{ item: "seed_carrot", qty: 6 }] }),
+  lesson(4, "Seeds in the soil",
+    "Pick the carrot seeds and plant them on your tilled soil. The panel on the right always tells you what Space will do before you press it.",
+    "One seed per tilled spot. Watch the panel: it says if a crop likes the season and the soil.",
+    { kind: "farmPlanted", count: 4 }, "Plant 4 crops",
+    "They're in! Now they'll be thirsty. Here's my watering can.", { items: [{ item: "can", qty: 1 }] }),
+  lesson(5, "A drink for the roots",
+    "Seeds need damp soil to sprout and grow. Water your carrots. When the can runs dry, fill it at the pond.",
+    "Space waters the spot in front of you. To refill, face the pond and press Space. Damp means moisture 60 or more on the soil panel.",
+    { kind: "wetSpots", count: 4 }, "Get 4 crops' soil damp",
+    "Good and damp. Healthy soil grows healthy food, so here's some compost and garden lime.", { items: [{ item: "compost", qty: 3 }, { item: "lime", qty: 2 }] }),
+  lesson(6, "Feed the soil",
+    "Compost adds organic matter that feeds the tiny life in your soil. Lime makes sour soil sweeter. Spread one of them on 2 spots in your garden.",
+    "Pick compost or lime and press Space on a garden spot. Until you've tested the soil, compost is the safe choice.",
+    { kind: "fedSpots", count: 2 }, "Spread compost or lime on 2 spots",
+    "Your soil thanks you. Now for some firewood: here's my axe.", { items: [{ item: "axe", qty: 1 }] }),
+  lesson(7, "Timber!",
+    "Sticks, logs, and stumps are scattered all over the farm. Chop them with the axe for wood. Big ones take a few swings.",
+    "Keep pressing Space on the same log; the panel shows how many swings are left. A felled tree grows back from its stump.",
+    { kind: "have", item: "wood", qty: 5 }, "Have 5 wood",
+    "That'll keep the stove going. Stones next: here's my pickaxe.", { items: [{ item: "pickaxe", qty: 1 }] }),
+  lesson(8, "Rock solid",
+    "Stones get in the way of your crops. Break them with the pickaxe, and keep the stone for building later.",
+    "Every swing uses energy (the yellow bar). When you're worn out, it's time for bed.",
+    { kind: "have", item: "stone", qty: 5 }, "Have 5 stone",
+    "Strong work! Here's a little pocket money.", { coins: 50 }),
+  lesson(9, "Sleep on it",
+    "Your crops grow overnight, and a night's sleep refills your energy. Go into the farmhouse and go to bed. The farm saves itself when you sleep.",
+    "Press E at the farmhouse door and choose Go to bed. Night falls in the evening; be in bed by 2 AM or you'll wake up tired.",
+    { kind: "tally", key: "slept", count: 1 }, "Sleep in the farmhouse",
+    "Good morning! Your carrots grew a little overnight. Here are more seeds to fill out your plot.", { items: [{ item: "seed_carrot", qty: 6 }] }),
+  lesson(10, "Market day",
+    "A farm runs on selling what it grows. Put something in the shipping bin by the house and you're paid overnight, or sell it at Seed & Soil Co. in town. Your fiber or wood will do.",
+    "Press E at the shipping bin and click what to ship. Organic crops sell for more, so go easy on synthetic fertilizer.",
+    { kind: "tally", key: "sold", count: 1 }, "Sell or ship something",
+    "That's my grandchild! You know the basics now. The folks in town have been asking about you: go say hello, and check the notice board. Love, Grandma Rosa.", { coins: 100 }),
+];
 
 export const QUESTS: QuestDef[] = [
   // The science tools: each quest unlocks one in the store and pays for it.
@@ -180,7 +242,7 @@ export const QUESTS: QuestDef[] = [
   },
 ];
 
-export const QUEST_BY_ID: Record<string, QuestDef> = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
+export const QUEST_BY_ID: Record<string, QuestDef> = Object.fromEntries([...QUESTS, ...TUTORIAL].map((q) => [q.id, q]));
 
 export interface ActiveQuest {
   id: string;
@@ -256,8 +318,14 @@ export function goalProgress(s: WorldState, goal: Goal): Progress {
       return p(ownGarden(s).filter((t) => (t.boost ?? 0) > 0).length, goal.count);
     case "wetSpots":
       return p(ownGarden(s).filter((t) => t.crop && !t.crop.dead && t.moisture >= 60).length, goal.count);
+    case "have":
+      return p(countAtGrade(s, goal.item), goal.qty);
+    case "tally":
+      return p(s.tally?.[goal.key] ?? 0, goal.count);
   }
 }
+
+const TALLY_LABEL: Record<string, string> = { weeds: "Cut weeds", tilled: "Till spots", slept: "Sleep", sold: "Sell or ship things" };
 
 export function goalLabel(goal: Goal): string {
   switch (goal.kind) {
@@ -272,6 +340,8 @@ export function goalLabel(goal: Goal): string {
     case "farmPlanted": return `Plant ${goal.count} crops on your farm`;
     case "fedSpots": return `Spread compost or lime on ${goal.count} garden spots`;
     case "wetSpots": return `Get ${goal.count} of your crops' soil damp`;
+    case "have": return `Have ${goal.qty} ${ITEMS[goal.item].name}`;
+    case "tally": return `${TALLY_LABEL[goal.key] ?? goal.key} ×${goal.count}`;
   }
 }
 
@@ -288,6 +358,8 @@ export function questStatus(s: WorldState, a: ActiveQuest) {
 /** Story quests this NPC can offer right now. */
 export function offers(s: WorldState, npcId: string): QuestDef[] {
   const qs = questState(s);
+  // Townsfolk wait until Grandma Rosa's lessons are done.
+  if (!tutorialDone(s)) return [];
   return QUESTS.filter((q) => q.giver === npcId
     && !qs.done.includes(q.id) && !qs.active.some((a) => a.id === q.id)
     && (q.needs?.hearts ?? 0) <= hearts(s, npcId)
@@ -324,10 +396,25 @@ function takeItems(s: WorldState, items: { item: string; qty: number; minGrade?:
   return { ...s, inventory: inv };
 }
 
+/** A reward that doesn't fit in your bag goes into Grandma's chest by the house. */
+function toChest(s: WorldState, item: string, qty: number): WorldState {
+  const chest = s.buildings.find((b) => b.id === "chest");
+  if (!chest) return s;
+  const items = [...(chest.data.items ?? [])];
+  const at = items.findIndex((x) => x?.item === item && !x.grade && !ITEMS[item].tool);
+  if (at >= 0) items[at] = { ...items[at]!, qty: items[at]!.qty + qty };
+  else {
+    const free = items.findIndex((x) => !x);
+    if (free >= 0) items[free] = { item, qty };
+    else items.push({ item, qty });
+  }
+  return { ...s, buildings: s.buildings.map((b) => (b === chest ? { ...b, data: { ...b.data, items } } : b)) };
+}
+
 function giveReward(s: WorldState, giver: string, r: Reward): WorldState {
   let next: WorldState = { ...s, coins: s.coins + (r.coins ?? 0) };
   if (r.plots) next = grantPlots(next, r.plots);
-  for (const it of r.items ?? []) next = addItem(next, it.item, it.qty) ?? next;
+  for (const it of r.items ?? []) next = addItem(next, it.item, it.qty) ?? toChest(next, it.item, it.qty);
   const friends = { ...(next.friends ?? {}) };
   const bump = (id: string, pts: number) => {
     const f = friends[id] ?? { points: 0 };
@@ -408,4 +495,37 @@ export function expireBoard(s: WorldState): WorldState {
   const day = dayOf(s.minute);
   const active = qs.active.filter((a) => !a.board || a.board.expires >= day);
   return active.length === qs.active.length ? s : { ...s, quests: { ...qs, active } };
+}
+
+// ───────────────────────── Grandma Rosa's lessons ─────────────────────────
+
+export const tutorialDone = (s: WorldState) => questState(s).done.includes(LESSONS[LESSONS.length - 1]);
+
+/** The lesson you're on, with its progress, or null once they're done (or skipped). */
+export function tutorialStep(s: WorldState) {
+  const a = questState(s).active.find((q) => LESSONS.includes(q.id));
+  if (!a) return null;
+  const q = QUEST_BY_ID[a.id];
+  return { ...questStatus(s, a), id: a.id, number: LESSONS.indexOf(a.id) + 1, of: LESSONS.length, ask: q.ask, hint: q.hint ?? "", rewardText: rewardText(q.reward) };
+}
+
+/** Claim a finished lesson's reward and open the next one. */
+export function claimLesson(s: WorldState): WorldState {
+  const step = tutorialStep(s);
+  if (!step) return s;
+  const r = turnIn(s, step.id);
+  if (!r.finished) return s;
+  const next = LESSONS[LESSONS.indexOf(step.id) + 1];
+  return say(next ? accept(r.state, next) : r.state, r.text);
+}
+
+/** Skip the rest of the lessons: every reward still to come is handed over at once. */
+export function skipTutorial(s: WorldState): WorldState {
+  const qs = questState(s);
+  const left = LESSONS.filter((id) => !qs.done.includes(id));
+  if (!left.length) return s;
+  let next = s;
+  for (const id of left) next = giveReward(next, "rosa", QUEST_BY_ID[id].reward);
+  next = { ...next, quests: { active: qs.active.filter((a) => !LESSONS.includes(a.id)), done: [...qs.done, ...left] } };
+  return say(next, "Grandma's tools are all yours. The folks in town have been asking about you!");
 }

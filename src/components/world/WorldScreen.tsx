@@ -8,6 +8,7 @@ import { npcInFront } from "@/world/town";
 import { useElementsPanel } from "@/store/elementsPanel";
 import { useProgress } from "@/store/progress";
 import { Hotbar, Messages, StatusBar, TileInspector } from "./Hud";
+import { TutorialCard } from "./Tutorial";
 import { JournalBook } from "./JournalBook";
 import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
 import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
@@ -237,6 +238,7 @@ export function WorldScreen() {
             >
               ☰ Menu <kbd className="text-xs text-muted">Esc</kbd>
             </button>
+            <TutorialCard />
             <Messages />
           </div>
           <div className="pointer-events-none absolute right-3 top-3 z-10">

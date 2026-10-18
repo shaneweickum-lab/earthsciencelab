@@ -55,6 +55,53 @@ static func _meter(icon: String, value: float, maximum: float, color: Color) -> 
 	return p
 
 
+## Grandma Rosa's note for the lesson you're on: what to do, how, and the reward to claim.
+## Port of Tutorial.tsx. Null once the lessons are done.
+static func tutorial(game_ui: GameUi, w: Dictionary) -> Control:
+	var step = Quests.tutorial_step(w)
+	if step == null:
+		return null
+	var ui: Dictionary = game_ui.ui
+	var open: bool = not ui.get("tut_closed", false)
+	var col := Ui.vbox(6)
+	col.custom_minimum_size = Vector2(300, 0)
+	var head := Ui.button("✉️ Lesson %d of %d: %s  (%s)" % [step.number, step.of, step.title, "hide" if open else "show"], func():
+		ui.tut_closed = open
+		game_ui.refresh(), "flat", 14)
+	head.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	col.add_child(head)
+	if open:
+		col.add_child(Ui.text(step.ask, 14))
+		col.add_child(Ui.panel(Ui.text("💡 " + step.hint, 12, Ui.MUTED), Ui.PAPER, 8, 6, Color(0, 0, 0, 0), 0))
+		col.add_child(Ui.text(step.step.label, 13, Ui.INK, 800))
+		var row := Ui.hbox(6)
+		var prog: Dictionary = step.progress
+		row.add_child(Ui.meter(prog.have, prog.need, Ui.LEAF if prog.done else Ui.SUN, 230, 8))
+		row.add_child(Ui.text("%s/%s" % [Js.num(prog.have), Js.num(prog.need)], 12, Ui.INK, 900, false))
+		col.add_child(row)
+		if prog.done:
+			col.add_child(Ui.button("Claim: %s" % step.rewardText if step.rewardText != "" else "Next lesson", func(): Game.update(Quests.claim_lesson), "primary", 14))
+		elif step.rewardText != "":
+			col.add_child(Ui.small("Reward: " + step.rewardText))
+		if ui.get("tut_skip", false):
+			col.add_child(Ui.small("Skip the lessons and take all of Grandma's tools now?", Ui.INK))
+			var choice := Ui.hbox(6)
+			choice.add_child(Ui.button("Skip", func():
+				ui.tut_skip = false
+				Game.update(Quests.skip_tutorial), "soil", 13))
+			choice.add_child(Ui.button("Keep going", func():
+				ui.tut_skip = false
+				game_ui.refresh(), "ghost", 13))
+			col.add_child(choice)
+		else:
+			var skip := Ui.button("Skip tutorial", func():
+				ui.tut_skip = true
+				game_ui.refresh(), "flat", 11)
+			skip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			col.add_child(skip)
+	return Ui.panel(col, Color(Ui.CARD, 0.95), 14, 10, Ui.SUN, 2)
+
+
 static func messages(w: Dictionary) -> Control:
 	var col := Ui.vbox(4)
 	col.custom_minimum_size = Vector2(320, 0)

@@ -157,6 +157,8 @@ export interface WorldState {
   deepest?: number;
   /** The farm plots you own (see PLOTS in map.ts). */
   plots?: number[];
+  /** How many times you've done things the lessons count (weeds cut, spots tilled, nights slept, sales). */
+  tally?: Record<string, number>;
   /** My Homestead: the furniture and garden decorations you've bought and where they stand. */
   homestead?: Homestead;
   /** Grandma Rosa's workbench has been found in the barn. */

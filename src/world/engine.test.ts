@@ -12,6 +12,7 @@ import { ITEMS, RECIPES, UPGRADES } from "./items";
 import { H, idx, MINE_ENTRANCE, MINE_START, MINE_W, mineFloor, OLD_H, PLOTS, W } from "./map";
 import { spawnCritters } from "./nature";
 import { previewAction } from "./preview";
+import { skipTutorial } from "./quests";
 import type { Tile, WeatherId, WorldState } from "./types";
 import { weatherFor, type DayWeather } from "./weather";
 
@@ -369,7 +370,7 @@ describe("tools", () => {
   });
 
   it("keep their wear in a chest", () => {
-    let s = takeAllFromChest(newWorld(42), "chest");
+    let s = takeAllFromChest(skipTutorial(newWorld(42)), "chest");
     const i = s.inventory.findIndex((x) => x?.item === "axe");
     s = { ...s, inventory: s.inventory.map((x, k) => (k === i ? { ...x!, dur: 7 } : x)) };
     s = putInChest(s, "chest", i);
@@ -556,18 +557,16 @@ describe("item icons", () => {
 describe("the starter chest", () => {
   const chestOf = (s: WorldState) => s.buildings.find((b) => b.kind === "chest")!;
 
-  it("holds the starting tools while the bag starts empty", () => {
+  it("holds Grandma's scythe while the bag starts empty", () => {
     const s = newWorld(42);
     expect(s.inventory.every((x) => x === null)).toBe(true);
-    const inside = chestOf(s).data.items!.filter(Boolean).map((x) => x!.item);
-    expect(inside).toEqual(["hoe", "can", "scythe", "axe", "pickaxe", "seed_carrot", "compost", "lime"]);
-    expect(inside).not.toContain("shovel");
+    expect(chestOf(s).data.items!.filter(Boolean).map((x) => x!.item)).toEqual(["scythe"]);
   });
 
   it("moves stacks between the chest and the bag", () => {
-    let s = takeAllFromChest(newWorld(42), "chest");
+    let s = takeAllFromChest(skipTutorial(newWorld(42)), "chest");
     expect(countItem(s, "hoe")).toBe(1);
-    expect(countItem(s, "seed_carrot")).toBe(6);
+    expect(countItem(s, "seed_carrot")).toBe(12);
     expect(chestOf(s).data.items!.every((x) => x === null)).toBe(true);
     const slot = s.inventory.findIndex((x) => x?.item === "lime");
     s = putInChest(s, "chest", slot);

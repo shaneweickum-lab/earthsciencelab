@@ -80,8 +80,9 @@ export function IntroLetter() {
           you&apos;d think. Keep an eye out for the little creatures. Most of them are friends.
         </p>
         <p>
-          My old tools are in the chest beside the front door, with some carrot seeds, compost, and lime, and my workbench is somewhere
-          in the barn. Carrots don&apos;t mind a chilly spring night. Save the beans and tomatoes for when the nights stay above freezing.
+          My old scythe is in the chest beside the front door. I&apos;ve left you a note for each thing I learned here, and the rest of my
+          tools go with them, one lesson at a time. My workbench is somewhere in the barn. Save the beans and tomatoes for when the
+          nights stay above freezing.
         </p>
         <p>The folks at Seed &amp; Soil Co. will buy what you grow. Remember, organic produce sells for more.</p>
         <p className="text-right italic">Love, Grandma Rosa 🌻</p>

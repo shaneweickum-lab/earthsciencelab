@@ -10,7 +10,7 @@ import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, typ
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 8;
+export const WORLD_VERSION = 9;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -21,11 +21,16 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 
 // ───────────────────────── setup ─────────────────────────
 
-/** What's in the chest by the house on day one. The science tools come later, from quests. */
-export const STARTER_CHEST: Slot[] = [
-  { item: "hoe", qty: 1 }, { item: "can", qty: 1 }, { item: "scythe", qty: 1 }, { item: "axe", qty: 1 }, { item: "pickaxe", qty: 1 },
-  { item: "seed_carrot", qty: 6 }, { item: "compost", qty: 3 }, { item: "lime", qty: 2 },
-];
+/** What's in the chest by the house on day one. Grandma Rosa's lessons hand out the rest of her tools. */
+export const STARTER_CHEST: Slot[] = [{ item: "scythe", qty: 1 }];
+
+/** Grandma Rosa's lessons, the tutorial (see quests.ts). A new farm starts on the first. */
+export const LESSONS = Array.from({ length: 10 }, (_, i) => `lesson-${i + 1}`);
+
+/** Count something the player did, for lessons that ask you to do it a few times. */
+export function tally(state: WorldState, key: string, n = 1): WorldState {
+  return { ...state, tally: { ...state.tally, [key]: (state.tally?.[key] ?? 0) + n } };
+}
 
 export function newWorld(seed = Date.now() % 2147483647, settings?: Partial<GameSettings>): WorldState {
   const cfg = normalizeSettings(settings);
@@ -54,6 +59,7 @@ export function newWorld(seed = Date.now() % 2147483647, settings?: Partial<Game
     journal: [],
     harvests: 0,
     plots: [0],
+    quests: { active: [{ id: LESSONS[0], accepted: dayOf(startOfDay(1)), step: 0 }], done: [] },
     weather: { 1: weatherFor(seed, 1, cfg), 2: weatherFor(seed, 2, cfg) },
     log: null,
     messages: [],
@@ -502,7 +508,7 @@ function runNight(state: WorldState): WorldState {
 export function sleep(state: WorldState): WorldState {
   const late = timeOfDay(state.minute) >= 24 * 60;
   const d = day(state) + 1;
-  const s = surface(startDay(runNight(state), d));
+  const s = surface(startDay(runNight(tally(state, "slept")), d));
   return {
     ...s,
     energy: late ? Math.round(s.maxEnergy * 0.8) : s.maxEnergy,
@@ -660,7 +666,7 @@ export function applyTool(state: WorldState): WorldState {
       if (t.obstacle) return say(state, `Clear the ${t.obstacle} first.`);
       if (t.weeds) return say(state, "Cut the weeds with the scythe first.");
       if (t.tilled) return say(state, "This soil is already tilled.");
-      return say(setTile(paid, x, y, (tt) => ({
+      return say(setTile(tally(paid, "tilled"), x, y, (tt) => ({
         ...tt, tilled: true,
         soil: on(state, "tillage") ? { ...tt.soil, structure: clamp(tt.soil.structure - 2), om: clamp(tt.soil.om - 0.5), life: clamp(tt.soil.life - 1) } : tt.soil,
       })), on(state, "tillage") ? "Tilled! (Each tilling breaks soil crumbs a little, so only till where you'll plant.)" : "Tilled!");
@@ -676,7 +682,7 @@ export function applyTool(state: WorldState): WorldState {
     }
     case "scythe": {
       if (t.weeds) {
-        const got = addItem(setTile(paid, x, y, (tt) => ({ ...tt, weeds: false })), "fiber", 1);
+        const got = addItem(setTile(tally(paid, "weeds"), x, y, (tt) => ({ ...tt, weeds: false })), "fiber", 1);
         return got ? say(got, "Cut weeds (+1 fiber).") : say(state, "Your bag is full.");
       }
       if (t.crop?.dead) {
@@ -1007,7 +1013,7 @@ export function sellNow(state: WorldState, slotIndex: number, qty: number): Worl
   const inv = [...state.inventory];
   inv[slotIndex] = s.qty - n > 0 ? { ...s, qty: s.qty - n } : null;
   const coins = sellPrice(def, s.grade, state.organic) * n;
-  return say({ ...state, inventory: inv, coins: state.coins + coins }, `Sold ${n} ${def.name}${s.grade ? ` (grade ${s.grade})` : ""} for ${coins} coins.`);
+  return say({ ...tally(state, "sold"), inventory: inv, coins: state.coins + coins }, `Sold ${n} ${def.name}${s.grade ? ` (grade ${s.grade})` : ""} for ${coins} coins.`);
 }
 
 export function ship(state: WorldState, slotIndex: number): WorldState {
@@ -1022,7 +1028,7 @@ export function ship(state: WorldState, slotIndex: number): WorldState {
   const shipping = removed.shipping.some(same)
     ? removed.shipping.map((x) => (same(x) ? { ...x, qty: x.qty + s.qty } : x))
     : [...removed.shipping, { ...s }];
-  return say({ ...removed, shipping }, `Put ${s.qty} ${def.name} in the shipping bin. You'll be paid overnight.`);
+  return say({ ...tally(removed, "sold"), shipping }, `Put ${s.qty} ${def.name} in the shipping bin. You'll be paid overnight.`);
 }
 
 // ───────────────────────── building ─────────────────────────
@@ -1316,6 +1322,12 @@ function addChest(old: WorldState): WorldState {
   return { ...s, quests: { ...qs, done: [...qs.done, ...unlocks] } };
 }
 
+/** Version 9 added Grandma Rosa's lessons. Older farms already know the ropes, so they're done. */
+function finishLessons(old: WorldState): WorldState {
+  const qs = old.quests ?? { active: [], done: [] };
+  return { ...old, version: 9, quests: { ...qs, done: [...qs.done, ...LESSONS.filter((l) => !qs.done.includes(l))] } };
+}
+
 /**
  * Version 8 split the farmland into plots and added the South Fields below the old map. Older
  * farms keep the whole field they had, gain the new rows, and get a path cut through the forest.
@@ -1362,6 +1374,7 @@ export function loadWorld(raw: string | null): WorldState | null {
     // Version 7 added the mine entrance past the town.
     if (up.version < 7) up = addLandmarks(up, 7);
     if (up.version < 8) up = addSouthFields(up);
+    if (up.version < 9) up = finishLessons(up);
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

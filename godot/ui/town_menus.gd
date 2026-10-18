@@ -173,12 +173,12 @@ static func quest_log() -> Dictionary:
 		body.add_child(Ui.text("No quests yet. Visit town, talk to people, and check the notice board in the square.", 14, Ui.MUTED))
 	for a in qs.active:
 		var st := Quests.quest_status(w, a)
-		var who: String = "Notice board" if a.get("board") else Town.npc(st.giver).short
+		var who: String = "Notice board" if a.get("board") else ("Grandma Rosa's note" if st.giver == "rosa" else Town.npc(st.giver).short)
 		var box := Ui.vbox(4)
 		box.add_child(Ui.text("[b]%s[/b] [color=#6e5f50]· %s[/color]" % [st.title, who], 15))
 		box.add_child(quest_step(w, a))
 		if st.progress.done:
-			box.add_child(Ui.text("Ready! Go see %s." % ("the notice board" if who == "Notice board" else who), 13, Ui.LEAF, 900))
+			box.add_child(Ui.text("Ready! Claim it on Grandma's note." if st.giver == "rosa" else "Ready! Go see %s." % ("the notice board" if who == "Notice board" else who), 13, Ui.LEAF, 900))
 		box.add_child(Ui.text("Reward: " + Quests.reward_text(st.reward), 11, Ui.MUTED))
 		body.add_child(Ui.panel(box, Ui.CARD, 12, 12))
 	var story := 0
@@ -186,7 +186,7 @@ static func quest_log() -> Dictionary:
 	for id in qs.done:
 		if id.begins_with("board-"):
 			board += 1
-		else:
+		elif not id.begins_with("lesson-"):
 			story += 1
 	body.add_child(Ui.small("Finished: %d story quests, %d notice-board requests." % [story, board]))
 	return m
