@@ -260,6 +260,11 @@ export function Bag() {
             )}
             <p className="mt-1 text-muted">{ITEMS[shown.item].desc}</p>
             {durability(shown) && <p className="mt-1 text-xs font-bold">Uses left: {durability(shown)!.left} of {durability(shown)!.max}</p>}
+            {ITEMS[shown.item].energy ? (
+              <button className="btn btn-primary mt-2 py-1 text-sm" onClick={() => run("eat", look!)}>
+                Eat · ⚡ +{ITEMS[shown.item].energy}
+              </button>
+            ) : null}
           </>
         ) : (
           <p className="text-muted">Click an item to read about it.</p>

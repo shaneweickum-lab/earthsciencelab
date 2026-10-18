@@ -55,7 +55,7 @@ export function tempFactor(type: WorldCrop["type"], meanF: number): number {
   return Math.max(0.3, 1 - ((meanF - bestHi) / (hot - bestHi)) * 0.7);
 }
 
-export type ItemKind = "tool" | "seed" | "produce" | "amendment" | "material" | "kit";
+export type ItemKind = "tool" | "seed" | "produce" | "amendment" | "material" | "kit" | "food" | "utensil";
 
 /** What a tool does when you use it. Axes and pickaxes come in tiers; the rest have one kind. */
 export type ToolUse = "hoe" | "can" | "scythe" | "axe" | "pickaxe" | "shovel" | "ring";
@@ -93,6 +93,8 @@ export interface ItemDef {
   notOrganic?: boolean;
   /** Tools: what it does, its tier, and how many uses it lasts. */
   tool?: { use: ToolUse; tier: Tier; durability: number };
+  /** Food: how much energy eating it gives back. */
+  energy?: number;
 }
 
 const tool = (use: ToolUse, durability: number, tier: Tier = "base") => ({ use, tier, durability });
@@ -169,7 +171,35 @@ const kits: ItemDef[] = [
   { id: "kit_spinningWheel", name: "Spinning Wheel", icon: "🧵", kind: "kit", building: "spinningWheel", desc: "Spin plant fiber into refined fiber, and refined fiber into rope." },
   { id: "kit_furnace", name: "Furnace", icon: "🔥", kind: "kit", building: "furnace", desc: "Smelts ore into metal bars, burning wood for heat." },
   { id: "kit_chest", name: "Storage Chest", icon: "🧰", kind: "kit", building: "chest", desc: "Twenty slots of storage. Put it anywhere on your farm." },
+  { id: "kit_stove", name: "Stove", icon: "🍳", kind: "kit", price: 300, building: "stove", desc: "Cook on it: fry with a pan, boil and stew with a pot." },
+  { id: "kit_oven", name: "Oven", icon: "🥖", kind: "kit", price: 450, building: "oven", desc: "Bakes bread, potatoes, pizza, and pie. Set it beside a stove for a full kitchen." },
   { id: "kit_smallBarn", name: "Small Barn", icon: "🛖", kind: "kit", price: 600, building: "smallBarn", desc: "Stores hay. Old hay becomes straw mulch you can collect each morning." },
+];
+
+/** Kitchen utensils: carry them in your bag, and recipes that need them can use them. */
+const utensils: ItemDef[] = [
+  { id: "knife", name: "Kitchen Knife", icon: "🔪", kind: "utensil", price: 60, desc: "Chops vegetables. Many recipes start with a knife." },
+  { id: "pan", name: "Frying Pan", icon: "🍳", kind: "utensil", price: 80, desc: "Fry and toast on a stove." },
+  { id: "pot", name: "Cooking Pot", icon: "🍲", kind: "utensil", price: 100, desc: "Boil and simmer soups and stews on a stove." },
+];
+
+/** Food you cook from your harvest. Eat it (select it and use it) to get energy back. */
+const foods: ItemDef[] = [
+  { id: "flour", name: "Flour", icon: "🌾", kind: "material", sell: 40, desc: "Wheat ground fine at a grinder. Bread, pizza, and pie start here." },
+  { id: "carrotSticks", name: "Carrot Sticks", icon: "🥕", kind: "food", energy: 15, sell: 40, desc: "Crunchy, sweet, and full of vitamin A." },
+  { id: "salad", name: "Garden Salad", icon: "🥗", kind: "food", energy: 30, sell: 85, desc: "Tomatoes and carrots, fresh from the garden." },
+  { id: "toastedSeeds", name: "Toasted Sunflower Seeds", icon: "🌻", kind: "food", energy: 20, sell: 60, desc: "A handful of seeds, toasted in a pan. Packed with healthy fats." },
+  { id: "friedEgg", name: "Fried Egg", icon: "🍳", kind: "food", energy: 25, sell: 30, desc: "Heat turns the clear egg white solid: the proteins unfold and tangle." },
+  { id: "cornOnCob", name: "Corn on the Cob", icon: "🌽", kind: "food", energy: 25, sell: 55, desc: "Boiled sweet corn. Each kernel is a seed." },
+  { id: "bakedPotato", name: "Baked Potato", icon: "🥔", kind: "food", energy: 35, sell: 80, desc: "Potatoes store the plant's energy as starch. Now it's yours." },
+  { id: "fries", name: "Fries", icon: "🍟", kind: "food", energy: 35, sell: 85, desc: "Potatoes cut into sticks and fried golden." },
+  { id: "tomatoSoup", name: "Tomato Soup", icon: "🍅", kind: "food", energy: 40, sell: 95, desc: "Warm and tangy. Simmered slowly in a pot." },
+  { id: "pancakes", name: "Buckwheat Pancakes", icon: "🥞", kind: "food", energy: 45, sell: 45, desc: "Buckwheat isn't wheat at all; it's related to rhubarb." },
+  { id: "beanStew", name: "Bean Stew", icon: "🫘", kind: "food", energy: 60, sell: 160, desc: "Beans, carrots, and potatoes. Beans are full of protein, thanks to the nitrogen their roots fix." },
+  { id: "bread", name: "Bread", icon: "🍞", kind: "food", energy: 40, sell: 100, desc: "Yeast eats sugar in the dough and breathes out bubbles that make it rise." },
+  { id: "sandwich", name: "Tomato Sandwich", icon: "🥪", kind: "food", energy: 55, sell: 150, desc: "Fresh bread and sliced tomato. Simple and perfect." },
+  { id: "pizza", name: "Garden Pizza", icon: "🍕", kind: "food", energy: 70, sell: 170, desc: "Flour, tomato, and sweet corn, baked hot." },
+  { id: "pie", name: "Squash Pie", icon: "🥧", kind: "food", energy: 80, sell: 230, desc: "Squash, flour, an egg, and honey. A harvest feast." },
 ];
 
 const SEED_NAME: Record<CropId, string> = {
@@ -201,7 +231,7 @@ const produce: ItemDef[] = Object.values(WORLD_CROPS)
 
 /** Every item has a picture icon in public/icons, rendered from the game's models by `npm run icons`. */
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  [...tools, ...amendments, ...materials, ...kits, ...seeds, ...produce].map((i) => [i.id, { ...i, image: `/icons/${i.id}.png` }]),
+  [...tools, ...amendments, ...materials, ...kits, ...utensils, ...foods, ...seeds, ...produce].map((i) => [i.id, { ...i, image: `/icons/${i.id}.png` }]),
 );
 
 /** What the store or shipping bin pays for one item of a given grade, with the organic bonus. */
@@ -219,20 +249,49 @@ export function item(id: string): ItemDef {
   return i;
 }
 
-export type Station = "workbench" | "grinder" | "spinningWheel" | "furnace";
+export type Station = "workbench" | "grinder" | "spinningWheel" | "furnace" | "stove" | "oven";
 
 export interface Recipe {
   /** The item made (and the recipe's id). */
   id: string;
   qty: number;
-  station: Station;
+  /** Where it's made. Cooking can need a stove, an oven, or both side by side; knife-only food is made anywhere. */
+  station?: Station;
   inputs: { item: string; qty: number }[];
+  /** Food: the kitchen stations it needs (all within reach of the one you're at). */
+  stations?: Station[];
+  /** Food: utensils that must be in your bag. They aren't used up. */
+  tools?: string[];
 }
 
 const r = (station: Station, id: string, inputs: [string, number][], qty = 1): Recipe => ({ id, qty, station, inputs: inputs.map(([item, n]) => ({ item, qty: n })) });
 /** Furnaces burn wood for heat: more for metals that melt hotter. */
 const smelt = (bar: string, ores: [string, number][], wood: number) => r("furnace", bar, [...ores, ["wood", wood]]);
 const toolHead = (tier: Tier) => (tier === "base" ? ["stone", 3] : [`${tier}Bar`, 3]) as [string, number];
+
+/** A dish: its ingredients, the utensils you need with you, and the stations it cooks on. */
+const cook = (id: string, inputs: [string, number][], tools: string[], stations: Station[] = []): Recipe => ({
+  id, qty: 1, inputs: inputs.map(([item, n]) => ({ item, qty: n })), tools, stations,
+  ...(stations.length ? { station: stations[0] } : {}),
+});
+
+/** What you can cook, from the simplest (a knife and a carrot) to a full kitchen. */
+export const COOKING: Recipe[] = [
+  cook("carrotSticks", [["crop_carrot", 1]], ["knife"]),
+  cook("salad", [["crop_tomato", 1], ["crop_carrot", 1]], ["knife"]),
+  cook("toastedSeeds", [["crop_sunflower", 1]], ["pan"], ["stove"]),
+  cook("friedEgg", [["egg", 1]], ["pan"], ["stove"]),
+  cook("cornOnCob", [["crop_corn", 1]], ["pot"], ["stove"]),
+  cook("bakedPotato", [["crop_potato", 1]], [], ["oven"]),
+  cook("fries", [["crop_potato", 1]], ["knife", "pan"], ["stove"]),
+  cook("tomatoSoup", [["crop_tomato", 2]], ["knife", "pot"], ["stove"]),
+  cook("pancakes", [["crop_buckwheat", 1], ["egg", 1]], ["pan"], ["stove"]),
+  cook("beanStew", [["crop_beans", 2], ["crop_carrot", 1], ["crop_potato", 1]], ["knife", "pot"], ["stove"]),
+  cook("bread", [["flour", 2]], [], ["oven"]),
+  cook("sandwich", [["bread", 1], ["crop_tomato", 1]], ["knife"]),
+  cook("pizza", [["flour", 1], ["crop_tomato", 1], ["crop_corn", 1]], ["knife"], ["oven"]),
+  cook("pie", [["crop_squash", 1], ["flour", 1], ["egg", 1], ["honey", 1]], ["knife"], ["stove", "oven"]),
+];
 
 /** What each station makes. */
 export const RECIPES: Recipe[] = [
@@ -252,14 +311,20 @@ export const RECIPES: Recipe[] = [
   r("grinder", "hoe", [["sticks", 2], ["stone", 3]]),
   r("grinder", "scythe", [["sticks", 2], ["stone", 2], ["rope", 1]]),
   r("grinder", "can", [["copperBar", 2]]),
+  r("grinder", "flour", [["crop_wheat", 2]]),
   ...TIER_ORDER.flatMap((tier) => (["axe", "pickaxe"] as const).map((use) => r(
     "grinder", tier === "base" ? use : `${use}_${tier}`,
     [toolHead(tier), ["sticks", 2], ["rope", tier === "mithril" ? 2 : 1]],
   ))),
+  ...COOKING,
 ];
 
 /** Science tools the store only sells after the quest that introduces them (quests.ts). */
-export const SHOP_UNLOCKS: Record<string, string> = { shovel: "dig-deeper", labKit: "feed-the-soil", ring: "soak-it-up" };
+export const SHOP_UNLOCKS: Record<string, string> = {
+  shovel: "dig-deeper", labKit: "feed-the-soil", ring: "soak-it-up",
+  // Grandma's recipe card opens the kitchen; the oven comes once you're growing more.
+  kit_stove: "recipe-card", kit_oven: "soak-it-up",
+};
 
 export const UPGRADES = {
   bigCan: { id: "bigCan", name: "Copper Watering Can", icon: "🚿", image: "/icons/bigCan.png", price: 250, desc: "Holds 40 waterings instead of 20." },

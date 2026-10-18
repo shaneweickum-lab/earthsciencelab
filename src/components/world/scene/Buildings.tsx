@@ -1,14 +1,15 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { memo, Suspense } from "react";
+import { memo, Suspense, useMemo } from "react";
+import { Box3, Matrix4, Vector3 } from "three";
 import { BUILDING_SIZE } from "@/world/map";
 import type { Building } from "@/world/types";
 import { mineOpen } from "@/world/engine";
 import { ownerOf } from "@/world/multi";
 import { useMulti } from "@/net/mp";
 import { labelLayer, useWorld } from "../useWorld";
-import { Model, model, type Pack } from "./models";
+import { Model, model, useParts, type Pack } from "./models";
 
 const Mat = ({ color, ...rest }: { color: string; transparent?: boolean; opacity?: number; emissive?: string; emissiveIntensity?: number }) => (
   <meshStandardMaterial color={color} flatShading {...rest} />
@@ -233,6 +234,9 @@ const Procedural = memo(function Procedural({ b }: { b: Building }) {
     case "workbench":
     case "grinder":
       return <mesh position={[0, 0.4, 0]} castShadow><boxGeometry args={[0.9, 0.8, 0.6]} /><Mat color="#b07a4f" /></mesh>;
+    case "stove":
+    case "oven":
+      return <mesh position={[0, 0.45, 0]} castShadow><boxGeometry args={[0.85, 0.9, 0.8]} /><Mat color={b.kind === "stove" ? "#e9e4da" : "#cfc8bb"} /></mesh>;
     case "spinningWheel":
       return (
         <group>
@@ -378,6 +382,11 @@ function Fancy({ b }: { b: Building }) {
       return <Model url={model("survival", "workbench")} scale={1.6} />;
     case "grinder":
       return <Model url={model("survival", "workbench-grind")} scale={1.6} />;
+    case "stove":
+      // A pot simmering on the stove.
+      return <Centered url={model("furniture", "kitchenStove")} s={2}>{(top) => <Model url={model("food", "pot-stew")} position={[0.12, top, 0.05]} scale={0.32} />}</Centered>;
+    case "oven":
+      return <Centered url={model("furniture", "kitchenStoveElectric")} s={2}>{(top) => <Model url={model("food", "loaf")} position={[0, top, 0]} scale={0.3} />}</Centered>;
     case "fence":
       return <Model url={model("nature", "fence_simple")} position={[0, 0, 0.47]} scale={[1, 1.5, 1]} />;
     case "pathStone":
@@ -460,10 +469,39 @@ function Fancy({ b }: { b: Building }) {
   }
 }
 
+/** A Furniture Kit model (its origin is in a corner), centered on its tile, with things set on top. */
+function Centered({ url, s, children }: { url: string; s: number; children?: (top: number) => React.ReactNode }) {
+  const parts = useParts(url);
+  const box = useMemo(() => {
+    const b = new Box3();
+    for (const p of parts) {
+      p.geometry.computeBoundingBox();
+      b.union(p.geometry.boundingBox!.clone().applyMatrix4(p.matrix));
+    }
+    return b;
+  }, [parts]);
+  const c = box.getCenter(new Vector3());
+  const offset = new Matrix4().makeTranslation(-c.x, -box.min.y, -c.z);
+  return (
+    <group>
+      <group scale={s}>
+        {parts.map((p, i) => (
+          <mesh key={i} geometry={p.geometry} matrix={offset.clone().multiply(p.matrix)} matrixAutoUpdate={false} castShadow receiveShadow>
+            <primitive object={p.material} attach="material" />
+          </mesh>
+        ))}
+      </group>
+      {children?.((box.max.y - box.min.y) * s)}
+    </group>
+  );
+}
+
 /** The name over a garden gate or market stall in a shared world. */
 function GardenSign({ b }: { b: Building }) {
   const label = useMulti((s) => {
-    const owner = s.world ? ownerOf(s.world, b.data.garden ?? 0) : null;
+    // In a game of your own, the first gate and stall are yours.
+    if (!s.world) return b.data.garden === 0 ? (b.kind === "gardenGate" ? "🏡 Your farm" : "🧺 Your stall") : null;
+    const owner = ownerOf(s.world, b.data.garden ?? 0);
     return owner ? (b.kind === "gardenGate" ? `🏡 ${owner.name}` : `🧺 ${owner.name}`) : null;
   });
   if (!label) return null;
@@ -481,9 +519,11 @@ export function Buildings({ buildings }: { buildings: Building[] }) {
         const [w, h] = BUILDING_SIZE[b.kind];
         return (
           <group key={b.id} position={[b.x + (w - 1) / 2, 0, b.y + (h - 1) / 2]}>
-            <Suspense fallback={<Procedural b={b} />}>
-              <Fancy b={b} />
-            </Suspense>
+            <group rotation-y={((b.rot ?? 0) * Math.PI) / 2}>
+              <Suspense fallback={<Procedural b={b} />}>
+                <Fancy b={b} />
+              </Suspense>
+            </group>
             {(b.kind === "gardenGate" || b.kind === "marketStall") && <GardenSign b={b} />}
             {b.data.sign && (
               <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>

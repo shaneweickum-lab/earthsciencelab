@@ -8,6 +8,25 @@ const FARM_W := 38
 ## The map was 36 rows tall before the South Fields were added below the forest belt.
 const OLD_H := 36
 
+## Garden Lane runs north-south just inside the town's west edge, with a gate to each garden.
+const LANE_X := 40
+const GATE_X := 39
+const GATE_ROWS := [4, 6, 8, 14, 16, 18, 20, 22]
+## Where you come out on your farm through its gate, and the tile on its road that leads back to town.
+const GARDEN_ENTRY := {"x": 36, "y": 11, "facing": "left"}
+const GARDEN_EXIT_X := 37
+## Market stalls stand in a row across the town square; the first one is yours.
+const STALL_ROW := 18
+const STALL_X0 := 53
+const STALL_SIZE := 6
+
+
+## True when a farmer on their farm has walked to the end of its road.
+static func at_garden_exit(p: Dictionary) -> bool:
+	var x := Js.round(p.x)
+	return x >= GARDEN_EXIT_X and x < FARM_W and absf(Js.round(p.y) - GARDEN_ENTRY.y) <= 1
+
+
 ## The farm field the player clears and plants.
 const FARM := {"x0": 10, "y0": 13, "x1": 27, "y1": 28}
 ## More farmland south of the forest belt, opened plot by plot.
@@ -71,7 +90,8 @@ const BUILDING_SIZE := {
 	"extension": [5, 4], "cottage": [4, 4], "fountain": [2, 2], "noticeBoard": [1, 1], "field": [5, 3], "lamp": [1, 1], "prop": [1, 1],
 	"barn": [4, 4], "silo": [2, 2], "windmill": [3, 2], "waterTower": [2, 2],
 	"mineEntrance": [2, 2], "ladderUp": [1, 1], "ladderDown": [1, 1],
-	"workbench": [1, 1], "grinder": [1, 1], "spinningWheel": [1, 1], "furnace": [1, 1],
+	"workbench": [1, 1], "grinder": [1, 1], "spinningWheel": [1, 1], "furnace": [1, 1], "stove": [1, 1], "oven": [1, 1],
+	"gardenGate": [1, 1], "marketStall": [1, 1],
 }
 
 ## The mine entrance (2×2, opening south onto the road), and the size of each mine floor.
@@ -90,7 +110,7 @@ const WALKABLE_BUILDINGS := ["pathStone", "flowerBed"]
 ## Town buildings the player can't build, pick up, or build over.
 const TOWN_KINDS := [
 	"house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
-	"mineEntrance", "ladderUp", "ladderDown",
+	"mineEntrance", "ladderUp", "ladderDown", "gardenGate", "marketStall",
 ]
 
 
@@ -253,6 +273,7 @@ static func create_map(seed: int) -> Dictionary:
 			path.call(w[0], py)
 	for px in range(45, 48):
 		path.call(px, 26)
+	add_garden_lane(tiles)
 	# Down past the field and through the forest belt to the South Fields.
 	for p in south_path():
 		path.call(p[0], p[1])
@@ -261,7 +282,7 @@ static func create_map(seed: int) -> Dictionary:
 	for px in range(sq.x1 + 1, 65):
 		path.call(px, 16)
 
-	var buildings := farm_buildings() + town_buildings()
+	var buildings := farm_buildings() + town_buildings() + lane_buildings()
 	# Clear land under the buildings.
 	for b in buildings:
 		var sz := size_of(b.kind)
@@ -273,6 +294,29 @@ static func create_map(seed: int) -> Dictionary:
 				if t.ground == "forest":
 					t.ground = "grass"
 	return {"tiles": tiles, "buildings": buildings}
+
+
+## The forest strip between farm and town becomes a hedge with Garden Lane running through it,
+## joined to the road. Every farm, yours included, is reached through its gate on the lane.
+static func add_garden_lane(tiles: Array) -> void:
+	var hedge := {"ground": "forest", "obstacle": "tree", "weeds": false}
+	var lane := {"ground": "path", "obstacle": null, "weeds": false}
+	for y in range(3, H - 2):
+		for x in range(FARM_W, TOWN.x0):
+			tiles[idx(x, y)] = Js.with(tiles[idx(x, y)], hedge)
+	for y in range(GATE_ROWS[0], GATE_ROWS[GATE_ROWS.size() - 1] + 1):
+		tiles[idx(LANE_X, y)] = Js.with(tiles[idx(LANE_X, y)], lane)
+	for y in range(TOWN.road - 1, TOWN.road + 2):
+		tiles[idx(LANE_X + 1, y)] = Js.with(tiles[idx(LANE_X + 1, y)], lane)
+
+
+## The gates along Garden Lane, and your market stall in the square.
+static func lane_buildings() -> Array:
+	var out := []
+	for k in GATE_ROWS.size():
+		out.append({"id": "gate-%d" % k, "kind": "gardenGate", "x": GATE_X, "y": GATE_ROWS[k], "data": {"garden": k}})
+	out.append({"id": "stall-0", "kind": "marketStall", "x": STALL_X0, "y": STALL_ROW, "data": {"garden": 0}})
+	return out
 
 
 # ───────────────────────── the mine ─────────────────────────

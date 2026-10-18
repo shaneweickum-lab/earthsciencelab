@@ -28,7 +28,23 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 		"plots":
 			return {"state": Js.with(s, {"plots": op.ids})}
 		"craft":
-			return {"state": World.craft(s, op.id)}
+			return {"state": World.craft(s, op.id, op.get("at") if op.get("at") != null else "")}
+		"eat":
+			return {"state": World.eat(s, int(op.slot))}
+		"energy":
+			return {"state": Js.with(s, {"energy": op.n})}
+		"turnPlacing":
+			return {"state": World.turn_placing(s)}
+		"rotate":
+			return {"state": World.rotate_building(s)}
+		"stock":
+			return {"state": World.stock_stall(s, int(op.slot), int(op.qty), op.price)}
+		"unstock":
+			return {"state": World.unstock_stall(s, int(op.i))}
+		"gate":
+			return {"state": World.enter_gate(s, int(op.garden))}
+		"leaveGarden":
+			return {"state": World.leave_farm(s)}
 		"selectItem":
 			var at := 0
 			for i in s.inventory.size():
@@ -94,6 +110,10 @@ static func summary(s: Dictionary, text: Variant) -> Dictionary:
 		if x != null:
 			inv.append([i, x.item, x.qty, x.get("grade")])
 	var npc = Town.npc_in_front(s)
+	var turned := []
+	for b in s.buildings:
+		if b.get("rot"):
+			turned.append([b.id, b.rot])
 	return {
 		"minute": s.minute, "coins": s.coins, "energy": s.energy, "water": s.water, "canSize": s.canSize, "organic": s.organic,
 		"selected": s.selected, "harvests": s.harvests, "player": s.player,
@@ -107,6 +127,7 @@ static func summary(s: Dictionary, text: Variant) -> Dictionary:
 		"deepest": s.get("deepest"),
 		"plots": s.get("plots"),
 		"tally": s.get("tally"),
+		"stall": s.get("stall"), "placeRot": s.get("placeRot"), "turned": turned,
 	}
 
 

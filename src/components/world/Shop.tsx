@@ -18,23 +18,25 @@ export function StoreMenu() {
   const w = useWorld((s) => s.world!);
   const run = useWorld((s) => s.run);
   const close = useWorld((s) => s.close);
-  const [tab, setTab] = useState<"seeds" | "tools" | "soil" | "build" | "sell">("seeds");
+  const [tab, setTab] = useState<"seeds" | "tools" | "soil" | "build" | "kitchen" | "sell">("seeds");
   const season = seasonOf(dayOf(w.minute), w.settings);
   const seasonal = w.settings.seasons && on(w, "plantingSeasons");
   const hasGreenhouse = w.buildings.some((b) => b.kind === "greenhouse");
   const all = Object.values(ITEMS);
   const seeds = all.filter((i) => i.kind === "seed" && (!seasonal || hasGreenhouse || WORLD_CROPS[i.crop!].seasons.includes(season)));
-  const science = (i: ItemDef) => i.id in SHOP_UNLOCKS;
+  const kitchenware = (i: ItemDef) => i.kind === "utensil" || i.building === "stove" || i.building === "oven";
+  const science = (i: ItemDef) => i.id in SHOP_UNLOCKS && !kitchenware(i);
   const farmTools = all.filter((i) => i.kind === "tool" && i.price && !science(i));
   const scienceTools = all.filter(science);
   const soil = all.filter((i) => i.kind === "amendment" && !science(i));
-  const kits = all.filter((i) => i.kind === "kit");
+  const kits = all.filter((i) => i.kind === "kit" && !kitchenware(i));
+  const kitchen = all.filter((i) => kitchenware(i) && i.price);
   const sellable = w.inventory.map((s, i) => ({ s, i })).filter(({ s }) => s && ITEMS[s.item].sell);
 
   return (
     <Modal title="Seed & Soil Co." icon="🌱" onClose={close} wide>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {([["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["sell", "🪙 Sell"]] as const).map(([id, label]) => (
+        {([["seeds", "🌱 Seeds"], ["tools", "🛠️ Tools"], ["soil", "🧪 Soil care"], ["build", "🔨 Build"], ["kitchen", "🍳 Kitchen"], ["sell", "🪙 Sell"]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} className={`btn py-1.5 text-sm ${tab === id ? "btn-soil" : "btn-ghost"}`}>{label}</button>
         ))}
         <span className="ml-auto rounded-full bg-paper px-3 py-1 text-sm font-black">🪙 {w.coins.toLocaleString()}</span>
@@ -100,6 +102,15 @@ export function StoreMenu() {
           <ItemList items={kits} w={w} onBuy={(id, n) => run("buy", id, n)} />
         </>
       )}
+      {tab === "kitchen" && (
+        <>
+          <p className="mb-2 text-sm text-muted">
+            Cook your harvest into food that gives you energy back. Carry the utensils a recipe needs, and cook at a stove or oven (set them side by side for
+            recipes that need both). Press C for your cookbook.
+          </p>
+          <ItemList items={kitchen} w={w} onBuy={(id, n) => run("buy", id, n)} />
+        </>
+      )}
       {tab === "sell" && (
         <>
           <p className="mb-2 text-sm text-muted">
@@ -160,7 +171,7 @@ function ItemList({ items, w, onBuy, extra }: {
             <button className="btn btn-primary px-3 py-1 text-sm" disabled={w.coins < i.price!} onClick={() => onBuy(i.id, 1)} aria-label={`Buy ${i.name}`}>
               🪙 {i.price}
             </button>
-            {i.kind !== "tool" && (i.kind !== "kit" || i.price! < 50) ? (
+            {i.kind !== "tool" && i.kind !== "utensil" && (i.kind !== "kit" || i.price! < 50) ? (
               <button className="btn btn-ghost px-3 py-1 text-sm" disabled={w.coins < i.price! * 5} onClick={() => onBuy(i.id, 5)} aria-label={`Buy 5 ${i.name}`}>
                 ×5
               </button>

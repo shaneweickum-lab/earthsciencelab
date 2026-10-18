@@ -3,7 +3,8 @@
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { useMulti } from "@/net/mp";
-import { buildingAt, facingTile, interactTarget, soilHealth } from "@/world/engine";
+import { buildingAt, canPickUp, facingTile, interactTarget, soilHealth } from "@/world/engine";
+import { ITEMS } from "@/world/items";
 import { actionAnim } from "@/world/preview";
 import { npcInFront } from "@/world/town";
 import { useElementsPanel } from "@/store/elementsPanel";
@@ -21,7 +22,7 @@ import { ChatPanel } from "./ChatPanel";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
-import { CraftMenu } from "./Craft";
+import { COOKBOOK, CraftMenu } from "./Craft";
 import { labelLayer, runtime, useWorld } from "./useWorld";
 
 const WorldScene = dynamic(() => import("./scene/WorldScene"), {
@@ -72,7 +73,7 @@ export function doAction(mode: "use" | "interact" = "use") {
   if (target === "gate" || target === "stall") {
     const { x, y } = facingTile(here);
     const garden = buildingAt(here, x, y)!.data.garden ?? 0;
-    if (target === "gate") st.remote?.("gate", [garden]);
+    if (target === "gate") st.run("gate", garden);
     else st.openChest(String(garden), "stall");
   } else if (target === "house") st.open("house");
   else if (target === "board") st.open("board");
@@ -90,6 +91,18 @@ export function doAction(mode: "use" | "interact" = "use") {
     runtime.action = { at: performance.now(), anim: mode === "interact" ? "pickup" : actionAnim(here) };
     st.run(mode === "interact" ? "interact" : "act");
   }
+}
+
+/** R: turn the thing you're facing (if you built it), or the next thing you're about to build. */
+function rotate() {
+  const st = useWorld.getState();
+  const w = st.world;
+  if (!w || st.menu) return;
+  const here = { ...w, player: runtime.player };
+  const { x, y } = facingTile(here);
+  const b = buildingAt(here, x, y);
+  if (b && canPickUp(b) && !w.mine) st.run("rotate");
+  else if (ITEMS[w.inventory[w.selected]?.item ?? ""]?.kind === "kit") st.run("turnPlacing");
 }
 
 function pickUp() {
@@ -114,7 +127,8 @@ function useGameKeys() {
         if (k === "e" || k === "j" || k === "i") e.preventDefault();
         if (k === "q") e.preventDefault();
         const toggles = (k === "i" && st.menu === "bag") || (k === "j" && st.menu === "journal") || (k === "q" && st.menu === "quests");
-        if ((k === "escape" || toggles) && st.menu !== "intro" && st.menu !== "summary") st.close();
+        const cookbook = k === "c" && st.menu === "craft" && st.chestId === COOKBOOK;
+        if ((k === "escape" || toggles || cookbook) && st.menu !== "intro" && st.menu !== "summary") st.close();
         return;
       }
       if (k === "escape") {
@@ -148,6 +162,12 @@ function useGameKeys() {
         st.open("quests");
       } else if (k === "p") {
         pickUp();
+      } else if (k === "r") {
+        e.preventDefault();
+        rotate();
+      } else if (k === "c") {
+        e.preventDefault();
+        st.openChest(COOKBOOK, "craft");
       }
     }
     function up(e: KeyboardEvent) {
@@ -289,6 +309,7 @@ export function WorldScreen() {
             <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("bag")}>🎒 Bag <kbd className="text-xs text-muted">I</kbd></button>
             <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("journal")}>📓 Journal <kbd className="text-xs text-muted">J</kbd></button>
             <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("quests")}>📜 Quests <kbd className="text-xs text-muted">Q</kbd></button>
+            <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => useWorld.getState().openChest(COOKBOOK, "craft")}>📖 Cookbook <kbd className="text-xs text-muted">C</kbd></button>
           </div>
           <TouchControls />
           {menu === "intro" && <IntroLetter />}

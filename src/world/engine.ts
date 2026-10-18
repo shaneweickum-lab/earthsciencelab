@@ -2,15 +2,15 @@ import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { cropDays, ITEMS, item, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type Recipe, type Station, type ToolUse } from "./items";
-import { BUILDING_SIZE, CHEST_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { addGardenLane, atGardenExit, BUILDING_SIZE, CHEST_SIZE, GARDEN_ENTRY, GATE_ROWS, LANE_X, laneBuildings, STALL_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
-import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, type Obstacle, type Slot, type Tile, type WorldState } from "./types";
+import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, type Listing, type Obstacle, type Slot, type Tile, type WorldState } from "./types";
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 9;
+export const WORLD_VERSION = 10;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -328,7 +328,7 @@ export function hourly(state: WorldState): WorldState {
     if (moisture === t.moisture && soil === t.soil && crop === t.crop) return t;
     return { ...t, moisture: r1(moisture), soil, crop };
   });
-  return { ...state, tiles };
+  return stallSales({ ...state, tiles });
 }
 
 // ───────────────────────── days ─────────────────────────
@@ -645,6 +645,7 @@ export function applyTool(state: WorldState): WorldState {
   const { x, y } = facingTile(state);
   const t = tileAt(state, x, y);
   if (!t) return state;
+  if (def.kind === "food") return eat(state, state.selected);
   if (plotLocked(state, x, y)) return say(state, "This plot isn't yours yet. Press E to see its price.");
 
   if (def.kind === "kit") return placeBuilding(state, state.selected, x, y);
@@ -1072,15 +1073,38 @@ export function placeBuilding(state: WorldState, slotIndex: number, x: number, y
   const reason = canPlace(state, def.building, ox, oy);
   if (reason) return say(state, reason);
   let next = removeItem(state, s.item, 1)!;
-  const b: Building = { id: `${def.building}-${state.minute}-${ox}-${oy}`, kind: def.building, x: ox, y: oy, data: def.building === "rainBarrel" ? { water: 0 } : {} };
+  const rot = rotatable(def.building) ? (state.placeRot ?? 0) % 4 : 0;
+  const b: Building = {
+    id: `${def.building}-${state.minute}-${ox}-${oy}`, kind: def.building, x: ox, y: oy,
+    ...(rot ? { rot } : {}), data: def.building === "rainBarrel" ? { water: 0 } : {},
+  };
   next = { ...next, buildings: [...next.buildings, b] };
   if (def.building === "greenhouse") {
     for (const p of greenhouseInterior(b)) {
       next = setTile(next, p.x, p.y, (t) => ({ ...t, greenhouse: true, ground: "farm", weeds: false, obstacle: null }));
     }
   }
-  next = say(next, `Built a ${def.name}!`);
+  next = say(next, `Built ${/^[AEIOU]/.test(def.name) ? "an" : "a"} ${def.name}!`);
   return def.building === "greenhouse" ? discover(next, "greenhouse-effect") : next;
+}
+
+/** Things you build can be turned to face any way, except the greenhouse (its door faces the path). */
+export const rotatable = (kind: BuildingKind) => kind !== "greenhouse";
+
+/** Turn the next thing you build a quarter turn. */
+export function turnPlacing(state: WorldState): WorldState {
+  return { ...state, placeRot: ((state.placeRot ?? 0) + 1) % 4 };
+}
+
+/** Turn something you built (the one in front of you) a quarter turn. */
+export function rotateBuilding(state: WorldState): WorldState {
+  if (state.mine) return state;
+  const { x, y } = facingTile(state);
+  const b = buildingAt(state, x, y);
+  if (!b || !canPickUp(b)) return state;
+  if (!rotatable(b.kind)) return say(state, "The greenhouse door has to face the path.");
+  const rot = ((b.rot ?? 0) + 1) % 4;
+  return { ...state, buildings: state.buildings.map((o) => (o.id === b.id ? { ...o, rot } : o)) };
 }
 
 /** Things you built yourself can be picked back up (Grandma's chest stays by the house). */
@@ -1164,25 +1188,155 @@ export function grantPlots(state: WorldState, n: number): WorldState {
 // ───────────────────────── crafting ─────────────────────────
 
 /** What each crafting station is called. */
-export const STATIONS: Record<Station, string> = { workbench: "Workbench", grinder: "Grinder", spinningWheel: "Spinning Wheel", furnace: "Furnace" };
+export const STATIONS: Record<Station, string> = {
+  workbench: "Workbench", grinder: "Grinder", spinningWheel: "Spinning Wheel", furnace: "Furnace", stove: "Stove", oven: "Oven",
+};
 
-/** How many of a recipe's inputs you have, and whether you can make it. */
-export function recipeStatus(state: WorldState, recipe: Recipe) {
-  const inputs = recipe.inputs.map((i) => ({ ...i, have: countItem(state, i.item) }));
-  return { inputs, ok: inputs.every((i) => i.have >= i.qty) };
+/** Kitchen stations count when they stand within this many steps of the one you're cooking at. */
+export const KITCHEN_REACH = 3;
+
+/** True for food: dishes made in a kitchen (or with only a knife, anywhere). */
+export const isCooking = (r: Recipe) => !!r.tools || !!r.stations;
+
+/** The stoves and ovens that make up the kitchen around the station you're at. */
+export function kitchenAt(state: WorldState, at?: string): Station[] {
+  const b = at ? state.buildings.find((x) => x.id === at) : undefined;
+  if (!b || (b.kind !== "stove" && b.kind !== "oven")) return [];
+  const near = state.buildings.filter((o) => (o.kind === "stove" || o.kind === "oven") && Math.abs(o.x - b.x) <= KITCHEN_REACH && Math.abs(o.y - b.y) <= KITCHEN_REACH);
+  return [...new Set(near.map((o) => o.kind as Station))];
 }
 
-/** Make one batch of a recipe at a station. */
-export function craft(state: WorldState, id: string): WorldState {
+/** How many of a recipe's inputs you have, the utensils and stations it's missing, and whether you can make it. */
+export function recipeStatus(state: WorldState, recipe: Recipe, at?: string) {
+  const inputs = recipe.inputs.map((i) => ({ ...i, have: countItem(state, i.item) }));
+  const missingTools = (recipe.tools ?? []).filter((t) => countItem(state, t) === 0);
+  const kitchen = kitchenAt(state, at);
+  const missingStations = (recipe.stations ?? []).filter((st) => !kitchen.includes(st));
+  return { inputs, missingTools, missingStations, ok: inputs.every((i) => i.have >= i.qty) && !missingTools.length && !missingStations.length };
+}
+
+/** Make one batch of a recipe: at a station, in a kitchen (`at` is the stove or oven you're using), or from your bag. */
+export function craft(state: WorldState, id: string, at?: string): WorldState {
   const recipe = RECIPES.find((x) => x.id === id);
   if (!recipe) return state;
-  if (!recipeStatus(state, recipe).ok) return say(state, "You don't have everything for that yet.");
+  const st = recipeStatus(state, recipe, at);
+  if (st.missingTools.length) return say(state, `You need a ${st.missingTools.map((t) => item(t).name.toLowerCase()).join(" and a ")} in your bag.`);
+  if (st.missingStations.length) return say(state, `Cook this at a ${st.missingStations.map((x) => STATIONS[x].toLowerCase()).join(" with an ")}${st.missingStations.length > 1 ? " beside it" : ""}.`);
+  if (!st.ok) return say(state, "You don't have everything for that yet.");
   let s = state;
   for (const i of recipe.inputs) s = removeItem(s, i.item, i.qty)!;
   const got = addItem(s, recipe.id, recipe.qty);
   if (!got) return say(state, "Your bag is full.");
-  const made = say(got, `Made ${recipe.qty > 1 ? `${recipe.qty} ` : ""}${item(recipe.id).name}!`);
+  const made = say(got, `${isCooking(recipe) ? "Cooked" : "Made"} ${recipe.qty > 1 ? `${recipe.qty} ` : ""}${item(recipe.id).name}!`);
+  if (isCooking(recipe)) {
+    const cooked = tally(made, "cooked");
+    return discover(cooked, "sun-to-supper");
+  }
   return recipe.id === "bronzeBar" ? discover(made, "alloy") : recipe.station === "furnace" ? discover(made, "smelting") : made;
+}
+
+// ───────────────────────── food ─────────────────────────
+
+/** Eat food from your bag: it gives back energy. */
+export function eat(state: WorldState, slotIndex: number): WorldState {
+  const s = state.inventory[slotIndex];
+  const def = s ? ITEMS[s.item] : null;
+  if (!s || !def?.energy) return state;
+  if (on(state, "energy") && state.energy >= state.maxEnergy) return say(state, "You're full of energy. Save it for later.");
+  const eaten = removeItem(state, s.item, 1);
+  if (!eaten) return state;
+  const gain = Math.min(def.energy, state.maxEnergy - state.energy);
+  const fed = tally({ ...eaten, energy: state.energy + gain }, "ate");
+  return say(fed, on(state, "energy") ? `Ate ${def.name}. +${gain} energy.` : `Ate ${def.name}. Yum! (Energy is turned off in this game.)`);
+}
+
+// ───────────────────────── Garden Lane ─────────────────────────
+
+/** Through a gate on Garden Lane. Yours (gate 0) leads home; the others are overgrown in a game of your own. */
+export function enterGate(state: WorldState, garden: number): WorldState {
+  if (state.mine) return state;
+  if (garden !== 0) return say(state, "Brambles grow over this gate. Nobody farms here. In a shared world, a friend's garden would be through here.");
+  return say({ ...state, player: { ...GARDEN_ENTRY } }, "Home sweet home.");
+}
+
+/** Out along your farm's road, back to your gate on Garden Lane. */
+export function leaveFarm(state: WorldState): WorldState {
+  if (state.mine || !atGardenExit(state.player)) return state;
+  return { ...state, player: { x: LANE_X, y: GATE_ROWS[0], facing: "right" } };
+}
+
+// ───────────────────────── your market stall ─────────────────────────
+
+/** The listings on your stall. */
+export const stallListings = (state: WorldState): Listing[] => state.stall ?? [];
+
+/** Put some of a bag stack on your stall, at your price. */
+export function stockStall(state: WorldState, slot: number, qty: number, price: number): WorldState {
+  const s = state.inventory[slot];
+  if (!s) return state;
+  const def = ITEMS[s.item];
+  if (!def.sell || def.tool || def.kind === "utensil") return say(state, "You can't sell that at the market.");
+  const n = Math.max(1, Math.min(Math.floor(qty) || 1, s.qty));
+  const each = Math.max(1, Math.round(price) || 1);
+  const list = stallListings(state);
+  const same = list.findIndex((l) => l.item === s.item && l.grade === s.grade && l.price === each);
+  if (same < 0 && list.length >= STALL_SIZE) return say(state, `Your stall holds ${STALL_SIZE} kinds of things. Take something off first.`);
+  const listing: Listing = s.grade ? { item: s.item, qty: n, grade: s.grade, price: each } : { item: s.item, qty: n, price: each };
+  const stall = same >= 0 ? list.map((l, i) => (i === same ? { ...l, qty: l.qty + n } : l)) : [...list, listing];
+  const inventory = state.inventory.map((x, i) => (i === slot ? (x!.qty - n > 0 ? { ...x!, qty: x!.qty - n } : null) : x));
+  return say({ ...state, inventory, stall }, `Put ${n} ${def.name} on your stall for ${each} coins each.`);
+}
+
+/** Take a listing back off your stall. */
+export function unstockStall(state: WorldState, listing: number): WorldState {
+  const l = stallListings(state)[listing];
+  if (!l) return state;
+  const back = addItem(state, l.item, l.qty, l.grade);
+  if (!back) return say(state, "Your bag is full.");
+  return { ...back, stall: stallListings(state).filter((_, i) => i !== listing) };
+}
+
+/** What a stall listing would fetch at the store: the fair price townsfolk expect. */
+export const fairPrice = (state: WorldState, l: Pick<Listing, "item" | "grade">) => Math.max(1, sellPrice(ITEMS[l.item], l.grade, state.organic));
+
+/**
+ * The chance a passer-by buys one of a listing this hour: about 1 in 3 at the store's price,
+ * less the more you ask, never above 3 times the store's price, and always when it's a bargain.
+ */
+export function stallChance(state: WorldState, l: Listing): number {
+  const ratio = l.price / fairPrice(state, l);
+  if (ratio <= 0.8) return 1;
+  if (ratio >= 3) return 0;
+  return Math.min(1, (0.35 * (3 - ratio)) / 2);
+}
+
+/** Who stops at your stall. */
+const SHOPPERS = ["Mei", "Dr. Okafor", "June", "Luis", "Pip", "A traveler", "A neighbor"];
+
+/** Townsfolk browse your stall during the day (8 AM to 8 PM): each listing may sell one an hour. */
+function stallSales(state: WorldState): WorldState {
+  const list = stallListings(state);
+  const hour = Math.floor(timeOfDay(state.minute) / 60);
+  if (!list.length || hour < 8 || hour >= 20) return state;
+  let seed = (state.seed ^ Math.imul(state.minute, 0x9e3779b1)) >>> 0;
+  const rand = () => {
+    const [v, n] = nextRandom(seed);
+    seed = n;
+    return v;
+  };
+  let s = state;
+  const stall: Listing[] = [];
+  for (const l of list) {
+    const roll = rand();
+    const who = SHOPPERS[Math.floor(rand() * SHOPPERS.length)];
+    if (roll >= stallChance(state, l)) {
+      stall.push(l);
+      continue;
+    }
+    s = say(tally({ ...s, coins: s.coins + l.price }, "sold"), `${who} bought ${ITEMS[l.item].name} from your stall: +${l.price} coins.`);
+    if (l.qty > 1) stall.push({ ...l, qty: l.qty - 1 });
+  }
+  return { ...s, stall };
 }
 
 // ───────────────────────── the mine ─────────────────────────
@@ -1321,7 +1475,8 @@ function addLandmarks(old: WorldState, version = 5): WorldState {
 function addChest(old: WorldState): WorldState {
   const s = addLandmarks(old, 6);
   const qs = s.quests ?? { active: [], done: [] };
-  const unlocks = Object.values(SHOP_UNLOCKS).filter((q) => !qs.done.includes(q));
+  // (Only the science tools: the kitchen came later, with its own quest.)
+  const unlocks = Object.entries(SHOP_UNLOCKS).filter(([id]) => !id.startsWith("kit_")).map(([, q]) => q).filter((q) => !qs.done.includes(q));
   return { ...s, quests: { ...qs, done: [...qs.done, ...unlocks] } };
 }
 
@@ -1344,6 +1499,42 @@ function addSouthFields(old: WorldState): WorldState {
     s = setTile(s, x, y, (t) => ({ ...unmarked(t), ground: "path", obstacle: null, weeds: false }));
   }
   return s;
+}
+
+/**
+ * Version 10 put Garden Lane between the farm and town (your farm is reached through its gate),
+ * set up your market stall, and locked the field plots that version 8 handed out free and that
+ * still stand empty, so they can be bought or earned like on a new farm.
+ */
+function addGardenLaneV10(old: WorldState): WorldState {
+  const tiles = [...old.tiles];
+  addGardenLane(tiles);
+  let s: WorldState = { ...old, version: 10, tiles };
+  for (const b of laneBuildings()) {
+    if (s.buildings.some((x) => x.id === b.id)) continue;
+    s = setTile(s, b.x, b.y, (t) => ({ ...unmarked(t), obstacle: null, weeds: false, ground: t.ground === "forest" ? "grass" : t.ground }));
+    s = { ...s, buildings: [...s.buildings, b] };
+  }
+  const px = Math.round(s.player.x);
+  if (!s.mine && px >= FARM_W && px <= LANE_X + 1) s = { ...s, player: { x: LANE_X + 1, y: GARDEN_ENTRY.y, facing: "right" } };
+  return { ...s, plots: relockedPlots(s) };
+}
+
+/** The field plots version 8 gave old farms, minus the ones still empty (plot 0 always stays yours). */
+function relockedPlots(s: WorldState): number[] {
+  const owned = ownedPlots(s);
+  const field = PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id);
+  // Only farms that got the whole field from version 8 (it handed them out in order).
+  if (!field.every((id, i) => owned[i] === id)) return owned;
+  const used = (id: number) => {
+    const p = PLOTS[id];
+    for (let y = p.y0; y <= p.y1; y++) for (let x = p.x0; x <= p.x1; x++) {
+      const t = s.tiles[idx(x, y)];
+      if (t.tilled || t.crop || t.mulch || t.greenhouse || buildingAt(s, x, y)) return true;
+    }
+    return false;
+  };
+  return owned.filter((id) => id === 0 || !field.includes(id) || used(id));
 }
 
 /** Version 1 saves had no settings and stored weather as a plain label. */
@@ -1378,6 +1569,7 @@ export function loadWorld(raw: string | null): WorldState | null {
     if (up.version < 7) up = addLandmarks(up, 7);
     if (up.version < 8) up = addSouthFields(up);
     if (up.version < 9) up = finishLessons(up);
+    if (up.version < 10) up = addGardenLaneV10(up);
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

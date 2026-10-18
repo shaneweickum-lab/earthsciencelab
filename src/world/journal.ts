@@ -36,6 +36,7 @@ const NOAA = { org: "NOAA National Weather Service, JetStream", url: "https://ww
 const USGS = { org: "U.S. Geological Survey, Water Science School", url: "https://www.usgs.gov/special-topics/water-science-school" };
 const PSU = { org: "Penn State Extension, Manure and Composting", url: "https://extension.psu.edu" };
 const USGS_MINERALS = { org: "U.S. Geological Survey, National Minerals Information Center", url: "https://www.usgs.gov/centers/national-minerals-information-center" };
+const MYPLATE = { org: "USDA MyPlate", url: "https://www.myplate.gov" };
 const MUSHROOM = { org: "North American Mycological Association", url: "https://namyco.org" };
 
 export const MUSHROOM_SAFETY = "Never eat a wild mushroom unless an expert identifies it. Some deadly mushrooms look like safe ones.";
@@ -350,6 +351,15 @@ export const JOURNAL: JournalEntry[] = [
       elementary: "Bronze is copper and tin melted together. Mixing metals can make a new metal that's stronger than either one. A mix of metals is called an alloy.",
       middle: "About 5,000 years ago people discovered that adding tin to copper made bronze, which is much harder. It made better tools and weapons, starting the Bronze Age. Steel (iron + carbon) and brass (copper + zinc) are alloys too.",
       high: "In an alloy, atoms of a different size distort the metal's crystal lattice and pin dislocations (the defects that let planes of atoms slip), so the metal resists bending: solid-solution strengthening. Bronze with about 12% tin is far harder than pure copper.",
+    },
+  },
+  {
+    id: "sun-to-supper", name: "From Sun to Supper", icon: "🍲", category: "soil", source: MYPLATE,
+    hint: "Cook something from your harvest.",
+    fact: {
+      elementary: "Plants catch sunlight and store its energy in their leaves, roots, and seeds. When you eat food from your garden, that sunshine energy becomes yours!",
+      middle: "Photosynthesis turns sunlight, water, and carbon dioxide into sugar. Plants store it as starch (potatoes, wheat) or oil (sunflower seeds). Cooking breaks down tough cell walls and starch so your body can use more of that energy.",
+      high: "Heat gelatinizes starch granules and denatures proteins, making them easier for digestive enzymes to break down. Your cells then release the stored chemical energy through cellular respiration, the reverse of photosynthesis: C₆H₁₂O₆ + 6O₂ → 6CO₂ + 6H₂O + energy.",
     },
   },
 ];

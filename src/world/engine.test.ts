@@ -531,19 +531,27 @@ describe("farm plots", () => {
     expect(s.plots).toEqual([0, 1, 2]);
   });
 
-  it("grow the farm south, and older farms keep their whole field", () => {
+  it("grow the farm south, and older farms keep the field plots they've used", () => {
     const s = newWorld(42);
     expect(s.tiles).toHaveLength(W * H);
     expect(tileAt(s, 20, 45)!.ground).toBe("farm");
     expect(tileAt(s, 9, 34)!.ground).toBe("path"); // through the forest belt
-    const old = { ...s, version: 7, tiles: s.tiles.slice(0, W * OLD_H).map((t, i) => (i === idx(9, 34) ? { ...t, ground: "forest" as const, obstacle: "tree" as const } : t)) } as WorldState;
+    // An old farm with crops growing in plot 4.
+    const used = fieldTile(s, 4);
+    const old = {
+      ...s, version: 7,
+      tiles: s.tiles.slice(0, W * OLD_H).map((t, i) => (
+        i === idx(9, 34) ? { ...t, ground: "forest" as const, obstacle: "tree" as const } : i === idx(used.x, used.y) ? { ...t, tilled: true } : t
+      )),
+    } as WorldState;
     delete old.plots;
     const up = loadWorld(JSON.stringify(old))!;
     expect(up.version).toBe(WORLD_VERSION);
     expect(up.tiles).toHaveLength(W * H);
-    expect(up.plots).toEqual(PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id));
+    expect(up.plots).toEqual([0, 4]);
     expect(tileAt(up, 9, 34)!.ground).toBe("path");
-    expect(plotLocked(up, 20, 20)).toBe(false);
+    expect(plotLocked(up, used.x, used.y)).toBe(false);
+    expect(plotLocked(up, fieldTile(s, 7).x, fieldTile(s, 7).y)).toBe(true);
     expect(plotLocked(up, 20, 45)).toBe(true);
   });
 });

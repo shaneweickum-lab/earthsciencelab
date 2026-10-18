@@ -341,6 +341,42 @@ ICONS.kit_furnace = async () => group(
   cyl(0.14, 0.16, 0.5, "#7a756d", [0.25, 1.2, -0.15], [0, 0, 0], 8),
 );
 
+// The kitchen: Kenney's Food Kit utensils and dishes, and the Furniture Kit stoves the farm draws.
+/** Something sitting on top of something else (a dish on a plate, a pan on a stove), `s` times the base's width. */
+async function on(base, top, s = 1, rot = [0, 0, 0]) {
+  const b = await base;
+  const t = await top;
+  const box3 = new THREE.Box3().setFromObject(b);
+  t.rotation.set(...rot);
+  const size = (o) => new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
+  const bs = size(b), ts = size(t);
+  t.scale.multiplyScalar((s * Math.max(bs.x, bs.z)) / Math.max(ts.x, ts.z));
+  const tb = new THREE.Box3().setFromObject(t);
+  t.position.set((box3.min.x + box3.max.x) / 2 - (tb.min.x + tb.max.x) / 2, box3.max.y - tb.min.y, (box3.min.z + box3.max.z) / 2 - (tb.min.z + tb.max.z) / 2);
+  return group(b, t);
+}
+const furniture = (n) => glb(`/models/furniture/${n}.glb`);
+ICONS.knife = () => food("cooking-knife");
+ICONS.pan = () => food("frying-pan");
+ICONS.pot = () => food("pot");
+ICONS.kit_stove = () => on(furniture("kitchenStove"), food("frying-pan"), 0.55);
+ICONS.kit_oven = () => on(furniture("kitchenStoveElectric"), food("loaf"), 0.45);
+ICONS.flour = async () => sack("#f3ead6", "#d6b04a", "#ffffff");
+ICONS.carrotSticks = () => on(food("cutting-board"), food("carrot"), 0.75, [0, 0, Math.PI / 2]);
+ICONS.salad = () => food("salad");
+ICONS.toastedSeeds = () => food("bowl-cereal");
+ICONS.friedEgg = () => food("egg-cooked");
+ICONS.cornOnCob = () => on(food("plate"), food("corn"), 0.75, [0, 0, Math.PI / 2]);
+ICONS.bakedPotato = () => on(food("plate"), Promise.resolve(potato()), 0.55);
+ICONS.fries = () => food("fries");
+ICONS.tomatoSoup = () => food("bowl-soup");
+ICONS.pancakes = () => food("pancakes");
+ICONS.beanStew = () => food("pot-stew");
+ICONS.bread = () => food("loaf");
+ICONS.sandwich = () => food("sandwich");
+ICONS.pizza = () => food("pizza");
+ICONS.pie = () => food("pie");
+
 for (const [tier, color] of Object.entries(TIER_COLORS)) {
   ICONS[`axe_${tier}`] = async () => metal(await survival("tool-axe-upgraded"), color);
   ICONS[`pickaxe_${tier}`] = async () => metal(await survival("tool-pickaxe-upgraded"), color);

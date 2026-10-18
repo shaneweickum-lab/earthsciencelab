@@ -2,7 +2,7 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 9
+const WORLD_VERSION := 10
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
@@ -374,7 +374,7 @@ static func _hourly(state: Dictionary) -> Dictionary:
 			changed = true
 		if changed:
 			tiles[i] = Js.with(t, {"moisture": Js.r1(moisture), "soil": soil, "crop": crop})
-	return Js.with(state, {"tiles": tiles})
+	return _stall_sales(Js.with(state, {"tiles": tiles}))
 
 
 # ───────────────────────── days ─────────────────────────
@@ -738,6 +738,8 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 	var t = tile_at(state, x, y)
 	if t == null:
 		return state
+	if def.kind == "food":
+		return eat(state, int(state.selected))
 	if plot_locked(state, x, y):
 		return say(state, "This plot isn't yours yet. Press E to see its price.")
 
@@ -957,6 +959,10 @@ static func interact_target(state: Dictionary) -> String:
 			return "board"
 		"chest":
 			return "chest"
+		"gardenGate":
+			return "gate"
+		"marketStall":
+			return "stall"
 		"mineEntrance":
 			# Once you've been deep enough, the mine cart at the entrance can take you down.
 			if mine_open(state) and int(state.get("deepest", 0)) >= 5:
@@ -1247,13 +1253,44 @@ static func place_building(state: Dictionary, slot_index: int, x: int, y: int) -
 	if reason:
 		return say(state, reason)
 	var next: Dictionary = remove_item(state, s.item, 1)
-	var b := {"id": "%s-%s-%d-%d" % [kind, Js.num(state.minute), o.x, o.y], "kind": kind, "x": o.x, "y": o.y, "data": {"water": 0} if kind == "rainBarrel" else {}}
+	var rot: int = int(state.get("placeRot", 0)) % 4 if rotatable(kind) else 0
+	var b := {"id": "%s-%s-%d-%d" % [kind, Js.num(state.minute), o.x, o.y], "kind": kind, "x": o.x, "y": o.y}
+	if rot:
+		b.rot = rot
+	b.data = {"water": 0} if kind == "rainBarrel" else {}
 	next = Js.with(next, {"buildings": next.buildings + [b]})
 	if kind == "greenhouse":
 		for p in WorldMap.greenhouse_interior(b):
 			next = _set_tile(next, p.x, p.y, func(t): return Js.with(t, {"greenhouse": true, "ground": "farm", "weeds": false, "obstacle": null}))
-	next = say(next, "Built a %s!" % def.name)
+	next = say(next, "Built %s %s!" % ["an" if def.name.substr(0, 1) in ["A", "E", "I", "O", "U"] else "a", def.name])
 	return discover(next, "greenhouse-effect") if kind == "greenhouse" else next
+
+
+## Things you build can be turned to face any way, except the greenhouse (its door faces the path).
+static func rotatable(kind: String) -> bool:
+	return kind != "greenhouse"
+
+
+## Turn the next thing you build a quarter turn.
+static func turn_placing(state: Dictionary) -> Dictionary:
+	return Js.with(state, {"placeRot": (int(state.get("placeRot", 0)) + 1) % 4})
+
+
+## Turn something you built (the one in front of you) a quarter turn.
+static func rotate_building(state: Dictionary) -> Dictionary:
+	if state.get("mine") != null:
+		return state
+	var f := facing_tile(state)
+	var b = building_at(state, f.x, f.y)
+	if b == null or not can_pick_up(b):
+		return state
+	if not rotatable(b.kind):
+		return say(state, "The greenhouse door has to face the path.")
+	var rot := (int(b.get("rot", 0)) + 1) % 4
+	var buildings := []
+	for o in state.buildings:
+		buildings.append(Js.with(o, {"rot": rot}) if o.id == b.id else o)
+	return Js.with(state, {"buildings": buildings})
 
 
 ## Things you built yourself can be picked back up (Grandma's chest stays by the house).
@@ -1381,7 +1418,11 @@ static func grant_plots(state: Dictionary, n: int) -> Dictionary:
 # ───────────────────────── crafting ─────────────────────────
 
 ## What each crafting station is called.
-const STATIONS := {"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace"}
+const STATIONS := {
+	"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace", "stove": "Stove", "oven": "Oven",
+}
+## Kitchen stations count when they stand within this many steps of the one you're cooking at.
+const KITCHEN_REACH := 3
 
 
 static func recipe(id: String) -> Variant:
@@ -1391,8 +1432,30 @@ static func recipe(id: String) -> Variant:
 	return null
 
 
-## How many of a recipe's inputs you have, and whether you can make it: {inputs, ok}.
-static func recipe_status(state: Dictionary, r: Dictionary) -> Dictionary:
+## True for food: dishes made in a kitchen (or with only a knife, anywhere).
+static func is_cooking(r: Dictionary) -> bool:
+	return r.has("tools") or r.has("stations")
+
+
+## The stoves and ovens that make up the kitchen around the station you're at.
+static func kitchen_at(state: Dictionary, at: String) -> Array:
+	var b = null
+	for o in state.buildings:
+		if o.id == at:
+			b = o
+			break
+	if b == null or not b.kind in ["stove", "oven"]:
+		return []
+	var out := []
+	for o in state.buildings:
+		if o.kind in ["stove", "oven"] and absi(int(o.x) - int(b.x)) <= KITCHEN_REACH and absi(int(o.y) - int(b.y)) <= KITCHEN_REACH and not o.kind in out:
+			out.append(o.kind)
+	return out
+
+
+## How many of a recipe's inputs you have, the utensils and stations it's missing, and whether
+## you can make it: {inputs, missingTools, missingStations, ok}.
+static func recipe_status(state: Dictionary, r: Dictionary, at := "") -> Dictionary:
 	var inputs := []
 	var ok := true
 	for i in r.inputs:
@@ -1400,15 +1463,36 @@ static func recipe_status(state: Dictionary, r: Dictionary) -> Dictionary:
 		inputs.append({"item": i.item, "qty": int(i.qty), "have": have})
 		if have < i.qty:
 			ok = false
-	return {"inputs": inputs, "ok": ok}
+	var missing_tools := []
+	for t in r.get("tools", []):
+		if count_item(state, t) == 0:
+			missing_tools.append(t)
+	var kitchen := kitchen_at(state, at)
+	var missing_stations := []
+	for st in r.get("stations", []):
+		if not st in kitchen:
+			missing_stations.append(st)
+	return {"inputs": inputs, "missingTools": missing_tools, "missingStations": missing_stations, "ok": ok and missing_tools.is_empty() and missing_stations.is_empty()}
 
 
-## Make one batch of a recipe at a station.
-static func craft(state: Dictionary, id: String) -> Dictionary:
+## Make one batch of a recipe: at a station, in a kitchen (`at` is the stove or oven you're
+## using), or from your bag.
+static func craft(state: Dictionary, id: String, at := "") -> Dictionary:
 	var r = recipe(id)
 	if r == null:
 		return state
-	if not recipe_status(state, r).ok:
+	var st := recipe_status(state, r, at)
+	if not st.missingTools.is_empty():
+		var names := []
+		for t in st.missingTools:
+			names.append(Items.get_def(t).name.to_lower())
+		return say(state, "You need a %s in your bag." % " and a ".join(names))
+	if not st.missingStations.is_empty():
+		var names := []
+		for x in st.missingStations:
+			names.append(STATIONS[x].to_lower())
+		return say(state, "Cook this at a %s%s." % [" with an ".join(names), " beside it" if names.size() > 1 else ""])
+	if not st.ok:
 		return say(state, "You don't have everything for that yet.")
 	var s := state
 	for i in r.inputs:
@@ -1416,12 +1500,154 @@ static func craft(state: Dictionary, id: String) -> Dictionary:
 	var got = add_item(s, r.id, int(r.qty))
 	if got == null:
 		return say(state, "Your bag is full.")
-	var made := say(got, "Made %s%s!" % ["%d " % r.qty if r.qty > 1 else "", Items.get_def(r.id).name])
+	var cooking := is_cooking(r)
+	var made := say(got, "%s %s%s!" % ["Cooked" if cooking else "Made", "%d " % r.qty if r.qty > 1 else "", Items.get_def(r.id).name])
+	if cooking:
+		return discover(tally(made, "cooked"), "sun-to-supper")
 	if r.id == "bronzeBar":
 		return discover(made, "alloy")
-	if r.station == "furnace":
+	if r.get("station") == "furnace":
 		return discover(made, "smelting")
 	return made
+
+
+# ───────────────────────── food ─────────────────────────
+
+## Eat food from your bag: it gives back energy.
+static func eat(state: Dictionary, slot_index: int) -> Dictionary:
+	if slot_index < 0 or slot_index >= state.inventory.size():
+		return state
+	var s = state.inventory[slot_index]
+	if s == null:
+		return state
+	var def := Items.get_def(s.item)
+	if not def.get("energy"):
+		return state
+	var energy_on := Settings.on(state, "energy")
+	if energy_on and state.energy >= state.maxEnergy:
+		return say(state, "You're full of energy. Save it for later.")
+	var eaten = remove_item(state, s.item, 1)
+	if eaten == null:
+		return state
+	var gain: int = mini(int(def.energy), int(state.maxEnergy - state.energy))
+	var fed := tally(Js.with(eaten, {"energy": state.energy + gain}), "ate")
+	if energy_on:
+		return say(fed, "Ate %s. +%d energy." % [def.name, gain])
+	return say(fed, "Ate %s. Yum! (Energy is turned off in this game.)" % def.name)
+
+
+# ───────────────────────── Garden Lane ─────────────────────────
+
+## Through a gate on Garden Lane. Yours (gate 0) leads home; the others are overgrown in a game of your own.
+static func enter_gate(state: Dictionary, garden: int) -> Dictionary:
+	if state.get("mine") != null:
+		return state
+	if garden != 0:
+		return say(state, "Brambles grow over this gate. Nobody farms here. In a shared world, a friend's garden would be through here.")
+	return say(Js.with(state, {"player": WorldMap.GARDEN_ENTRY.duplicate()}), "Home sweet home.")
+
+
+## Out along your farm's road, back to your gate on Garden Lane.
+static func leave_farm(state: Dictionary) -> Dictionary:
+	if state.get("mine") != null or not WorldMap.at_garden_exit(state.player):
+		return state
+	return Js.with(state, {"player": {"x": WorldMap.LANE_X, "y": WorldMap.GATE_ROWS[0], "facing": "right"}})
+
+
+# ───────────────────────── your market stall ─────────────────────────
+
+## The listings on your stall.
+static func stall_listings(state: Dictionary) -> Array:
+	return state.get("stall") if state.get("stall") is Array else []
+
+
+## Put some of a bag stack on your stall, at your price.
+static func stock_stall(state: Dictionary, slot: int, qty: int, price: float) -> Dictionary:
+	if slot < 0 or slot >= state.inventory.size() or state.inventory[slot] == null:
+		return state
+	var s: Dictionary = state.inventory[slot]
+	var def := Items.get_def(s.item)
+	if not def.get("sell") or def.get("tool") or def.kind == "utensil":
+		return say(state, "You can't sell that at the market.")
+	var n := maxi(1, mini(qty if qty > 0 else 1, int(s.qty)))
+	var each := maxi(1, int(Js.round(price)) if Js.round(price) > 0 else 1)
+	var list := stall_listings(state)
+	var same := -1
+	for i in list.size():
+		if list[i].item == s.item and list[i].get("grade") == s.get("grade") and int(list[i].price) == each:
+			same = i
+			break
+	if same < 0 and list.size() >= WorldMap.STALL_SIZE:
+		return say(state, "Your stall holds %d kinds of things. Take something off first." % WorldMap.STALL_SIZE)
+	var stall := []
+	for i in list.size():
+		stall.append(Js.with(list[i], {"qty": int(list[i].qty) + n}) if i == same else list[i])
+	if same < 0:
+		var listing := {"item": s.item, "qty": n}
+		if s.get("grade") != null:
+			listing.grade = s.grade
+		listing.price = each
+		stall.append(listing)
+	var inventory: Array = state.inventory.duplicate()
+	inventory[slot] = Js.with(s, {"qty": int(s.qty) - n}) if int(s.qty) - n > 0 else null
+	return say(Js.with(state, {"inventory": inventory, "stall": stall}), "Put %d %s on your stall for %d coins each." % [n, def.name, each])
+
+
+## Take a listing back off your stall.
+static func unstock_stall(state: Dictionary, listing: int) -> Dictionary:
+	var list := stall_listings(state)
+	if listing < 0 or listing >= list.size():
+		return state
+	var l: Dictionary = list[listing]
+	var back = add_item(state, l.item, int(l.qty), l.get("grade"))
+	if back == null:
+		return say(state, "Your bag is full.")
+	var stall := []
+	for i in list.size():
+		if i != listing:
+			stall.append(list[i])
+	return Js.with(back, {"stall": stall})
+
+
+## What a stall listing would fetch at the store: the fair price townsfolk expect.
+static func fair_price(state: Dictionary, l: Dictionary) -> int:
+	return maxi(1, int(Items.sell_price(Items.get_def(l.item), l.get("grade"), state.organic)))
+
+
+## The chance a passer-by buys one of a listing this hour: about 1 in 3 at the store's price,
+## less the more you ask, never above 3 times the store's price, and always when it's a bargain.
+static func stall_chance(state: Dictionary, l: Dictionary) -> float:
+	var ratio: float = float(l.price) / fair_price(state, l)
+	if ratio <= 0.8:
+		return 1.0
+	if ratio >= 3:
+		return 0.0
+	return minf(1.0, (0.35 * (3 - ratio)) / 2)
+
+
+## Who stops at your stall.
+const SHOPPERS := ["Mei", "Dr. Okafor", "June", "Luis", "Pip", "A traveler", "A neighbor"]
+
+
+## Townsfolk browse your stall during the day (8 AM to 8 PM): each listing may sell one an hour.
+static func _stall_sales(state: Dictionary) -> Dictionary:
+	var list := stall_listings(state)
+	var hour := int(Clock.time_of_day(state.minute) / 60)
+	if list.is_empty() or hour < 8 or hour >= 20:
+		return state
+	var r := Rng.stream(int(state.seed) ^ U32.imul(int(state.minute), 0x9e3779b1))
+	var s := state
+	var stall := []
+	for l in list:
+		var roll := r.next()
+		var who: String = SHOPPERS[int(r.next() * SHOPPERS.size())]
+		if roll >= stall_chance(state, l):
+			stall.append(l)
+			continue
+		s = say(tally(Js.with(s, {"coins": s.coins + int(l.price)}), "sold"), "%s bought %s from your stall: +%d coins." % [who, Items.get_def(l.item).name, int(l.price)])
+		if int(l.qty) > 1:
+			stall.append(Js.with(l, {"qty": int(l.qty) - 1}))
+	return Js.with(s, {"stall": stall})
 
 
 # ───────────────────────── the mine ─────────────────────────
@@ -1591,9 +1817,11 @@ static func _add_chest(old: Dictionary) -> Dictionary:
 	var s := _add_landmarks(old, 6)
 	var qs := Quests.quest_state(s)
 	var done: Array = qs.done.duplicate()
-	for q in Data.shop_unlocks().values():
-		if not q in done:
-			done.append(q)
+	# (Only the science tools: the kitchen came later, with its own quest.)
+	var unlocks: Dictionary = Data.shop_unlocks()
+	for id in unlocks:
+		if not id.begins_with("kit_") and not unlocks[id] in done:
+			done.append(unlocks[id])
 	return Js.with(s, {"quests": Js.with(qs, {"done": done})})
 
 
@@ -1624,6 +1852,56 @@ static func _add_south_fields(old: Dictionary) -> Dictionary:
 			out.erase("regrow")
 			return out)
 	return s
+
+
+## Version 10 put Garden Lane between the farm and town (your farm is reached through its gate),
+## set up your market stall, and locked the field plots that version 8 handed out free and that
+## still stand empty, so they can be bought or earned like on a new farm.
+static func _add_garden_lane_v10(old: Dictionary) -> Dictionary:
+	var tiles: Array = old.tiles.duplicate()
+	WorldMap.add_garden_lane(tiles)
+	var s := Js.with(old, {"version": 10, "tiles": tiles})
+	for b in WorldMap.lane_buildings():
+		if s.buildings.any(func(o): return o.id == b.id):
+			continue
+		s = _set_tile(s, b.x, b.y, func(t):
+			var out := Js.with(t, {"obstacle": null, "weeds": false, "ground": "grass" if t.ground == "forest" else t.ground})
+			out.erase("hits")
+			out.erase("regrow")
+			return out)
+		s = Js.with(s, {"buildings": s.buildings + [b]})
+	var px := Js.round(s.player.x)
+	if s.get("mine") == null and px >= WorldMap.FARM_W and px <= WorldMap.LANE_X + 1:
+		s = Js.with(s, {"player": {"x": WorldMap.LANE_X + 1, "y": WorldMap.GARDEN_ENTRY.y, "facing": "right"}})
+	return Js.with(s, {"plots": _relocked_plots(s)})
+
+
+## The field plots version 8 gave old farms, minus the ones still empty (plot 0 always stays yours).
+static func _relocked_plots(s: Dictionary) -> Array:
+	var owned := owned_plots(s)
+	var field := []
+	for p in WorldMap.plots():
+		if p.y1 < WorldMap.OLD_H:
+			field.append(p.id)
+	# Only farms that got the whole field from version 8 (it handed them out in order).
+	for i in field.size():
+		if i >= owned.size() or int(owned[i]) != field[i]:
+			return owned
+	var out := []
+	for id in owned:
+		if int(id) == 0 or not int(id) in field or _plot_used(s, int(id)):
+			out.append(id)
+	return out
+
+
+static func _plot_used(s: Dictionary, id: int) -> bool:
+	var p: Dictionary = WorldMap.plots()[id]
+	for y in range(p.y0, p.y1 + 1):
+		for x in range(p.x0, p.x1 + 1):
+			var t: Dictionary = s.tiles[WorldMap.idx(x, y)]
+			if t.tilled or t.crop != null or t.mulch or t.greenhouse or building_at(s, x, y) != null:
+				return true
+	return false
 
 
 ## Version 1 saves had no settings and stored weather as a plain label.
@@ -1674,6 +1952,8 @@ static func load_world(raw: String) -> Variant:
 		up = _add_south_fields(up)
 	if up.version < 9:
 		up = _finish_lessons(up)
+	if up.version < 10:
+		up = _add_garden_lane_v10(up)
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null
@@ -1689,6 +1969,8 @@ static func _normalize_numbers(s: Dictionary) -> void:
 	s.selected = int(s.selected)
 	if s.get("deepest") != null:
 		s.deepest = int(s.deepest)
+	if s.get("placeRot") != null:
+		s.placeRot = int(s.placeRot)
 	if s.get("mine") != null:
 		s.mine.floor = int(s.mine.floor)
 		s.mine.ladderAt = int(s.mine.ladderAt)

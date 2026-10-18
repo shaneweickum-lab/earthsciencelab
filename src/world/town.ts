@@ -130,7 +130,7 @@ export const NPCS: Npc[] = [
     id: "pip", short: "Pip", name: "Pip Ortega", role: "Luis's kid, full of questions", avatar: "male-e", scale: 0.8,
     schedule: [
       { hour: 8, x: 54, y: 17, facing: "up", doing: "looking for frogs in the fountain" },
-      { hour: 11, x: 36, y: 11, facing: "left", doing: "peeking at your farm" },
+      { hour: 11, x: 40, y: 5, facing: "left", doing: "peeking through your garden gate" },
       { hour: 14, x: 60, y: 16, facing: "right", doing: "collecting rocks" },
       { hour: 17, x: 47, y: 24, facing: "left", doing: "doing homework on the steps" },
       { hour: 20, x: 46, y: 26, facing: "down", inside: true, doing: "in bed (supposedly)" },

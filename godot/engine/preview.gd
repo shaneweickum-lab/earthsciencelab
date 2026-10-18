@@ -26,6 +26,14 @@ static func preview_action(state: Dictionary) -> Dictionary:
 	var b = World.building_at(state, x, y)
 	if b != null and b.kind == "chest":
 		return _r("Open", "Open the chest to take things out or put them away.", true)
+	if b != null and b.kind == "gardenGate":
+		if b.data.get("garden") == 0:
+			return _r("Enter", "Your garden gate. Press E to go home to your farm.", true)
+		return _r("Enter", "Brambles grow over this gate. In a shared world, a friend's garden would be here.", false)
+	if b != null and b.kind == "marketStall":
+		return _r("Stall", "Your market stall. Put things out at your price; townsfolk buy during the day. Press E.", true)
+	if b != null and b.kind in ["stove", "oven"]:
+		return _r("Cook", "Cook at the %s. Bring the utensils each dish needs." % World.STATIONS[b.kind], true)
 	if b != null and b.kind == "mineEntrance":
 		if World.mine_open(state):
 			return _r("Enter", "Climb down into the old mine.", true)
@@ -78,7 +86,11 @@ static func preview_action(state: Dictionary) -> Dictionary:
 			var bonus := " Raises the next crop's grade (+%s)." % Js.num(minf(pts, room)) if pts and room else ""
 			return _r("Apply", def.desc + bonus, not t.obstacle)
 		"kit":
-			return _r("Build", "Place a %s. %s" % [def.name, def.desc], true)
+			return _r("Build", "Place a %s. %s Press R to turn it." % [def.name, def.desc], true)
+		"food":
+			if state.energy >= state.maxEnergy and Settings.on(state, "energy"):
+				return _r("Eat", "You're full of energy. Save it for later.", false)
+			return _r("Eat", "Eat the %s (+%d energy)." % [def.name.to_lower(), int(def.energy)], true)
 		"tool":
 			pass
 		_:

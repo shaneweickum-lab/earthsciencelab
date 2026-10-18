@@ -63,7 +63,7 @@ export function applyEntry(m: MultiWorld, e: Entry): MultiWorld {
         const why = helperBlock(at, e.pid, e.op === "interact" ? "interact" : "act");
         if (why) return asPlayer(at, e.pid, (v) => say(v, why));
       }
-      if (["take", "takeAll", "put", "craft", "buyPlot", "pickUp", "sleep"].includes(e.op)) {
+      if (["take", "takeAll", "put", "craft", "buyPlot", "pickUp", "rotate", "sleep"].includes(e.op)) {
         const p = at.players[e.pid];
         if (p.area.kind === "garden" && p.area.garden !== p.garden) return asPlayer(at, e.pid, (v) => say(v, "That's not yours to use."));
         if (e.op === "sleep") return at; // in multiplayer, beds go through "bed"
