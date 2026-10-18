@@ -275,6 +275,17 @@ await stall.getByText(/chance an hour/).waitFor();
 await shot("07d4-stall");
 await page.keyboard.press("Escape");
 
+// Full screen: F fills the screen with the game (or the window, where the browser can't), and F again goes back.
+const gameBox = page.getByLabel("Soil & Sprout game");
+const isFull = () => gameBox.evaluate((el) => document.fullscreenElement === el || el.classList.contains("fixed!"));
+await page.keyboard.press("f");
+await page.waitForFunction(() => { const el = document.querySelector('[aria-label="Soil & Sprout game"]'); return document.fullscreenElement === el || el.classList.contains("fixed!"); });
+await page.getByRole("button", { name: "Exit full screen" }).first().waitFor();
+await shot("07d5-fullscreen");
+await page.keyboard.press("f");
+await page.waitForFunction(() => !document.fullscreenElement && !document.querySelector('[aria-label="Soil & Sprout game"]').classList.contains("fixed!"));
+if (await isFull()) throw new Error("Full screen didn't turn off");
+
 // Pause: switch a science feature off mid-game, then save and quit to the main menu.
 await page.keyboard.press("Escape");
 await page.getByRole("dialog", { name: "Paused" }).waitFor();
@@ -436,6 +447,13 @@ if (existsSync("public/godot/index.html")) {
   await page.waitForTimeout(800);
   await shot("33-godot-stall");
   await frame.evaluate(() => window.__soilCommand("close"));
+  // The page around the game goes full screen too.
+  await page.getByRole("button", { name: "Full screen" }).click();
+  await page.getByRole("button", { name: "Exit full screen" }).waitFor();
+  await page.waitForTimeout(800);
+  await shot("34-godot-fullscreen");
+  await page.getByRole("button", { name: "Exit full screen" }).click();
+  await page.getByRole("button", { name: "Full screen" }).waitFor();
 }
 
 // Multiplayer, between two tabs of one browser (?net=local, no Supabase): Ana hosts, Ben joins

@@ -8,6 +8,7 @@ import { AvatarChoice } from "./Menus";
 import { CalendarPanel, SciencePanel, TimePanel } from "./SettingsPanels";
 import { useMulti } from "@/net/mp";
 import { useWorld } from "./useWorld";
+import { useFullscreen } from "./useFullscreen";
 
 /** Rolling hills and a sunrise behind the menus. */
 export function Backdrop({ children }: { children: React.ReactNode }) {
@@ -131,6 +132,17 @@ export function NewGameSetup() {
 }
 
 /** In-game pause: resume, change settings, or save and quit. */
+/** Full screen on or off (also the F key). */
+function FullscreenToggle() {
+  const full = useFullscreen((s) => s.full);
+  const toggle = useFullscreen((s) => s.toggle);
+  return (
+    <button className="btn btn-ghost py-1.5" onClick={toggle}>
+      {full ? "🗗 Exit full screen" : "⛶ Full screen"} <kbd className="text-xs text-muted">F</kbd>
+    </button>
+  );
+}
+
 export function PauseMenu() {
   const w = useWorld((s) => s.world!);
   const multi = useWorld((s) => s.remote !== null);
@@ -145,6 +157,7 @@ export function PauseMenu() {
           <p className="text-sm text-muted">The world keeps going while this is open.</p>
           <div className="grid gap-2">
             <button className="btn btn-primary" onClick={close}>▶ Back to the farm</button>
+            <FullscreenToggle />
             <button className="btn btn-ghost" onClick={() => void useMulti.getState().leave()}>🚪 Leave this world</button>
           </div>
         </div>
@@ -157,6 +170,7 @@ export function PauseMenu() {
         <div className="flex flex-wrap items-center gap-2 border-b border-line bg-paper px-5 py-3">
           <h2 className="mr-auto font-display text-xl font-black">⏸ Paused</h2>
           <button className="btn btn-primary py-1.5" onClick={close}>▶ Resume</button>
+          <FullscreenToggle />
           <button className="btn btn-ghost py-1.5" onClick={quitToMenu}>💾 Save &amp; quit to menu</button>
         </div>
         <div className="flex gap-1 px-5 pt-3">
