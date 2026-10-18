@@ -100,7 +100,7 @@ export function Lobby() {
                 </ul>
               </section>
             )}
-            <p className="text-xs text-muted">Playing as <b>{me.name}</b>. You can see other farmers&apos; names and how they look; there&apos;s no chat.</p>
+            <p className="text-xs text-muted">Playing as <b>{me.name}</b>. World chat is filtered for bad language and contact details, and the host can turn it off. Be kind!</p>
           </>
         )}
         {error && <p className="text-sm font-bold text-danger">{error}</p>}

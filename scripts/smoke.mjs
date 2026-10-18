@@ -442,6 +442,30 @@ if (existsSync("public/godot/index.html")) {
   await until(ben, async () => (await me(ben)).coins === 457, "Ben should be paid for his fiber");
   await ana.screenshot({ path: `${OUT}/41-multiplayer-stall.png` });
   await ana.keyboard.press("Escape");
+  // Chat: Ana's message reaches Ben cleaned up, with a bubble over her head.
+  await ana.keyboard.press("Enter");
+  await ana.getByLabel("Chat message").fill("look at www.cheats.com you shit");
+  await ana.keyboard.press("Enter");
+  await ben.getByText("look at *** you ***").first().waitFor();
+  await ben.waitForTimeout(500);
+  await ben.screenshot({ path: `${OUT}/42-multiplayer-chat.png` });
+  await ana.getByLabel("Chat message").press("Escape");
+  // Ben mutes Ana: her messages are gone for him.
+  const anaId = await game(ana, () => window.__soilGame.useMulti.getState().me.pid);
+  await game(ben, (id) => window.__soilGame.useMulti.getState().toggleMute(id), anaId);
+  await until(ben, async () => (await ben.getByText("look at *** you ***").count()) === 0, "Ana's message should be hidden after muting her");
+  // The host turns chat off, and Ben's message doesn't get through.
+  await game(ana, () => window.__soilGame.useWorld.getState().remote("chatOff", [true]));
+  await until(ben, () => game(ben, () => window.__soilGame.useMulti.getState().world.chatOff === true), "Chat should turn off for Ben");
+  const chatCount = await game(ana, () => window.__soilGame.useMulti.getState().world.chat.length);
+  await game(ben, () => window.__soilGame.useWorld.getState().remote("chat", ["hello?"]));
+  await ben.waitForTimeout(1000);
+  if ((await game(ana, () => window.__soilGame.useMulti.getState().world.chat.length)) !== chatCount) throw new Error("Multiplayer: chat should be off");
+  await ben.keyboard.press("Enter");
+  await ben.getByText("The host has turned chat off.").waitFor();
+  await ben.keyboard.press("Escape");
+  await game(ana, () => window.__soilGame.useWorld.getState().remote("chatOff", [false]));
+
   // Bedtime: the night waits for both.
   const night = (await me(ana)).minute;
   for (const p of [ana, ben]) await game(p, () => window.__soilGame.useWorld.getState().remote("bed", [true]));
