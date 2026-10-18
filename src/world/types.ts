@@ -66,12 +66,14 @@ export type BuildingKind =
   // Town buildings, landmarks, and props (not buildable by the player).
   | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower"
   // The mine: its entrance in town, and the ladders on each floor.
-  | "mineEntrance" | "ladderUp" | "ladderDown";
+  | "mineEntrance" | "ladderUp" | "ladderDown"
+  // Multiplayer towns: the gates along Garden Lane, and each farmer's market stall.
+  | "gardenGate" | "marketStall";
 
 /** Town buildings the player can't build, pick up, or build over. */
 export const TOWN_KINDS: BuildingKind[] = [
   "house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
-  "mineEntrance", "ladderUp", "ladderDown",
+  "mineEntrance", "ladderUp", "ladderDown", "gardenGate", "marketStall",
 ];
 
 export interface Building {
@@ -84,6 +86,8 @@ export interface Building {
     fiber?: number; startedDay?: number; ready?: number; water?: number; honeyDay?: number;
     /** Chicken coop: eggs waiting, and the day manure was last composted. */
     eggs?: number; manureDay?: number;
+    /** Multiplayer: the garden a Garden Lane gate or market stall belongs to. */
+    garden?: number;
     /** Town buildings: who lives or works here, and the sign over the door. */
     owner?: string; sign?: string;
     /** Props: which model to draw ("pack/name"). */

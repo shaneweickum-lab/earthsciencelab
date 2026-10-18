@@ -152,3 +152,105 @@ create or replace view public.class_progress with (security_invoker = true) as
   left join public.saves s on s.user_id = m.student_id;
 
 grant select on public.class_progress to authenticated;
+
+-- ───────────────────────── multiplayer worlds ─────────────────────────
+
+-- A shared farm town for up to 8 farmers. One farmer hosts: their browser runs the world and
+-- keeps its snapshot here (`data`, at sequence number `seq`); the others join with the code.
+create table if not exists public.worlds (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique default ('FARM-' || public.new_join_code()),
+  name text not null,
+  host_id uuid not null references public.profiles (id) on delete cascade,
+  host_name text not null default 'Farmer',
+  data jsonb,
+  seq integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.world_members (
+  world_id uuid not null references public.worlds (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  primary key (world_id, user_id)
+);
+
+create index if not exists world_members_user_idx on public.world_members (user_id);
+
+create or replace function public.in_world(w uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.world_members where world_id = w and user_id = auth.uid());
+$$;
+
+-- Start a world (you're its host and first member).
+create or replace function public.create_world(p_name text) returns public.worlds
+language plpgsql security definer set search_path = public as $$
+declare
+  w public.worlds;
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  insert into public.worlds (name, host_id, host_name)
+    values (left(coalesce(nullif(trim(p_name), ''), 'Our farm town'), 40), auth.uid(),
+            coalesce((select display_name from public.profiles where id = auth.uid()), 'Farmer'))
+    returning * into w;
+  insert into public.world_members (world_id, user_id) values (w.id, auth.uid());
+  return w;
+end;
+$$;
+
+-- Join a world by its code (again is fine). Worlds hold 8 farmers.
+create or replace function public.join_world(p_code text) returns public.worlds
+language plpgsql security definer set search_path = public as $$
+declare
+  w public.worlds;
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  select * into w from public.worlds where code = upper(trim(p_code));
+  if not found then raise exception 'no such world'; end if;
+  if not exists (select 1 from public.world_members where world_id = w.id and user_id = auth.uid()) then
+    if (select count(*) from public.world_members where world_id = w.id) >= 8 then raise exception 'world is full'; end if;
+    insert into public.world_members (world_id, user_id) values (w.id, auth.uid());
+  end if;
+  return w;
+end;
+$$;
+
+alter table public.worlds enable row level security;
+alter table public.world_members enable row level security;
+
+drop policy if exists "members see their worlds" on public.worlds;
+create policy "members see their worlds" on public.worlds for select
+  using (public.in_world(id));
+drop policy if exists "the host saves the world" on public.worlds;
+create policy "the host saves the world" on public.worlds for update
+  using (host_id = auth.uid()) with check (host_id = auth.uid());
+drop policy if exists "the host deletes the world" on public.worlds;
+create policy "the host deletes the world" on public.worlds for delete
+  using (host_id = auth.uid());
+
+drop policy if exists "members see who's in their worlds" on public.world_members;
+create policy "members see who's in their worlds" on public.world_members for select
+  using (public.in_world(world_id));
+drop policy if exists "leave a world" on public.world_members;
+create policy "leave a world" on public.world_members for delete
+  using (user_id = auth.uid());
+
+grant execute on function public.create_world(text) to authenticated;
+grant execute on function public.join_world(text) to authenticated;
+
+-- Realtime: only a world's members may use its channel ("world:<id>", private).
+create or replace function public.in_world_topic(topic text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.world_members
+    where world_id::text = split_part(topic, ':', 2) and user_id = auth.uid()
+  );
+$$;
+
+drop policy if exists "world members listen" on realtime.messages;
+create policy "world members listen" on realtime.messages for select to authenticated
+  using (realtime.topic() like 'world:%' and public.in_world_topic(realtime.topic()));
+drop policy if exists "world members talk" on realtime.messages;
+create policy "world members talk" on realtime.messages for insert to authenticated
+  with check (realtime.topic() like 'world:%' and public.in_world_topic(realtime.topic()));
