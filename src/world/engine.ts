@@ -145,7 +145,7 @@ export function facingTile(state: WorldState) {
   return { x: p.x + dx, y: p.y + dy };
 }
 
-function say(state: WorldState, text: string): WorldState {
+export function say(state: WorldState, text: string): WorldState {
   return { ...state, messages: [...state.messages, { text, at: state.minute }].slice(-6) };
 }
 

@@ -70,6 +70,12 @@ static func house(game_ui: GameUi) -> Dictionary:
 		Game.open("summary"), "soil", 16))
 	body.add_child(Ui.button("📺 Watch the weather channel", func(): Game.open("tv"), "ghost", 16))
 	body.add_child(Ui.button("📓 Read your Nature Journal", func(): Game.open("journal"), "ghost", 16))
+	if Site.is_web():
+		# My Homestead lives on the website: save, and the page opens it over the game.
+		body.add_child(Ui.button("🏡 My Homestead: decorate your room and yard", func():
+			Game.save()
+			Game.close()
+			Site.post({"type": "soil:openHomestead"}), "ghost", 16))
 	var ui: Dictionary = game_ui.ui
 	body.add_child(Ui.button("👕 Change your look", func():
 		ui.look = not ui.get("look", false)

@@ -157,6 +157,8 @@ export interface WorldState {
   deepest?: number;
   /** The farm plots you own (see PLOTS in map.ts). */
   plots?: number[];
+  /** My Homestead: the furniture and garden decorations you've bought and where they stand. */
+  homestead?: Homestead;
   /** Grandma Rosa's workbench has been found in the barn. */
   foundWorkbench?: boolean;
   /** Friendship with townsfolk, by NPC id. */
@@ -173,4 +175,25 @@ export interface MineFloor {
   buildings: Building[];
   /** The rock hiding the ladder down (an index into tiles). */
   ladderAt: number;
+}
+
+/** Where a homestead decoration goes: inside the farmhouse or out in the front yard. */
+export type DecorArea = "room" | "yard";
+
+/** A decoration standing in the room or yard. `x, y` is its top-left cell; `rot` is quarter turns. */
+export interface Placed {
+  uid: number;
+  item: string;
+  x: number;
+  y: number;
+  rot: number;
+}
+
+export interface Homestead {
+  room: Placed[];
+  yard: Placed[];
+  /** Decorations bought but not set out, by id. */
+  stored: Record<string, number>;
+  /** The next uid to hand out. */
+  next: number;
 }

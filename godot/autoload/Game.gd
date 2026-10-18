@@ -137,6 +137,18 @@ func talk_to(id: String) -> void:
 	open("npc")
 
 
+## Pick up changes the website made to the save (My Homestead), keeping where you stand.
+func reload_save() -> void:
+	if world.is_empty():
+		return
+	var w = World.load_world(SaveIO.read())
+	if w == null:
+		return
+	world = Js.with(w, {"player": runtime.player})
+	saved_world = world
+	world_changed.emit()
+
+
 func save() -> void:
 	if world.is_empty():
 		return

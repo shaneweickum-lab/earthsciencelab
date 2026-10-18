@@ -8,6 +8,7 @@ All models in this folder (and the item icons in `public/icons`, rendered from t
 | `nature/` | Nature Kit | Kenney | https://kenney.nl/assets/nature-kit |
 | `town/` | Fantasy Town Kit | Kenney | https://kenney.nl/assets/fantasy-town-kit |
 | `survival/` | Survival Kit | Kenney | https://kenney.nl/assets/survival-kit |
+| `furniture/` | Furniture Kit | Kenney | https://kenney.nl/assets/furniture-kit |
 | `food/` | Food Kit | Kenney | https://kenney.nl/assets/food-kit |
 | `characters/` | Mini Characters | Kenney | https://kenney.nl/assets/mini-characters |
 | `crops/` | Ultimate Crops (converted from OBJ in `assets-src/quaternius-crops`) | Quaternius | https://quaternius.com/packs/ultimatecrops.html |

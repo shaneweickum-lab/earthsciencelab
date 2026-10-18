@@ -12,7 +12,7 @@ const CACHE = path.join(ROOT, ".asset-cache");
 const MODELS = path.join(ROOT, "public/models");
 const ICONS = path.join(ROOT, "public/icons");
 // The Kenney nature models stay until the web game is replaced by the Godot version (which uses Quaternius's).
-const BUDGET_BYTES = 9 * 1024 * 1024;
+const BUDGET_BYTES = 10 * 1024 * 1024;
 
 const PACKS = {
   nature: {
@@ -48,6 +48,19 @@ const PACKS = {
     page: "https://kenney.nl/assets/food-kit", dir: "Models/GLB format", textures: true,
     models: ["tomato", "carrot", "corn", "pumpkin-basic"],
   },
+  furniture: {
+    // Homestead decorations. The kit's materials are unlit; we make them lit so they shade like the farm.
+    title: "Furniture Kit", url: "https://kenney.nl/media/pages/assets/furniture-kit/440e0608a4-1677580847/kenney_furniture-kit.zip",
+    page: "https://kenney.nl/assets/furniture-kit", dir: "Models/GLTF format", lit: true,
+    models: [
+      "bedSingle", "bedDouble", "bedBunk", "cabinetBed", "chair", "chairCushion", "chairRounded", "loungeChair", "loungeChairRelax",
+      "loungeSofa", "loungeDesignSofa", "loungeSofaOttoman", "table", "tableCoffee", "tableCloth", "sideTable", "desk", "chairDesk",
+      "bookcaseOpen", "bookcaseClosedWide", "books", "lampRoundFloor", "lampSquareTable", "rugRectangle", "rugRound", "rugSquare", "rugDoormat",
+      "pottedPlant", "plantSmall1", "plantSmall2", "plantSmall3", "kitchenStove", "kitchenFridge", "kitchenSink", "kitchenCabinet",
+      "kitchenCoffeeMachine", "radio", "televisionVintage", "coatRackStanding", "bathtub", "washer", "trashcan", "cardboardBoxClosed",
+      "benchCushion", "bench", "speaker", "laptop", "floorFull", "wall", "wallWindow", "wallDoorway",
+    ],
+  },
   characters: {
     title: "Mini Characters", url: "https://kenney.nl/media/pages/assets/mini-characters/bfc7e272b4-1774770718/kenney_mini-characters.zip",
     page: "https://kenney.nl/assets/mini-characters", dir: "Models/GLB format", textures: true,
@@ -71,6 +84,15 @@ async function keepOnly(src, dest, keep) {
   for (const anim of doc.getRoot().listAnimations()) if (!keep.includes(anim.getName())) anim.dispose();
   await doc.transform(prune({ keepAttributes: true }), dedup());
   // Texture paths stay relative (Textures/colormap.png), so write next to the original layout.
+  writeFileSync(dest, await io.writeBinary(doc));
+}
+
+/** Copy a model with its unlit materials made ordinary lit ones (and its data shrunk). */
+async function makeLit(src, dest) {
+  const doc = await io.read(src);
+  for (const ext of doc.getRoot().listExtensionsUsed()) if (ext.extensionName === "KHR_materials_unlit") ext.dispose();
+  for (const m of doc.getRoot().listMaterials()) m.setMetallicFactor(0).setRoughnessFactor(0.85);
+  await doc.transform(dedup(), weld(), quantize());
   writeFileSync(dest, await io.writeBinary(doc));
 }
 
@@ -102,6 +124,7 @@ for (const [key, pack] of Object.entries(PACKS)) {
     const src = path.join(unpacked, pack.dir, `${name}.glb`);
     if (!existsSync(src)) throw new Error(`${pack.title} has no model ${name}`);
     if (pack.keepAnimations) await keepOnly(src, path.join(out, `${name}.glb`), pack.keepAnimations);
+    else if (pack.lit) await makeLit(src, path.join(out, `${name}.glb`));
     else copyFileSync(src, path.join(out, `${name}.glb`));
   }
   if (pack.textures) {

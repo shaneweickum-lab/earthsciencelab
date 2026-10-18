@@ -29,6 +29,7 @@ const PAGE = `<!doctype html><html><body style="margin:0;background:transparent"
 const server = createServer((req, res) => {
   const url = decodeURIComponent(new URL(req.url, "http://x").pathname);
   if (url === "/") return res.writeHead(200, { "content-type": "text/html" }).end(PAGE);
+  if (url === "/decor.json") return res.writeHead(200, { "content-type": "application/json" }).end(readFileSync(path.join(ROOT, "src/world/decor.json")));
   if (url === "/icons-page.js") return res.writeHead(200, { "content-type": "text/javascript" }).end(readFileSync(path.join(ROOT, "scripts/icons-page.js")));
   const prefix = Object.keys(ROUTES).find((p) => url.startsWith(p));
   const file = prefix && path.join(ROOT, ROUTES[prefix], url.slice(prefix.length));

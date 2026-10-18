@@ -11,7 +11,7 @@ import { Hotbar, Messages, StatusBar, TileInspector } from "./Hud";
 import { JournalBook } from "./JournalBook";
 import { MainMenu, NewGameSetup, PauseMenu } from "./MainMenu";
 import { NoticeBoard, NpcDialog, QuestLog } from "./Town";
-import { Bag, DaySummary, HouseMenu, IntroLetter, TvForecast } from "./Menus";
+import { Bag, DaySummary, HomesteadMenu, HouseMenu, IntroLetter, TvForecast } from "./Menus";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
@@ -265,6 +265,7 @@ export function WorldScreen() {
           {menu === "mine" && <MineCart />}
           {menu === "craft" && <CraftMenu />}
           {menu === "plot" && <PlotMenu />}
+          {menu === "homestead" && <HomesteadMenu />}
           {menu === "journal" && <JournalBook />}
           {menu === "pause" && <PauseMenu />}
           {menu === "npc" && <NpcDialog />}
