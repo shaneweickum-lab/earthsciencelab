@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+export { loginWords } from "./accounts";
 
 /** Server-side clients for the student account routes. The service-role key never reaches the browser. */
 export function adminClient(): SupabaseClient | null {
@@ -14,22 +15,6 @@ export function anonClient(): SupabaseClient | null {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-
-/** Kid-friendly login words: three words and a number, like "otter-maple-river-42". */
-const WORDS = [
-  "acorn", "apple", "badger", "basil", "beaver", "berry", "birch", "bison", "breeze", "brook", "cactus", "canyon",
-  "cedar", "clover", "comet", "coral", "cricket", "daisy", "delta", "dune", "eagle", "ember", "falcon", "fern",
-  "finch", "fossil", "frog", "garnet", "geyser", "glacier", "granite", "harbor", "hazel", "heron", "island", "jasper",
-  "juniper", "kelp", "lagoon", "lichen", "lotus", "maple", "marble", "meadow", "mesa", "moss", "nectar", "oak",
-  "otter", "pebble", "pine", "pollen", "prairie", "quartz", "raven", "reef", "river", "robin", "sage", "salmon",
-  "sprout", "tundra", "willow", "wren",
-];
-
-export function loginWords(): string {
-  const bytes = crypto.getRandomValues(new Uint32Array(4));
-  const w = (i: number) => WORDS[bytes[i] % WORDS.length];
-  return `${w(0)}-${w(1)}-${w(2)}-${10 + (bytes[3] % 90)}`;
 }
 
 /** Login words are typed by kids: ignore case and extra spaces, and accept spaces for dashes. */

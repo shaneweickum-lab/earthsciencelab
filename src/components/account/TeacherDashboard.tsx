@@ -16,6 +16,7 @@ interface StudentRow {
   class_id: string;
   student_id: string;
   nickname: string;
+  username: string | null;
   farm_day: number | null;
   coins: number | null;
   harvests: number | null;
@@ -74,7 +75,7 @@ function ClassCard({ c, students, onChange }: { c: ClassRow; students: StudentRo
         </div>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Students go to <b>{typeof location !== "undefined" ? location.host : ""}/account</b>, choose <b>Join my class</b>, and type this code and their first name.
+        Students make an account at <b>{typeof location !== "undefined" ? location.host : ""}/account</b> (a username and password, no email), then add this code under <b>Your classes</b>. They can also type it while making their account.
       </p>
       {students.length > 0 && (
         <div className="mt-4 overflow-x-auto">
@@ -87,6 +88,7 @@ function ClassCard({ c, students, onChange }: { c: ClassRow; students: StudentRo
                 <tr key={s.student_id} className="border-t border-line align-top">
                   <td className="py-2 pr-3 font-bold">
                     {s.nickname}
+                    {s.username && <span className="block font-mono text-xs font-normal text-muted">{s.username}</span>}
                     {words[s.student_id] && <p className="font-mono text-xs font-black text-soil">New words: {words[s.student_id]}</p>}
                   </td>
                   <td className="pr-3">{s.xp ?? "–"}</td>

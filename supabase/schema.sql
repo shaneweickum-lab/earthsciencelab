@@ -1,10 +1,10 @@
 -- Earth Science Lab: cloud saves and teacher classes.
 -- Paste this whole file into the Supabase SQL editor and run it once. It's safe to run again.
 --
--- Teachers sign up with an email address. Students never give an email: the site's server
--- (app/api/students/*, using the service-role key) creates their account when they join a class
--- with the class's join code, and they sign in with the class code, their nickname, and three
--- login words.
+-- Teachers sign up with an email address. Students never give an email: they make an account
+-- with a username and password (app/api/students/*, using the service-role key, creates it), and
+-- add their classes afterwards with each class's join code. Students who joined the older way,
+-- with a class code, a nickname, and login words, can still sign in like that.
 
 -- ───────────────────────── tables ─────────────────────────
 
@@ -54,6 +54,13 @@ create table if not exists public.saves (
   xp integer,
   updated_at timestamptz not null default now()
 );
+
+-- Students sign in with a username (set by the server; lowercase letters, numbers, and _).
+alter table public.profiles add column if not exists username text;
+do $$ begin
+  alter table public.profiles add constraint profiles_username_format check (username ~ '^[a-z0-9_]{3,20}$');
+exception when duplicate_object then null; end $$;
+create unique index if not exists profiles_username_idx on public.profiles (username);
 
 create index if not exists classes_teacher_idx on public.classes (teacher_id);
 create index if not exists class_members_student_idx on public.class_members (student_id);
@@ -134,7 +141,10 @@ create policy "teachers remove students" on public.class_members for delete
 drop policy if exists "students see their memberships" on public.class_members;
 create policy "students see their memberships" on public.class_members for select
   using (student_id = auth.uid());
--- Joining a class happens on the server (it checks the join code and makes the account).
+-- Students join classes with join_class() below, and can leave them.
+drop policy if exists "students leave classes" on public.class_members;
+create policy "students leave classes" on public.class_members for delete
+  using (student_id = auth.uid());
 
 drop policy if exists "your own save" on public.saves;
 create policy "your own save" on public.saves for all
@@ -145,13 +155,44 @@ create policy "teachers read their students' saves" on public.saves for select
   using (public.teaches(user_id));
 
 -- Teachers see progress through this view, which leaves out the big JSON columns.
-create or replace view public.class_progress with (security_invoker = true) as
-  select m.class_id, m.student_id, m.nickname, m.joined_at,
+drop view if exists public.class_progress;
+create view public.class_progress with (security_invoker = true) as
+  select m.class_id, m.student_id, m.nickname, m.joined_at, p.username,
          s.farm_day, s.coins, s.harvests, s.journal_pages, s.xp, s.updated_at
   from public.class_members m
+  left join public.profiles p on p.id = m.student_id
   left join public.saves s on s.user_id = m.student_id;
 
 grant select on public.class_progress to authenticated;
+
+-- A signed-in student adds a class with its join code. Their nickname in the class defaults to
+-- their display name; it has to be unique in the class. Joining again is fine.
+create or replace function public.join_class(p_code text, p_nickname text default null) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  me public.profiles;
+  cls public.classes;
+  nick text;
+begin
+  select * into me from public.profiles where id = auth.uid();
+  if me.id is null then raise exception 'sign in first'; end if;
+  if me.role <> 'student' then raise exception 'teachers can''t join classes'; end if;
+  select * into cls from public.classes where join_code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'));
+  if cls.id is null then raise exception 'no such class'; end if;
+  if exists (select 1 from public.class_members where class_id = cls.id and student_id = me.id) then
+    return json_build_object('id', cls.id, 'name', cls.name);
+  end if;
+  nick := left(trim(regexp_replace(coalesce(nullif(trim(p_nickname), ''), nullif(me.display_name, ''), me.username, 'Student'), '[^[:alnum:] ''-]', '', 'g')), 24);
+  if nick = '' then nick := 'Student'; end if;
+  if exists (select 1 from public.class_members where class_id = cls.id and lower(nickname) = lower(nick)) then
+    raise exception 'nickname taken';
+  end if;
+  insert into public.class_members (class_id, student_id, nickname) values (cls.id, me.id, nick);
+  return json_build_object('id', cls.id, 'name', cls.name);
+end;
+$$;
+
+grant execute on function public.join_class(text, text) to authenticated;
 
 -- ───────────────────────── multiplayer worlds ─────────────────────────
 
