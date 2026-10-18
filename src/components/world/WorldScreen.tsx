@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { act, buildingAt, facingTile, interact, interactTarget, pickUpBuilding, soilHealth } from "@/world/engine";
+import { actionAnim } from "@/world/preview";
 import { npcInFront } from "@/world/town";
 import { useElementsPanel } from "@/store/elementsPanel";
 import { useProgress } from "@/store/progress";
@@ -54,7 +55,8 @@ export function doAction(mode: "use" | "interact" = "use") {
     const { x, y } = facingTile(here);
     st.openChest(buildingAt(here, x, y)!.id, target);
   } else {
-    runtime.actionAt = performance.now();
+    // E reaches out to touch or collect; Space uses the item in hand.
+    runtime.action = { at: performance.now(), anim: mode === "interact" ? "pickup" : actionAnim(here) };
     st.update(mode === "interact" ? interact : act);
   }
 }

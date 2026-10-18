@@ -53,7 +53,7 @@ const PACKS = {
     page: "https://kenney.nl/assets/mini-characters", dir: "Models/GLB format", textures: true,
     models: ["a", "b", "c", "d", "e", "f"].flatMap((l) => [`character-female-${l}`, `character-male-${l}`]),
     // Each character ships with 32 animations; the farm only plays these.
-    keepAnimations: ["idle", "walk", "interact-right"],
+    keepAnimations: ["idle", "walk", "interact-right", "holding-right", "attack-melee-right", "pick-up"],
     icons: { previewDir: "Previews", suffix: "", map: Object.fromEntries(
       ["a", "b", "c", "d", "e", "f"].flatMap((l) => [[`avatar_female-${l}`, `character-female-${l}`], [`avatar_male-${l}`, `character-male-${l}`]]),
     ) },
@@ -74,13 +74,20 @@ async function keepOnly(src, dest, keep) {
   writeFileSync(dest, await io.writeBinary(doc));
 }
 
+// `--only=<pack>` rebuilds one Kenney pack in place (e.g. --only=characters) and leaves the rest alone.
+const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
+if (ONLY && !PACKS[ONLY]) throw new Error(`No pack called ${ONLY}. Packs: ${Object.keys(PACKS).join(", ")}`);
+
 mkdirSync(CACHE, { recursive: true });
-rmSync(MODELS, { recursive: true, force: true });
-rmSync(ICONS, { recursive: true, force: true });
+if (!ONLY) {
+  rmSync(MODELS, { recursive: true, force: true });
+  rmSync(ICONS, { recursive: true, force: true });
+}
 mkdirSync(ICONS, { recursive: true });
 
 let total = 0;
 for (const [key, pack] of Object.entries(PACKS)) {
+  if (ONLY && key !== ONLY) continue;
   const zip = path.join(CACHE, path.basename(pack.url));
   if (!existsSync(zip)) {
     console.log(`Downloading ${pack.title}…`);
@@ -182,7 +189,7 @@ async function convertObjPack(pack) {
   if (license) copyFileSync(path.join(src, license), path.join(out, "License.txt"));
 }
 
-for (const pack of OBJ_PACKS) await convertObjPack(pack);
+if (!ONLY) for (const pack of OBJ_PACKS) await convertObjPack(pack);
 
 function sizeOf(dir) {
   return readdirSync(dir).reduce((n, f) => {
@@ -191,7 +198,7 @@ function sizeOf(dir) {
   }, 0);
 }
 
-writeFileSync(path.join(MODELS, "CREDITS.md"), `# 3D model and icon credits
+if (!ONLY) writeFileSync(path.join(MODELS, "CREDITS.md"), `# 3D model and icon credits
 
 All models in this folder (and the icons in \`public/icons\`: the avatars from Kenney's previews, the items rendered
 from these models by \`npm run icons\`) are released under
@@ -206,7 +213,7 @@ Credit is not required by CC0, but we're grateful. Regenerate this folder with \
 `);
 
 // Item icons are rendered from the models above, so they match the game.
-execFileSync(process.execPath, [path.join(ROOT, "scripts/render-icons.mjs")], { stdio: "inherit" });
+if (!ONLY) execFileSync(process.execPath, [path.join(ROOT, "scripts/render-icons.mjs")], { stdio: "inherit" });
 total = sizeOf(MODELS) + sizeOf(ICONS);
 console.log(`Assets ready: ${(total / 1024 / 1024).toFixed(2)} MB`);
 if (total > BUDGET_BYTES) {

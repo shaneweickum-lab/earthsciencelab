@@ -26,7 +26,8 @@ var _world_root := Node3D.new()
 var _built := false
 var _acc := 0.0
 var _zoom := 1.0
-var _acted := false
+## The animation for the action just taken ("swing", "use", "pickup"), played on the next frame.
+var _action_anim := ""
 var _publish_at := 0.0
 
 
@@ -227,8 +228,9 @@ func _process(delta: float) -> void:
 	w = Game.world
 	var player: Dictionary = rt.player
 	# Your lantern lights up at night, and always underground.
-	_player.update_player(player, rt.moving, _acted, dt, 0.0 if w.get("mine") != null else Clock.daylight(w.minute))
-	_acted = false
+	var slot = w.inventory[int(w.selected)]
+	_player.update_player(player, rt.moving, _action_anim, dt, 0.0 if w.get("mine") != null else Clock.daylight(w.minute), slot.item if slot else "")
+	_action_anim = ""
 	for a in _npcs:
 		a.update_npc(w, w.minute + rt.minute_frac, player, dt)
 	_sky.update(w, player)
@@ -305,7 +307,8 @@ func do_action(mode: String) -> void:
 	if target != "":
 		Game.open(target)
 		return
-	_acted = true
+	# E reaches out to touch or collect; Space uses the item in hand.
+	_action_anim = "pickup" if mode == "interact" else Preview.action_anim(here)
 	Game.update(func(s): return World.interact(s) if mode == "interact" else World.act(s))
 
 

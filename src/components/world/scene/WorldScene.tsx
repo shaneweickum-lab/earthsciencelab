@@ -19,6 +19,8 @@ import { Crops } from "./Crops";
 import { model } from "./models";
 import { MineScene } from "./Mine";
 import { Obstacles, Pond, Terrain } from "./Terrain";
+import { HeldItem } from "./HeldItem";
+import type { ActionAnim } from "@/world/preview";
 
 const SPEED = 4.2; // tiles per second
 const DAY_SKY = new Color("#bfe3f2");
@@ -141,31 +143,52 @@ function Farmer({ avatar }: { avatar: string }) {
   }, [scene]);
   const ref = useRef<Group>(null);
   const { actions } = useAnimations(animations, ref);
+  const held = useWorld((s) => s.world!.inventory[s.world!.selected]?.item ?? null);
   const current = useRef<string>("");
-  const seenAction = useRef(runtime.actionAt);
+  const seenAction = useRef(runtime.action.at);
+  const oneShot = useRef<string | null>(null);
   useFrame(() => {
-    let next = runtime.moving ? "walk" : "idle";
-    if (runtime.actionAt !== seenAction.current) {
-      seenAction.current = runtime.actionAt;
-      const reach = actions["interact-right"];
-      if (reach) {
-        reach.reset().setLoop(LoopOnce, 1).fadeIn(0.05).play();
-        reach.clampWhenFinished = false;
+    // An action plays once: a swing for axes, pickaxes, hoes, and scythes, a careful use for the
+    // can, seeds, and soil care, and a reach down to pick things up.
+    if (runtime.action.at !== seenAction.current) {
+      seenAction.current = runtime.action.at;
+      const name = runtime.action.anim ? ACTION_CLIPS[runtime.action.anim] : null;
+      const clip = name ? actions[name] : null;
+      if (clip && name) {
+        clip.reset().setLoop(LoopOnce, 1).fadeIn(0.05).play();
+        // Kenney's swing and pick-up are quick; slow them a little so they read.
+        clip.timeScale = ACTION_SPEED[runtime.action.anim!];
+        clip.clampWhenFinished = false;
+        if (current.current !== name) actions[current.current]?.fadeOut(0.05);
+        current.current = name;
+        oneShot.current = name;
       }
     }
-    if (actions["interact-right"]?.isRunning() && !runtime.moving) next = "interact-right";
+    // Walking cuts an action short; otherwise it plays to the end.
+    if (oneShot.current && (runtime.moving || !actions[oneShot.current]?.isRunning())) oneShot.current = null;
+    // Otherwise walk, or stand: holding up whatever's in hand.
+    const next = oneShot.current ?? (runtime.moving ? "walk" : held && actions["holding-right"] ? "holding-right" : "idle");
     if (next !== current.current) {
       const prev = actions[current.current];
       const act = actions[next];
       if (act) {
-        if (next !== "interact-right") act.reset().fadeIn(0.15).play();
+        act.reset().fadeIn(0.15).play();
         prev?.fadeOut(0.15);
         current.current = next;
       }
     }
   });
-  return <primitive ref={ref} object={clone} scale={1.35} />;
+  return (
+    <>
+      <primitive ref={ref} object={clone} scale={1.35} />
+      <HeldItem farmer={clone} item={held} />
+    </>
+  );
 }
+
+/** Which character animation each kind of action plays. */
+const ACTION_CLIPS: Record<ActionAnim, string> = { swing: "attack-melee-right", use: "interact-right", pickup: "pick-up" };
+const ACTION_SPEED: Record<ActionAnim, number> = { swing: 0.7, use: 1, pickup: 0.55 };
 
 /** A townsperson: walks their daily route with walk and idle animations, and shows a name tag nearby. */
 function NpcFigure({ npc }: { npc: Npc }) {

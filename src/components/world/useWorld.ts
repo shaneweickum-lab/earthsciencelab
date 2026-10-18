@@ -1,5 +1,6 @@
 "use client";
 
+import type { ActionAnim } from "@/world/preview";
 import { create } from "zustand";
 import { loadWorld, newWorld, saveWorld } from "@/world/engine";
 import { DEFAULT_SETTINGS, type GameSettings } from "@/world/settings";
@@ -62,8 +63,8 @@ export const runtime = {
   player: { x: 10, y: 10, facing: "down" as WorldState["player"]["facing"] },
   keys: new Set<string>(),
   moving: false,
-  /** When the player last pressed the action button (for the reach animation). */
-  actionAt: 0,
+  /** The player's last action and when it happened, for its animation (a swing, a use, or a pick-up). */
+  action: { at: 0, anim: null as ActionAnim | null },
   /** Fraction of the current game minute that has passed, so townsfolk walk smoothly between ticks. */
   minuteFrac: 0,
 };
