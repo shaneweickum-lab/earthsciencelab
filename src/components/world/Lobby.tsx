@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { CloudSetupNote } from "@/lib/supabase";
 import { useMulti } from "@/net/mp";
 import type { WorldInfo } from "@/net/lobby";
 import { Backdrop } from "./MainMenu";
@@ -54,7 +55,7 @@ export function Lobby() {
         {status === "connecting" && <p className="rounded-xl bg-paper p-3 text-sm">Connecting to the world…</p>}
 
         {!lobby ? (
-          <p className="rounded-xl bg-paper p-3 text-sm">Multiplayer needs the site&apos;s cloud connection, which isn&apos;t set up here.</p>
+          <CloudSetupNote what="Multiplayer" />
         ) : !me ? (
           <p className="rounded-xl bg-paper p-3 text-sm">
             Sign in to play with friends. <Link href="/account" className="font-bold underline">Sign in or make an account</Link>

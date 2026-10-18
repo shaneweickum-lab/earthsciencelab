@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { cloudEnabled, supabase } from "@/lib/supabase";
+import { CloudSetupNote, cloudEnabled, supabase } from "@/lib/supabase";
 import { useAccount } from "@/store/account";
 
 const field = "w-full rounded-xl border-2 border-line bg-card px-3 py-2 font-semibold outline-none focus:border-sky";
@@ -175,6 +175,7 @@ export function AccountPage() {
       <div className="card p-6">
         <h1 className="font-display text-3xl font-black">Accounts</h1>
         <p className="mt-2 text-muted">Cloud accounts aren&apos;t turned on for this site yet. Your progress is saved in this browser.</p>
+        <div className="mt-3"><CloudSetupNote what="Signing in" /></div>
       </div>
     );
   }
