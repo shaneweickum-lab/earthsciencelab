@@ -22,8 +22,8 @@ import { ChatPanel } from "./ChatPanel";
 import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
-import { COOKBOOK, CraftMenu } from "./Craft";
-import { labelLayer, runtime, useWorld } from "./useWorld";
+import { Cookbook, CraftMenu } from "./Craft";
+import { isHubTab, labelLayer, runtime, useWorld, type HubTab } from "./useWorld";
 import { fullClasses, useFullscreen, useFullscreenTarget } from "./useFullscreen";
 
 const WorldScene = dynamic(() => import("./scene/WorldScene"), {
@@ -124,12 +124,17 @@ function useGameKeys() {
       const st = useWorld.getState();
       if (st.screen !== "playing") return;
       // The game owns E (and other keys) while you play: mark them handled so site shortcuts skip them.
+      // The I window: I (or Tab) opens or closes it, J, Q, and C go straight to their tab.
+      const tab: HubTab | null = k === "j" ? "journal" : k === "q" ? "quests" : k === "c" ? "cookbook" : null;
       if (st.menu) {
-        if (k === "e" || k === "j" || k === "i") e.preventDefault();
-        if (k === "q") e.preventDefault();
-        const toggles = (k === "i" && st.menu === "bag") || (k === "j" && st.menu === "journal") || (k === "q" && st.menu === "quests");
-        const cookbook = k === "c" && st.menu === "craft" && st.chestId === COOKBOOK;
-        if ((k === "escape" || toggles || cookbook) && st.menu !== "intro" && st.menu !== "summary") st.close();
+        if (["e", "i", "j", "q", "c", "tab"].includes(k)) e.preventDefault();
+        if (isHubTab(st.menu) && tab) {
+          if (st.menu === tab) st.close();
+          else st.open(tab);
+          return;
+        }
+        const toggles = (k === "i" || k === "tab") && isHubTab(st.menu);
+        if ((k === "escape" || toggles) && st.menu !== "intro" && st.menu !== "summary") st.close();
         return;
       }
       if (k === "escape") {
@@ -163,20 +168,14 @@ function useGameKeys() {
       if (k === "i" || k === "tab") {
         e.preventDefault();
         st.open("bag");
-      } else if (k === "j") {
+      } else if (tab) {
         e.preventDefault();
-        st.open("journal");
-      } else if (k === "q") {
-        e.preventDefault();
-        st.open("quests");
+        st.open(tab);
       } else if (k === "p") {
         pickUp();
       } else if (k === "r") {
         e.preventDefault();
         rotate();
-      } else if (k === "c") {
-        e.preventDefault();
-        st.openChest(COOKBOOK, "craft");
       }
     }
     function up(e: KeyboardEvent) {
@@ -229,19 +228,6 @@ function HoldButton({ dir, label, className }: { dir: string; label: string; cla
   );
 }
 
-/** Fill the screen with the game (F), or go back. */
-function FullscreenButton({ compact }: { compact?: boolean }) {
-  const full = useFullscreen((s) => s.full);
-  const toggle = useFullscreen((s) => s.toggle);
-  const label = full ? "Exit full screen" : "Full screen";
-  if (compact) return <button aria-label={label} className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={toggle}>{full ? "🗗" : "⛶"}</button>;
-  return (
-    <button className="pointer-events-auto rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={toggle} aria-label={label}>
-      {full ? "🗗" : "⛶"} {label} <kbd className="text-xs text-muted">F</kbd>
-    </button>
-  );
-}
-
 function TouchControls() {
   const open = useWorld((s) => s.open);
   return (
@@ -254,9 +240,7 @@ function TouchControls() {
       </div>
       <div className="pointer-events-auto flex flex-col items-end gap-2">
         <div className="flex gap-2">
-          <button className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("bag")}>🎒</button>
-          <button className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("journal")}>📓</button>
-          <FullscreenButton compact />
+          <button aria-label="Your things" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("bag")}>🎒</button>
           <button aria-label="Interact" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => doAction("interact")}>✋</button>
         </div>
         <button aria-label="Action" className="grid h-16 w-16 place-items-center rounded-full bg-leaf text-lg font-black text-white shadow-xl active:scale-95" onClick={() => doAction("use")}>
@@ -311,14 +295,6 @@ export function WorldScreen() {
       {ready && (
         <>
           <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col items-start gap-2">
-            <button
-              className="pointer-events-auto rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white"
-              onClick={() => open("pause")}
-              aria-label="Pause and settings"
-            >
-              ☰ Menu <kbd className="text-xs text-muted">Esc</kbd>
-            </button>
-            <span className="hidden md:inline-flex"><FullscreenButton /></span>
             <TutorialCard />
             <Messages />
           </div>
@@ -337,11 +313,16 @@ export function WorldScreen() {
           <div className="pointer-events-none absolute bottom-36 left-3 z-20">
             <ChatPanel />
           </div>
-          <div className="pointer-events-auto absolute bottom-24 left-3 z-10 hidden gap-1.5 md:flex">
-            <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("bag")}>🎒 Bag <kbd className="text-xs text-muted">I</kbd></button>
-            <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("journal")}>📓 Journal <kbd className="text-xs text-muted">J</kbd></button>
-            <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => open("quests")}>📜 Quests <kbd className="text-xs text-muted">Q</kbd></button>
-            <button className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={() => useWorld.getState().openChest(COOKBOOK, "craft")}>📖 Cookbook <kbd className="text-xs text-muted">C</kbd></button>
+          {/* Bag, journal, quests, cookbook, and the game menu all live in the I window. */}
+          <div className="pointer-events-auto absolute bottom-3 left-3 z-10 hidden md:block">
+            <button
+              className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white"
+              onClick={() => open("bag")}
+              aria-label="Your things"
+              title="Bag, journal, quests, cookbook, and game menu"
+            >
+              🎒 <kbd className="text-xs text-muted">I</kbd>
+            </button>
           </div>
           <TouchControls />
           {menu === "intro" && <IntroLetter />}
@@ -354,6 +335,7 @@ export function WorldScreen() {
           {menu === "chest" && <ChestMenu />}
           {menu === "mine" && <MineCart />}
           {menu === "craft" && <CraftMenu />}
+          {menu === "cookbook" && <Cookbook />}
           {menu === "plot" && <PlotMenu />}
           {menu === "homestead" && <HomesteadMenu />}
           {menu === "stall" && <StallMenu />}

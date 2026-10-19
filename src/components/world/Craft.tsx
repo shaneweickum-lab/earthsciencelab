@@ -9,9 +9,6 @@ import { useWorld } from "./useWorld";
 
 const ICONS: Record<Station, string> = { workbench: "🪚", grinder: "⚙️", spinningWheel: "🧵", furnace: "🔥", stove: "🍳", oven: "🥖" };
 
-/** The cookbook (from the bag) has no building: knife-only food is made right there. */
-export const COOKBOOK = "cookbook";
-
 function RecipeRow({ w, r, at }: { w: WorldState; r: Recipe; at?: string }) {
   const run = useWorld((s) => s.run);
   const { inputs, missingTools, missingStations, ok } = recipeStatus(w, r, at);
@@ -54,26 +51,29 @@ function RecipeRow({ w, r, at }: { w: WorldState; r: Recipe; at?: string }) {
   );
 }
 
+/** The cookbook (a tab of the I window): every dish; knife-only food is made right there. */
+export function Cookbook() {
+  const w = useWorld((s) => s.world!);
+  const close = useWorld((s) => s.close);
+  return (
+    <Modal title="Cookbook" icon="📖" onClose={close} wide>
+      <p className="mb-2 text-sm text-muted">
+        Carry the utensils a dish needs in your bag. Food with only a knife can be made anywhere; the rest cook at a stove or oven
+        (put them side by side for recipes that need both). Select food and use it to eat it.
+      </p>
+      <ul className="space-y-1.5">{COOKING.map((r) => <RecipeRow key={r.id} w={w} r={r} />)}</ul>
+    </Modal>
+  );
+}
+
 /**
  * A crafting station: what it makes, what each takes, and a button to make one. A stove or oven
- * opens the kitchen (every dish, and what's missing for each); the bag's cookbook does the same,
- * where only knife-only food can be made.
+ * opens the kitchen (every dish, and what's missing for each).
  */
 export function CraftMenu() {
   const w = useWorld((s) => s.world!);
   const id = useWorld((s) => s.chestId);
   const close = useWorld((s) => s.close);
-  if (id === COOKBOOK) {
-    return (
-      <Modal title="Cookbook" icon="📖" onClose={close} wide>
-        <p className="mb-2 text-sm text-muted">
-          Carry the utensils a dish needs in your bag. Food with only a knife can be made anywhere; the rest cook at a stove or oven
-          (put them side by side for recipes that need both). Select food and use it to eat it.
-        </p>
-        <ul className="space-y-1.5">{COOKING.map((r) => <RecipeRow key={r.id} w={w} r={r} />)}</ul>
-      </Modal>
-    );
-  }
   const b = w.buildings.find((x) => x.id === id);
   if (!b || !(b.kind in STATIONS)) return null;
   const station = b.kind as Station;

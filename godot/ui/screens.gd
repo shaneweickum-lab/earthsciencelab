@@ -331,6 +331,7 @@ static func pause(game_ui: GameUi) -> Dictionary:
 	var top := Ui.hbox(6)
 	top.add_child(Ui.button("▶️ Resume", Game.close, "primary", 15))
 	top.add_child(Ui.button("💾 Save & quit to menu", Game.quit_to_menu, "ghost", 15))
+	top.add_child(Ui.button("🖥️ Full screen (F)", Site.toggle_fullscreen, "ghost", 15))
 	body.add_child(top)
 	var tabs := Ui.hbox(4)
 	for t in [["science", "🔬 Science"], ["time", "⏱️ Time & units"], ["calendar", "📅 Calendar"]]:

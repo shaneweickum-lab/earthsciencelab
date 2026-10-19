@@ -16,6 +16,8 @@ var screen := "menu"
 ## The open menu or dialog ("" when playing): intro, house, tv, store, shipping, bag, journal,
 ## summary, pause, npc, board, quests.
 var menu := ""
+## The tabs of the window I opens: your bag, journal, quests, cookbook, and the game menu.
+const HUB_TABS := ["bag", "journal", "quests", "cookbook", "pause"]
 ## The saved farm, for the main menu's Continue button (null when there isn't one).
 var saved_world: Variant = null
 ## Which townsperson you're talking to, and what they said when you started.

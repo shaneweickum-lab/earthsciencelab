@@ -43,6 +43,15 @@ export function StatusBar() {
         <div className="rounded-full bg-card/95 px-3 py-1 text-sm font-black shadow" aria-label="Coins">🪙 {w.coins.toLocaleString()}</div>
         {w.organic && <div className="rounded-full bg-leaf px-2.5 py-1 text-xs font-black text-white shadow" title="Certified organic: produce sells for 25% more">🌿 Organic</div>}
       </div>
+    </div>
+  );
+}
+
+/** Energy and the watering can, just above the hotbar. */
+export function Meters() {
+  const w = useWorld((s) => s.world!);
+  return (
+    <div className="flex gap-2" aria-label="Energy and water">
       {on(w, "energy") && <Meter label="Energy" icon="⚡" value={w.energy} max={w.maxEnergy} color={w.energy < 20 ? "bg-danger" : "bg-sun"} />}
       <Meter label="Watering can" icon="💧" value={w.water} max={w.canSize} color="bg-sky" />
     </div>
@@ -51,11 +60,12 @@ export function StatusBar() {
 
 function Meter({ label, icon, value, max, color }: { label: string; icon: string; value: number; max: number; color: string }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-full bg-card/95 px-2 py-1 shadow" title={`${label}: ${Math.round(value)}/${max}`}>
+    <div className="flex items-center gap-1.5 rounded-full bg-soil-dark/70 px-2.5 py-1 text-white shadow" title={`${label}: ${Math.round(value)}/${max}`}>
       <span className="text-xs" aria-hidden>{icon}</span>
-      <div className="h-2 w-24 overflow-hidden rounded-full bg-line" role="meter" aria-label={label} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={max}>
+      <div className="h-2.5 w-24 overflow-hidden rounded-full bg-white/25 sm:w-36" role="meter" aria-label={label} aria-valuenow={Math.round(value)} aria-valuemin={0} aria-valuemax={max}>
         <div className={`h-full ${color} transition-all`} style={{ width: `${(value / max) * 100}%` }} />
       </div>
+      <span className="text-[11px] font-black tabular-nums">{Math.round(value)}/{max}</span>
     </div>
   );
 }
@@ -70,6 +80,7 @@ export function Hotbar() {
       <div className="rounded-full bg-soil-dark/80 px-3 py-0.5 text-xs font-bold text-white">
         {sel ? ITEMS[sel.item].name : "Empty hands"}
       </div>
+      <Meters />
       <div className="flex gap-0.5 rounded-2xl bg-soil-dark/70 p-1 shadow-xl sm:gap-1 sm:p-1.5" role="toolbar" aria-label="Hotbar">
         {inv.slice(0, HOTBAR_SIZE).map((s, i) => (
           <button

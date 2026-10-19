@@ -313,13 +313,17 @@ static func modal(title_text: String, icon: String, on_close: Variant = null, wi
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(center)
+	# Your bag, journal, quests, cookbook, and the game menu share one window, with tabs.
+	var hub: bool = Game.menu in Game.HUB_TABS
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", box(CARD, 20, LINE, 1, 0))
-	card.custom_minimum_size = Vector2(760 if wide else 520, 0)
+	card.custom_minimum_size = Vector2(760 if wide or hub else 520, 0)
 	center.add_child(card)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 0)
 	card.add_child(col)
+	if hub:
+		col.add_child(panel(hub_tabs(), PAPER, 0, 8, LINE, 0))
 	var head := hbox(10)
 	head.add_child(emoji_icon(icon, 28))
 	head.add_child(text(title_text, 22, INK, 900, false))
@@ -341,6 +345,15 @@ static func modal(title_text: String, icon: String, on_close: Variant = null, wi
 	root.set_meta("scroll", scroll)
 	root.set_meta("card", card)
 	return {"root": root, "body": body, "scroll": scroll}
+
+
+## The tabs across the top of the window I opens.
+static func hub_tabs() -> Control:
+	var row := hbox(4)
+	for t in [["bag", "🎒 Bag (I)"], ["journal", "📓 Journal (J)"], ["quests", "📜 Quests (Q)"], ["cookbook", "📖 Cookbook (C)"], ["pause", "⚙️ Game (Esc)"]]:
+		var id: String = t[0]
+		row.add_child(button(t[1], func(): Game.open(id), "soil" if Game.menu == id else "ghost", 13))
+	return row
 
 
 ## A worn tool's uses left, as a little bar along the bottom of its slot (null while it's like new).

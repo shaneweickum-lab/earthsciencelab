@@ -100,42 +100,32 @@ func _process(_delta: float) -> void:
 func _build_hud() -> void:
 	var w := Game.world
 	_clock_text = Hud.clock_text(w)
-	# Top left: the menu button and recent messages.
+	# Top left: Grandma's note and recent messages.
 	var tl := Ui.vbox(6)
 	tl.position = Vector2(12, 12)
-	var menu_btn := Ui.button("⚙️ Menu (Esc)", func(): Game.open("pause"), "flat", 14)
-	menu_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	tl.add_child(menu_btn)
 	var tut = Hud.tutorial(self, w)
 	if tut:
 		tut.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		tl.add_child(tut)
 	tl.add_child(Hud.messages(w))
 	_hud.add_child(tl)
-	# Top right: date, weather, time, coins, energy, water.
+	# Top right: date, weather, time, and coins.
 	_clock = Hud.status(w)
 	_clock.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
 	_clock.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_hud.add_child(_clock)
-	# Bottom: the hotbar.
+	# Bottom: energy and water over the hotbar.
 	var bar := Hud.hotbar(w)
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM, Control.PRESET_MODE_MINSIZE, 12)
 	bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_hud.add_child(bar)
 	var size := get_viewport().get_visible_rect().size
-	# Bottom left: bag, journal, quests. Bottom right: what's in front of you.
+	# Bottom left: the I window (bag, journal, quests, cookbook, and game menu). Bottom right: what's in front of you.
 	var bl := Ui.hbox(6)
-	bl.add_child(Ui.button("🎒 Bag (I)", func(): Game.open("bag"), "flat", 14))
-	bl.add_child(Ui.button("📓 Journal (J)", func(): Game.open("journal"), "flat", 14))
-	bl.add_child(Ui.button("📜 Quests (Q)", func(): Game.open("quests"), "flat", 14))
-	bl.add_child(Ui.button("📖 Cookbook (C)", func():
-		Game.chest_id = "cookbook"
-		Game.open("craft"), "flat", 14))
-	bl.add_child(Ui.button("🖥️ Full screen (F)", Site.toggle_fullscreen, "flat", 14))
+	bl.add_child(Ui.button("🎒 (I)", func(): Game.open("bag"), "flat", 14))
 	bl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	bl.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bl.position.y -= 84
 	if size.x >= 900:
 		_hud.add_child(bl)
 		var insp := Hud.inspector(w)
