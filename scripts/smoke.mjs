@@ -162,6 +162,11 @@ await shot("06c-planted");
 
 // Sleep in the farmhouse: the night passes and the crop grows.
 await teleport(10, 9, "up");
+// Every run is a new farm with its own weather: make tonight mild, so a frost can't kill the test crop.
+await page.evaluate(() => window.__soilGame.useWorld.getState().update((w) => {
+  const tomorrow = Math.floor(w.minute / 1440) + 2;
+  return { ...w, weather: { ...w.weather, [tomorrow]: { kind: "sunny", high: 72, low: 52 } } };
+}));
 await page.keyboard.press(" ");
 await page.getByRole("dialog", { name: "Your farmhouse" }).waitFor();
 await page.getByRole("button", { name: /Watch the weather/ }).click();
