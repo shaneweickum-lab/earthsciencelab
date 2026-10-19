@@ -301,7 +301,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not event.echo:
 				do_action("interact" if k == KEY_E else "use")
 		KEY_I, KEY_TAB:
-			Game.open(Game.last_tab)
+			Game.open("bag")
 		KEY_J:
 			Game.open("journal")
 		KEY_Q:

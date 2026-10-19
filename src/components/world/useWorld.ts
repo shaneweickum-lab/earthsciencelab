@@ -45,8 +45,6 @@ interface WorldStore {
   /** In multiplayer: how ops reach the host. Null in single-player. */
   remote: ((op: string, args: unknown[]) => void) | null;
   open: (menu: Menu) => void;
-  /** The I window's tab you looked at last (I opens it there). */
-  lastTab: HubTab;
   /** Which townsperson you're talking to. */
   talkingTo: string | null;
   /** The chest or crafting station that's open (or, for "plot", the plot's number). */
@@ -141,9 +139,8 @@ export const useWorld = create<WorldStore>((set, get) => {
       // Each morning, notice-board requests past their date come down.
       const w = get().world;
       if (menu === "summary" && w) set({ world: expireBoard(w) });
-      set(isHubTab(menu) && menu !== "pause" ? { menu, lastTab: menu } : { menu });
+      set({ menu });
     },
-    lastTab: "bag",
     talkingTo: null,
     chestId: null,
     openChest: (id, menu = "chest") => set({ menu, chestId: id }),

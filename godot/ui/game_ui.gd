@@ -123,7 +123,7 @@ func _build_hud() -> void:
 	var size := get_viewport().get_visible_rect().size
 	# Bottom left: the I window (bag, journal, quests, cookbook, and game menu). Bottom right: what's in front of you.
 	var bl := Ui.hbox(6)
-	bl.add_child(Ui.button("🎒 (I)", func(): Game.open(Game.last_tab), "flat", 14))
+	bl.add_child(Ui.button("🎒 (I)", func(): Game.open("bag"), "flat", 14))
 	bl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	bl.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	if size.x >= 900:

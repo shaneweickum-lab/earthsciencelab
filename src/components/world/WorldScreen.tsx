@@ -167,7 +167,7 @@ function useGameKeys() {
       }
       if (k === "i" || k === "tab") {
         e.preventDefault();
-        st.open(st.lastTab);
+        st.open("bag");
       } else if (tab) {
         e.preventDefault();
         st.open(tab);
@@ -240,7 +240,7 @@ function TouchControls() {
       </div>
       <div className="pointer-events-auto flex flex-col items-end gap-2">
         <div className="flex gap-2">
-          <button aria-label="Your things" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open(useWorld.getState().lastTab)}>🎒</button>
+          <button aria-label="Your things" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("bag")}>🎒</button>
           <button aria-label="Interact" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => doAction("interact")}>✋</button>
         </div>
         <button aria-label="Action" className="grid h-16 w-16 place-items-center rounded-full bg-leaf text-lg font-black text-white shadow-xl active:scale-95" onClick={() => doAction("use")}>
@@ -317,7 +317,7 @@ export function WorldScreen() {
           <div className="pointer-events-auto absolute bottom-3 left-3 z-10 hidden md:block">
             <button
               className="rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white"
-              onClick={() => open(useWorld.getState().lastTab)}
+              onClick={() => open("bag")}
               aria-label="Your things"
               title="Bag, journal, quests, cookbook, and game menu"
             >

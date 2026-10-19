@@ -311,7 +311,7 @@ static func touch_controls(game_ui: GameUi) -> Control:
 	root.add_child(pad)
 	var acts := Ui.vbox(8)
 	var row := Ui.hbox(6)
-	row.add_child(Ui.button("🎒", func(): Game.open(Game.last_tab), "flat", 18))
+	row.add_child(Ui.button("🎒", func(): Game.open("bag"), "flat", 18))
 	row.add_child(Ui.button("✋", func(): game_ui.get_parent().do_action("interact"), "flat", 18))
 	acts.add_child(row)
 	var a := Ui.button("A", func(): game_ui.get_parent().do_action("use"), "primary", 22)
