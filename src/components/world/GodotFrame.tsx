@@ -6,6 +6,7 @@ import { useProgress } from "@/store/progress";
 import { loadWorld, saveWorld } from "@/world/engine";
 import type { WorldState } from "@/world/types";
 import { SAVE_KEY } from "./useWorld";
+import { fullClasses, useFullscreen, useFullscreenTarget } from "./useFullscreen";
 
 /**
  * Embeds the Godot web build (public/godot, made by `npm run godot:export`).
@@ -13,12 +14,17 @@ import { SAVE_KEY } from "./useWorld";
  * soil:setGrade; this page answers with the reader's grade level, records farm badges, and
  * saves grade changes made in the game. soil:openHomestead (sent after the game saves) shows
  * My Homestead over the game; closing it posts soil:reload so the game picks up the changes.
+ * soil:fullscreen (the F key in the game) fills the screen with the game, homestead and all.
  */
 export function GodotFrame() {
   const frame = useRef<HTMLIFrameElement>(null);
   const grade = useProgress((s) => s.gradeLevel);
   const [built, setBuilt] = useState<boolean | null>(null);
   const [home, setHome] = useState<WorldState | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const full = useFullscreen((s) => s.full);
+  const fallback = useFullscreen((s) => s.fallback);
+  useFullscreenTarget(box);
   const updateHome = useCallback((fn: (w: WorldState) => WorldState) => {
     setHome((w) => {
       if (!w) return w;
@@ -50,6 +56,7 @@ export function GodotFrame() {
         useProgress.getState().setGradeLevel(e.data.level);
       }
       if (e.data?.type === "soil:openHomestead") setHome(loadWorld(localStorage.getItem(SAVE_KEY)));
+      if (e.data?.type === "soil:fullscreen") useFullscreen.getState().toggle();
       if (e.data?.type === "soil:recordFarm") {
         const { journal, harvests, bestSoilHealth } = e.data;
         if (Array.isArray(journal) && typeof harvests === "number" && typeof bestSoilHealth === "number") {
@@ -76,7 +83,7 @@ export function GodotFrame() {
     );
   }
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-3xl bg-soil-dark shadow-lg">
+    <div ref={box} className={`relative aspect-video w-full overflow-hidden rounded-3xl bg-soil-dark shadow-lg ${full ? "aspect-auto!" : ""} ${fullClasses(full, fallback)}`}>
       {built && (
         <iframe
           ref={frame}
@@ -85,6 +92,19 @@ export function GodotFrame() {
           className="absolute inset-0 h-full w-full"
           allow="fullscreen; autoplay; gamepad"
         />
+      )}
+      {built && (
+        <button
+          className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-card/90 px-2.5 py-1 text-sm font-black shadow hover:bg-white"
+          aria-label={full ? "Exit full screen" : "Full screen"}
+          title={full ? "Exit full screen (F)" : "Full screen (F)"}
+          onClick={() => {
+            useFullscreen.getState().toggle();
+            frame.current?.focus();
+          }}
+        >
+          {full ? "🗗" : "⛶"}
+        </button>
       )}
       {home && <HomesteadOverlay world={home} update={updateHome} onClose={closeHome} />}
     </div>

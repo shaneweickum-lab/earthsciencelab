@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMulti } from "@/net/mp";
 import { buildingAt, canPickUp, facingTile, interactTarget, soilHealth } from "@/world/engine";
 import { ITEMS } from "@/world/items";
@@ -24,6 +24,7 @@ import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
 import { COOKBOOK, CraftMenu } from "./Craft";
 import { labelLayer, runtime, useWorld } from "./useWorld";
+import { fullClasses, useFullscreen, useFullscreenTarget } from "./useFullscreen";
 
 const WorldScene = dynamic(() => import("./scene/WorldScene"), {
   ssr: false,
@@ -132,7 +133,15 @@ function useGameKeys() {
         return;
       }
       if (k === "escape") {
-        st.open("pause");
+        // In full-window mode (no browser full screen), Esc leaves it first.
+        const fs = useFullscreen.getState();
+        if (fs.fallback) fs.exit();
+        else st.open("pause");
+        return;
+      }
+      if (k === "f") {
+        e.preventDefault();
+        if (!e.repeat) useFullscreen.getState().toggle();
         return;
       }
       if (MOVE[k]) {
@@ -220,6 +229,19 @@ function HoldButton({ dir, label, className }: { dir: string; label: string; cla
   );
 }
 
+/** Fill the screen with the game (F), or go back. */
+function FullscreenButton({ compact }: { compact?: boolean }) {
+  const full = useFullscreen((s) => s.full);
+  const toggle = useFullscreen((s) => s.toggle);
+  const label = full ? "Exit full screen" : "Full screen";
+  if (compact) return <button aria-label={label} className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={toggle}>{full ? "🗗" : "⛶"}</button>;
+  return (
+    <button className="pointer-events-auto rounded-full bg-card/90 px-3 py-1.5 text-sm font-bold shadow hover:bg-white" onClick={toggle} aria-label={label}>
+      {full ? "🗗" : "⛶"} {label} <kbd className="text-xs text-muted">F</kbd>
+    </button>
+  );
+}
+
 function TouchControls() {
   const open = useWorld((s) => s.open);
   return (
@@ -234,6 +256,7 @@ function TouchControls() {
         <div className="flex gap-2">
           <button className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("bag")}>🎒</button>
           <button className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => open("journal")}>📓</button>
+          <FullscreenButton compact />
           <button aria-label="Interact" className="h-11 rounded-full bg-card/90 px-3 text-sm font-black shadow" onClick={() => doAction("interact")}>✋</button>
         </div>
         <button aria-label="Action" className="grid h-16 w-16 place-items-center rounded-full bg-leaf text-lg font-black text-white shadow-xl active:scale-95" onClick={() => doAction("use")}>
@@ -251,6 +274,14 @@ export function WorldScreen() {
   const init = useWorld((s) => s.init);
   const save = useWorld((s) => s.save);
   const open = useWorld((s) => s.open);
+  const box = useRef<HTMLDivElement>(null);
+  const full = useFullscreen((s) => s.full);
+  const fallback = useFullscreen((s) => s.fallback);
+  useFullscreenTarget(box);
+  // Quitting to the main menu leaves full screen.
+  useEffect(() => {
+    if (!ready) useFullscreen.getState().exit();
+  }, [ready]);
   useGameKeys();
   useProgressSync();
 
@@ -271,7 +302,7 @@ export function WorldScreen() {
   }, [init, save]);
 
   return (
-    <div className="relative h-[78vh] min-h-[520px] w-full select-none overflow-hidden rounded-3xl bg-[#0f1a2e] shadow-xl" aria-label="Soil & Sprout game">
+    <div ref={box} className={`relative h-[78vh] min-h-[520px] w-full select-none overflow-hidden rounded-3xl bg-[#0f1a2e] shadow-xl ${fullClasses(full, fallback)}`} aria-label="Soil & Sprout game">
       <div ref={(el) => { labelLayer.current = el; }} className="pointer-events-none absolute inset-0 z-[5]" />
       {screen === "menu" && <MainMenu />}
       {screen === "setup" && <NewGameSetup />}
@@ -287,6 +318,7 @@ export function WorldScreen() {
             >
               ☰ Menu <kbd className="text-xs text-muted">Esc</kbd>
             </button>
+            <span className="hidden md:inline-flex"><FullscreenButton /></span>
             <TutorialCard />
             <Messages />
           </div>

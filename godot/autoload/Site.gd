@@ -47,6 +47,16 @@ func set_grade(level: String) -> void:
 	post({"type": "soil:setGrade", "level": level})
 
 
+## Fill the screen with the game, or go back. On the web the page around the game does it (so
+## My Homestead shows over it too); on desktop the window does.
+func toggle_fullscreen() -> void:
+	if is_web():
+		post({"type": "soil:fullscreen"})
+		return
+	var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
 ## Send a message to the page that embeds the game.
 func post(data: Dictionary) -> void:
 	if not is_web():

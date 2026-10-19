@@ -321,6 +321,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_C:
 			Game.chest_id = COOKBOOK
 			Game.open("craft")
+		KEY_F:
+			Site.toggle_fullscreen()
 		_:
 			if k >= KEY_0 and k <= KEY_9:
 				var n := 9 if k == KEY_0 else k - KEY_1
