@@ -33,10 +33,6 @@ var _action_anim := ""
 var _publish_at := 0.0
 
 
-## The cookbook (from the bag, C) has no building: knife-only food is made right there.
-const COOKBOOK := "cookbook"
-
-
 func _ready() -> void:
 	_ui = GameUi.new()
 	add_child(_ui)
@@ -284,10 +280,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var k: int = event.physical_keycode
 	var menu := Game.menu
+	# The I window: I (or Tab) opens or closes it; J, Q, and C go straight to their tab.
+	var tab: String = {KEY_J: "journal", KEY_Q: "quests", KEY_C: "cookbook"}.get(k, "")
 	if menu != "":
-		# Escape (or a menu's own key) closes it, except the letter and the morning summary.
-		var toggles := (k == KEY_I and menu == "bag") or (k == KEY_J and menu == "journal") or (k == KEY_Q and menu == "quests") \
-			or (k == KEY_C and menu == "craft" and Game.chest_id == COOKBOOK)
+		if menu in Game.HUB_TABS and tab != "":
+			if menu == tab:
+				Game.close()
+			else:
+				Game.open(tab)
+			return
+		# Escape (or I in the I window) closes it, except the letter and the morning summary.
+		var toggles: bool = (k == KEY_I or k == KEY_TAB) and menu in Game.HUB_TABS
 		if (k == KEY_ESCAPE or toggles) and menu != "intro" and menu != "summary":
 			Game.close()
 		return
@@ -298,7 +301,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not event.echo:
 				do_action("interact" if k == KEY_E else "use")
 		KEY_I, KEY_TAB:
-			Game.open("bag")
+			Game.open(Game.last_tab)
 		KEY_J:
 			Game.open("journal")
 		KEY_Q:
@@ -319,8 +322,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif slot != null and Items.get_def(slot.item).kind == "kit":
 				Game.update(World.turn_placing)
 		KEY_C:
-			Game.chest_id = COOKBOOK
-			Game.open("craft")
+			Game.open("cookbook")
 		KEY_F:
 			Site.toggle_fullscreen()
 		_:

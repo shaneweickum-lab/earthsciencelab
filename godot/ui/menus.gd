@@ -16,6 +16,7 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"plot": return plot_menu()
 		"mine": return mine_cart()
 		"craft": return craft_menu()
+		"cookbook": return craft_menu(true)
 		"stall": return stall_menu(game_ui)
 		"journal": return journal(game_ui)
 		"pause": return Screens.pause(game_ui)
@@ -321,10 +322,10 @@ const STATION_ICONS := {"workbench": "🪚", "grinder": "⚙️", "spinningWheel
 ## A crafting station: what it makes, what each takes, and a button to make one. A stove or oven
 ## opens the kitchen (every dish, and what's missing for each); the cookbook (C) does the same,
 ## where only knife-only food can be made.
-static func craft_menu() -> Dictionary:
+static func craft_menu(cookbook := false) -> Dictionary:
 	var w := Game.world
 	var cooking: Array = Data.recipes().filter(func(r): return World.is_cooking(r))
-	if Game.chest_id == "cookbook":
+	if cookbook:
 		var cm := Ui.modal("Cookbook", "📖", Game.close, true)
 		cm.body.add_child(Ui.text("Carry the utensils a dish needs in your bag. Food with only a knife can be made anywhere; the rest cook at a stove or oven (put them side by side for recipes that need both). Select food and use it to eat it.", 14, Ui.MUTED))
 		for r in cooking:

@@ -11,14 +11,43 @@ import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
 import { GRADE_INFO } from "@/world/grades";
 import { WEATHER } from "@/world/weather";
 import { ItemIcon, WearBar } from "./ItemIcon";
-import { useWorld } from "./useWorld";
+import { HUB_TABS, isHubTab, useWorld, type HubTab } from "./useWorld";
+
+const HUB_LABELS: Record<HubTab, [string, string]> = {
+  bag: ["🎒", "Bag"], journal: ["📓", "Journal"], quests: ["📜", "Quests"], cookbook: ["📖", "Cookbook"], pause: ["⚙️", "Game"],
+};
+const HUB_KEYS: Record<HubTab, string> = { bag: "I", journal: "J", quests: "Q", cookbook: "C", pause: "Esc" };
+
+/** The tabs across the top of the window I opens. */
+export function HubTabs() {
+  const menu = useWorld((s) => s.menu);
+  const open = useWorld((s) => s.open);
+  return (
+    <div className="flex gap-1 overflow-x-auto border-b border-line bg-paper px-3 pt-2" role="tablist" aria-label="Your things">
+      {HUB_TABS.map((t) => (
+        <button
+          key={t}
+          role="tab"
+          aria-selected={menu === t}
+          onClick={() => open(t)}
+          className={`shrink-0 rounded-t-xl px-3 py-1.5 text-sm font-black ${menu === t ? "bg-card text-ink shadow-[0_-1px_0_var(--color-line)]" : "text-muted hover:bg-line/60"}`}
+        >
+          {HUB_LABELS[t][0]} {HUB_LABELS[t][1]} <kbd className="text-[10px] font-bold text-muted">{HUB_KEYS[t]}</kbd>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function Modal({ title, icon, children, onClose, wide = false }: {
   title: string; icon: string; children: React.ReactNode; onClose?: () => void; wide?: boolean;
 }) {
+  // Your bag, journal, quests, cookbook, and the game menu share one window, with tabs.
+  const hub = useWorld((s) => isHubTab(s.menu));
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-soil-dark/50 p-3 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label={title}>
-      <div className={`card flex max-h-full w-full flex-col overflow-hidden ${wide ? "max-w-3xl" : "max-w-lg"}`}>
+      <div className={`card flex max-h-full w-full flex-col overflow-hidden ${wide || hub ? "max-w-3xl" : "max-w-lg"}`}>
+        {hub && <HubTabs />}
         <div className="flex items-center gap-2 border-b border-line bg-paper px-5 py-3">
           <span className="text-2xl" aria-hidden>{icon}</span>
           <h2 className="font-display text-xl font-black">{title}</h2>

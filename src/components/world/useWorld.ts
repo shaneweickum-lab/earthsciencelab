@@ -11,7 +11,12 @@ import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "homestead" | "stall" | "bed" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "homestead" | "stall" | "bed" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests" | "cookbook";
+
+/** The tabs of the window that I opens: your bag, journal, quests, cookbook, and the game menu. */
+export const HUB_TABS = ["bag", "journal", "quests", "cookbook", "pause"] as const;
+export type HubTab = (typeof HUB_TABS)[number];
+export const isHubTab = (m: Menu): m is HubTab => (HUB_TABS as readonly string[]).includes(m ?? "");
 
 export type Screen = "menu" | "setup" | "lobby" | "playing";
 
@@ -40,6 +45,8 @@ interface WorldStore {
   /** In multiplayer: how ops reach the host. Null in single-player. */
   remote: ((op: string, args: unknown[]) => void) | null;
   open: (menu: Menu) => void;
+  /** The I window's tab you looked at last (I opens it there). */
+  lastTab: HubTab;
   /** Which townsperson you're talking to. */
   talkingTo: string | null;
   /** The chest or crafting station that's open (or, for "plot", the plot's number). */
@@ -134,8 +141,9 @@ export const useWorld = create<WorldStore>((set, get) => {
       // Each morning, notice-board requests past their date come down.
       const w = get().world;
       if (menu === "summary" && w) set({ world: expireBoard(w) });
-      set({ menu });
+      set(isHubTab(menu) && menu !== "pause" ? { menu, lastTab: menu } : { menu });
     },
+    lastTab: "bag",
     talkingTo: null,
     chestId: null,
     openChest: (id, menu = "chest") => set({ menu, chestId: id }),

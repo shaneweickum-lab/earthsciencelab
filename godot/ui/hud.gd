@@ -41,19 +41,25 @@ static func status(w: Dictionary) -> Control:
 	if w.organic:
 		row.add_child(Ui.pill("🌿 Organic", Ui.LEAF, Color.WHITE, 13))
 	col.add_child(row)
-	if Settings.on(w, "energy"):
-		col.add_child(_meter("⚡", w.energy, w.maxEnergy, Ui.DANGER if w.energy < 20 else Ui.SUN))
-	col.add_child(_meter("💧", w.water, w.canSize, Ui.SKY))
 	return col
+
+
+## Energy and the watering can, just above the hotbar.
+static func meters(w: Dictionary) -> Control:
+	var row := Ui.hbox(8)
+	if Settings.on(w, "energy"):
+		row.add_child(_meter("⚡", w.energy, w.maxEnergy, Ui.DANGER if w.energy < 20 else Ui.SUN))
+	row.add_child(_meter("💧", w.water, w.canSize, Ui.SKY))
+	row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return row
 
 
 static func _meter(icon: String, value: float, maximum: float, color: Color) -> Control:
 	var h := Ui.hbox(6)
 	h.add_child(Ui.emoji_icon(icon, 14))
-	h.add_child(Ui.meter(value, maximum, color, 96, 8))
-	var p := Ui.panel(h, Color(Ui.CARD, 0.95), 99, 5, Color(0, 0, 0, 0), 0)
-	p.size_flags_horizontal = Control.SIZE_SHRINK_END
-	return p
+	h.add_child(Ui.meter(value, maximum, color, 130, 9))
+	h.add_child(Ui.text("%d/%d" % [roundi(value), roundi(maximum)], 11, Color.WHITE, 900, false))
+	return Ui.panel(h, Color(Ui.SOIL_DARK, 0.7), 99, 5, Color(0, 0, 0, 0), 0)
 
 
 ## Grandma Rosa's note for the lesson you're on: what to do, how, and the reward to claim.
@@ -119,6 +125,7 @@ static func hotbar(w: Dictionary) -> Control:
 	var name := Ui.pill(Items.get_def(sel.item).name if sel else "Empty hands", Color(Ui.SOIL_DARK, 0.8), Color.WHITE, 12)
 	name.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(name)
+	col.add_child(meters(w))
 	var row := Ui.hbox(4)
 	for i in World.HOTBAR_SIZE:
 		row.add_child(_slot(w, i))
@@ -304,8 +311,7 @@ static func touch_controls(game_ui: GameUi) -> Control:
 	root.add_child(pad)
 	var acts := Ui.vbox(8)
 	var row := Ui.hbox(6)
-	row.add_child(Ui.button("🎒", func(): Game.open("bag"), "flat", 18))
-	row.add_child(Ui.button("📓", func(): Game.open("journal"), "flat", 18))
+	row.add_child(Ui.button("🎒", func(): Game.open(Game.last_tab), "flat", 18))
 	row.add_child(Ui.button("✋", func(): game_ui.get_parent().do_action("interact"), "flat", 18))
 	acts.add_child(row)
 	var a := Ui.button("A", func(): game_ui.get_parent().do_action("use"), "primary", 22)

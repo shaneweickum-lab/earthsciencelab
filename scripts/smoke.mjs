@@ -189,7 +189,25 @@ await page.keyboard.press("Escape");
 await page.keyboard.press("j");
 await page.getByRole("dialog", { name: /Nature Journal/ }).waitFor();
 await shot("07b-journal");
-await page.keyboard.press("Escape");
+// Bag, journal, quests, cookbook, and the game menu are tabs of the one window.
+const tabs = page.getByRole("tablist", { name: "Your things" });
+await tabs.getByRole("tab", { name: /Quests/ }).click();
+await page.getByRole("dialog", { name: "Quests" }).waitFor();
+await tabs.getByRole("tab", { name: /Cookbook/ }).click();
+await page.getByRole("dialog", { name: "Cookbook" }).waitFor();
+await tabs.getByRole("tab", { name: /Game/ }).click();
+await page.getByRole("dialog", { name: "Paused" }).waitFor();
+await tabs.getByRole("tab", { name: /Bag/ }).click();
+await page.getByRole("dialog", { name: "Your bag" }).waitFor();
+await shot("07b2-tabs");
+await page.keyboard.press("i");
+await page.getByRole("dialog", { name: "Your bag" }).waitFor({ state: "detached" });
+// Energy and water sit above the hotbar.
+const meters = await page.evaluate(() => {
+  const box = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+  return { meter: box('[role="meter"][aria-label="Watering can"]'), hotbar: box('[aria-label="Hotbar"]') };
+});
+if (!meters.meter || meters.meter.bottom > meters.hotbar.top || Math.abs(meters.meter.left - meters.hotbar.left) > 400) throw new Error("The meters should sit above the hotbar");
 
 // Town: the notice board in the square and the quest log.
 await teleport(58, 14, "up");
@@ -280,7 +298,6 @@ const gameBox = page.getByLabel("Soil & Sprout game");
 const isFull = () => gameBox.evaluate((el) => document.fullscreenElement === el || el.classList.contains("fixed!"));
 await page.keyboard.press("f");
 await page.waitForFunction(() => { const el = document.querySelector('[aria-label="Soil & Sprout game"]'); return document.fullscreenElement === el || el.classList.contains("fixed!"); });
-await page.getByRole("button", { name: "Exit full screen" }).first().waitFor();
 await shot("07d5-fullscreen");
 await page.keyboard.press("f");
 await page.waitForFunction(() => !document.fullscreenElement && !document.querySelector('[aria-label="Soil & Sprout game"]').classList.contains("fixed!"));
@@ -438,7 +455,7 @@ if (existsSync("public/godot/index.html")) {
   await frame.waitForFunction(() => window.__soil.menu === "", null, { timeout: 10000 });
   // The cookbook (C) and your market stall.
   await page.keyboard.press("c");
-  await frame.waitForFunction(() => window.__soil.menu === "craft", null, { timeout: 10000 });
+  await frame.waitForFunction(() => window.__soil.menu === "cookbook", null, { timeout: 10000 });
   await page.waitForTimeout(800);
   await shot("32-godot-cookbook");
   await page.keyboard.press("Escape");

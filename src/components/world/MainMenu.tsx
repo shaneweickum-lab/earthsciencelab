@@ -4,7 +4,7 @@ import { useState } from "react";
 import { dayOf, formatDate, seasonLabel, yearOf } from "@/world/clock";
 import { AVATARS, DEFAULT_AVATAR } from "@/world/avatars";
 import { DEFAULT_SETTINGS, normalizeSettings, PRESETS, presetOf, type GameSettings } from "@/world/settings";
-import { AvatarChoice } from "./Menus";
+import { AvatarChoice, HubTabs } from "./Menus";
 import { CalendarPanel, SciencePanel, TimePanel } from "./SettingsPanels";
 import { useMulti } from "@/net/mp";
 import { useWorld } from "./useWorld";
@@ -152,13 +152,16 @@ export function PauseMenu() {
   if (multi) {
     return (
       <div className="absolute inset-0 z-40 grid place-items-center bg-soil-dark/50 p-3 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Menu">
-        <div className="card w-full max-w-sm space-y-3 p-5 text-center">
-          <h2 className="font-display text-xl font-black">☰ Menu</h2>
+        <div className="card w-full max-w-3xl overflow-hidden">
+          <HubTabs />
+          <div className="mx-auto max-w-sm space-y-3 p-5 text-center">
+          <h2 className="font-display text-xl font-black">⚙️ Game</h2>
           <p className="text-sm text-muted">The world keeps going while this is open.</p>
           <div className="grid gap-2">
             <button className="btn btn-primary" onClick={close}>▶ Back to the farm</button>
             <FullscreenToggle />
             <button className="btn btn-ghost" onClick={() => void useMulti.getState().leave()}>🚪 Leave this world</button>
+          </div>
           </div>
         </div>
       </div>
@@ -167,6 +170,7 @@ export function PauseMenu() {
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-soil-dark/50 p-3 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Paused">
       <div className="card flex max-h-full w-full max-w-3xl flex-col overflow-hidden">
+        <HubTabs />
         <div className="flex flex-wrap items-center gap-2 border-b border-line bg-paper px-5 py-3">
           <h2 className="mr-auto font-display text-xl font-black">⏸ Paused</h2>
           <button className="btn btn-primary py-1.5" onClick={close}>▶ Resume</button>
