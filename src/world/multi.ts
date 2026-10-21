@@ -1,7 +1,7 @@
-import { addItem, buildingAt, faint, facingTile, hourly, newWorld, say, selectedItem, sleep, tally, tileAt, WORLD_VERSION } from "./engine";
+import { addItem, packTiles, unpackTiles, buildingAt, faint, facingTile, hourly, nearSignpost, newWorld, say, selectedItem, sleep, tally, tileAt, WORLD_VERSION } from "./engine";
 import { DAY_END, timeOfDay } from "./clock";
 import { ITEMS, sellPrice } from "./items";
-import { createMap, FARM_W, GARDEN_ENTRY, GATE_ROWS, H, idx, LANE_X, STALL_ROW, STALL_SIZE, STALL_X0, W } from "./map";
+import { ALLOTMENT0, createMap, DESTINATIONS, FARM_W, OLD_ROWS, OLD_W, PLOTS, TOWN, TOWN_SHIFT, GARDEN_ENTRY, GATE_ROWS, H, idx, LANE_X, STALL_ROW, STALL_SIZE, STALL_X0, W } from "./map";
 import { expireCritters } from "./nature";
 import { cleanChat } from "./chatFilter";
 import { on, type GameSettings } from "./settings";
@@ -17,6 +17,8 @@ import type { Building, Critter, Listing, MineFloor, Slot, Tile, WorldState } fr
  */
 
 export const MAX_PLAYERS = 8;
+export const MULTI_VERSION = 2;
+const ALLOTMENTS = PLOTS.filter((p) => p.id >= ALLOTMENT0).map((p) => p.id);
 /** Width of the town half of the map. */
 const TW = W - FARM_W;
 
@@ -67,7 +69,8 @@ export interface ChatMessage {
 export const CHAT_KEEP = 100;
 
 export interface MultiWorld {
-  version: 1;
+  /** 2 since the valley grew (version 1 worlds are upgraded when they load). */
+  version: number;
   id: string;
   name: string;
   /** The farmer who hosts the world (and can turn chat off). */
@@ -140,7 +143,7 @@ function wilds(seed: number): FarmPart {
 export function newMultiWorld(id: string, name: string, seed: number, settings: GameSettings | undefined, host: { id: string; name: string; avatar?: string }): MultiWorld {
   const base = newWorld(seed, settings);
   const m: MultiWorld = {
-    version: 1, id, name, hostId: host.id, chat: [], seed, minute: base.minute, weather: base.weather, settings: base.settings,
+    version: MULTI_VERSION, id, name, hostId: host.id, chat: [], seed, minute: base.minute, weather: base.weather, settings: base.settings,
     town: multiTown(seed), farms: {}, players: {}, mines: {}, stalls: {},
   };
   return addPlayer(m, host.id, host.name, host.avatar)!;
@@ -184,7 +187,8 @@ function stitch(m: MultiWorld, farm: FarmPart, p: PlayerPart): WorldState {
     ...(player as Pick<WorldState, (typeof PLAYER_KEYS)[number]>),
     version: WORLD_VERSION, seed: m.seed, minute: m.minute, weather: m.weather, settings: m.settings,
     tiles, buildings: [...farm.buildings, ...m.town.buildings], critters: [...farm.critters, ...m.town.critters],
-    plots: farm.plots, foundWorkbench: farm.foundWorkbench,
+    // The park allotments are shared community beds in a shared world: anyone can farm them.
+    plots: [...farm.plots, ...ALLOTMENTS], foundWorkbench: farm.foundWorkbench,
     mine: p.area.kind === "mine" ? m.mines[p.area.floor] : undefined,
   };
 }
@@ -206,8 +210,11 @@ function splitFarm(v: WorldState, prev: FarmPart, garden: number): FarmPart {
   const buildings = keepIfSame(v.buildings.filter((b) => b.x < FARM_W), prev.buildings);
   // Critter ids are made per day, so tag each garden's to keep them apart from the town's.
   const critters = keepIfSame(v.critters.filter((c) => c.x < FARM_W).map((c) => (c.id.startsWith("g") && c.id.includes(":") ? c : { ...c, id: `g${garden}:${c.id}` })), prev.critters);
-  const same = tiles === prev.tiles && buildings === prev.buildings && critters === prev.critters && v.plots === prev.plots && v.foundWorkbench === prev.foundWorkbench;
-  return same ? prev : { tiles, buildings, critters, plots: v.plots ?? prev.plots, foundWorkbench: v.foundWorkbench };
+  // The view adds the shared allotments; the farm keeps only its own plots.
+  const own = (v.plots ?? prev.plots).filter((id) => id < ALLOTMENT0);
+  const plots = own.length === prev.plots.length && own.every((id, i) => id === prev.plots[i]) ? prev.plots : own;
+  const same = tiles === prev.tiles && buildings === prev.buildings && critters === prev.critters && plots === prev.plots && v.foundWorkbench === prev.foundWorkbench;
+  return same ? prev : { tiles, buildings, critters, plots, foundWorkbench: v.foundWorkbench };
 }
 
 function splitTown(v: WorldState, prev: MultiWorld["town"]): MultiWorld["town"] {
@@ -275,6 +282,18 @@ export function enterGate(m: MultiWorld, pid: string, garden: number): MultiWorl
   const welcome = garden === p.garden ? "Home sweet home." : `Welcome to ${gardenName(m, garden)}! Lend a hand: water, weed, and plant. The harvest is theirs.`;
   const moved: PlayerPart = { ...p, area: { kind: "garden", garden }, player: { ...GARDEN_ENTRY } };
   return tell({ ...m, players: { ...m.players, [pid]: moved } }, pid, welcome);
+}
+
+/**
+ * Travel from a signpost in a shared world. Everywhere a signpost goes is in town, so you step
+ * out of whichever garden you were in. (The shared clock doesn't wait for one farmer's walk.)
+ */
+export function travelMulti(m: MultiWorld, pid: string, id: string): MultiWorld {
+  const p = m.players[pid];
+  const d = DESTINATIONS.find((x) => x.id === id);
+  if (!p || !d || p.area.kind === "mine" || !nearSignpost(viewFor(m, pid))) return m;
+  const moved: PlayerPart = { ...p, area: { kind: "town" }, player: { x: d.x, y: d.y, facing: d.facing } };
+  return tell({ ...m, players: { ...m.players, [pid]: moved } }, pid, `You walked to the ${d.name.toLowerCase()}.`);
 }
 
 /** Out of a garden by its road, back to its gate in town. */
@@ -480,3 +499,55 @@ export function hideChat(m: MultiWorld, pid: string, id: number, hide = true): M
 
 /** Messages the host still needs to look at. */
 export const reportedChat = (m: MultiWorld) => (m.chat ?? []).filter((c) => !c.hidden && (c.reports?.length ?? 0) > 0);
+
+// ───────────────────────── stored worlds ─────────────────────────
+
+const farmBases = new Map<string, Tile[]>();
+const townBases = new Map<number, Tile[]>();
+const farmBase = (seed: number, garden: number) => {
+  const key = `${seed}:${garden}`;
+  if (!farmBases.has(key)) farmBases.set(key, newFarm(seed, garden).tiles);
+  return farmBases.get(key)!;
+};
+const townBase = (seed: number) => {
+  if (!townBases.has(seed)) townBases.set(seed, multiTown(seed).tiles);
+  return townBases.get(seed)!;
+};
+
+/** A shared world for storing: tiles still as they were on day one are kept as 0. */
+export function packMultiWorld(m: MultiWorld): MultiWorld {
+  const farms = Object.fromEntries(Object.entries(m.farms).map(([g, f]) => [g, { ...f, tiles: packTiles(f.tiles, farmBase(m.seed, Number(g))) as Tile[] }]));
+  return { ...m, farms, town: { ...m.town, tiles: packTiles(m.town.tiles, townBase(m.seed)) as Tile[] } };
+}
+
+/** A stored shared world, unpacked (and upgraded if it's from before the valley grew). */
+export function unpackMultiWorld(m: MultiWorld): MultiWorld {
+  if ((m.version ?? 1) < 2) return growMultiWorld(m);
+  const farms = Object.fromEntries(Object.entries(m.farms).map(([g, f]) => [g, { ...f, tiles: unpackTiles(f.tiles as (Tile | 0)[], farmBase(m.seed, Number(g))) }]));
+  return { ...m, farms, town: { ...m.town, tiles: unpackTiles(m.town.tiles as (Tile | 0)[], townBase(m.seed)) } };
+}
+
+/**
+ * Shared worlds from before the valley grew: each garden keeps every tile, gaining the new rows
+ * below; the town is the new valley, with the community garden's progress carried over.
+ */
+function growMultiWorld(m: MultiWorld): MultiWorld {
+  const oldTW = OLD_W - FARM_W;
+  const farms = Object.fromEntries(Object.entries(m.farms).map(([g, f]) => {
+    const tiles = [...farmBase(m.seed, Number(g))];
+    for (let i = 0; i < Math.min(f.tiles.length, FARM_W * OLD_ROWS); i++) tiles[i] = f.tiles[i];
+    return [g, { ...f, tiles }];
+  }));
+  const fresh = multiTown(m.seed);
+  const tiles = [...fresh.tiles];
+  const g = TOWN.garden;
+  for (let y = g.y0; y <= g.y1; y++) for (let x = g.x0; x <= g.x1; x++) {
+    const old = m.town.tiles[y * oldTW + (x - TOWN_SHIFT - FARM_W)];
+    if (old) tiles[y * TW + (x - FARM_W)] = old;
+  }
+  const players = Object.fromEntries(Object.entries(m.players).map(([id, p]) => {
+    const inTown = p.area.kind === "town" && Math.round(p.player.x) >= LANE_X + 2;
+    return [id, inTown ? { ...p, player: { ...p.player, x: p.player.x + TOWN_SHIFT } } : p];
+  }));
+  return { ...m, version: MULTI_VERSION, farms, players, town: { ...fresh, tiles } };
+}

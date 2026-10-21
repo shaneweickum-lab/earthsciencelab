@@ -7,7 +7,7 @@ import { BufferAttribute, Color, LoopOnce, type AmbientLight, type DirectionalLi
 import { daylight, dayOf, msPerGameMinute, seasonOf, timeOfDay } from "@/world/clock";
 import { canPlace, DIRS, facingTile, movePlayer, placementFor, rotatable, tick, todayWeather } from "@/world/engine";
 import { ITEMS } from "@/world/items";
-import { atGardenExit, BUILDING_SIZE } from "@/world/map";
+import { atGardenExit, BUILDING_SIZE, H, W } from "@/world/map";
 import { critterIcon, expireCritters } from "@/world/nature";
 import { NPCS, npcPose, type Npc } from "@/world/town";
 import type { WeatherId, WorldState } from "@/world/types";
@@ -23,6 +23,7 @@ import { model } from "./models";
 import { MineScene } from "./Mine";
 import { Obstacles, Pond, Terrain } from "./Terrain";
 import { HeldItem } from "./HeldItem";
+import { heightAt } from "./height";
 import { LockedPlots } from "./Plots";
 import type { ActionAnim } from "@/world/preview";
 
@@ -106,7 +107,10 @@ function GameLoop() {
     // Camera follows the player (and jumps there when you go in or out of the mine).
     const p = runtime.player;
     const z = zoom.current;
-    const tx = p.x, ty = 0, tz = p.y + 0.5;
+    // Up the mountain the camera rises too; at the map's edges it stops short of the void.
+    const tx = w.mine ? p.x : Math.min(W - 9 * z, Math.max(9 * z, p.x));
+    const tz = (w.mine ? p.y : Math.min(H - 4 * z, Math.max(2, p.y))) + 0.5;
+    const ty = w.mine ? 0 : heightAt(w.tiles, p.x, p.y);
     const place = w.mine ? `mine-${w.mine.floor}` : "up";
     if (place !== lastPlace.current) {
       lastPlace.current = place;
@@ -115,7 +119,7 @@ function GameLoop() {
     camera.position.x += (tx - camera.position.x) * Math.min(1, dt * 5);
     camera.position.y += (ty + 12 * z - camera.position.y) * Math.min(1, dt * 5);
     camera.position.z += (tz + 9.5 * z - camera.position.z) * Math.min(1, dt * 5);
-    camera.lookAt(camera.position.x, 0, camera.position.z - 9.5 * z);
+    camera.lookAt(camera.position.x, camera.position.y - 12 * z, camera.position.z - 9.5 * z);
   });
   return null;
 }
@@ -218,7 +222,7 @@ function NpcFigure({ npc }: { npc: Npc }) {
     if (!w || !g) return;
     const pose = npcPose(w, npc, w.minute + runtime.minuteFrac);
     g.visible = pose.visible;
-    g.position.set(pose.x, 0, pose.y);
+    g.position.set(pose.x, heightAt(w.tiles, pose.x, pose.y), pose.y);
     let diff = ROT[pose.facing] - g.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -312,6 +316,8 @@ function OtherFarmer({ pid, avatar, name }: { pid: string; avatar: string; name:
     const k = Math.min(1, dt * 12);
     g.position.x += (pos.pos.x - g.position.x) * k;
     g.position.z += (pos.pos.y - g.position.z) * k;
+    const view = useWorld.getState().world;
+    g.position.y = view && !view.mine ? heightAt(view.tiles, g.position.x, g.position.z) : 0;
     let diff = ROT[pos.pos.facing] - g.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -382,13 +388,13 @@ function Player() {
     const g = ref.current;
     if (!g) return;
     const p = runtime.player;
-    g.position.set(p.x, 0, p.y);
+    const w = useWorld.getState().world;
+    g.position.set(p.x, w && !w.mine ? heightAt(w.tiles, p.x, p.y) : 0, p.y);
     const target = ROT[p.facing];
     let diff = target - g.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     g.rotation.y += diff * Math.min(1, dt * 14);
-    const w = useWorld.getState().world;
     // Your lantern lights up at night, and always underground.
     if (lamp.current && w) lamp.current.intensity = w.mine ? 9 : (1 - daylight(w.minute)) * 6;
   });
@@ -409,8 +415,10 @@ function FacingMarker() {
   useFrame(() => {
     if (!ref.current) return;
     const p = runtime.player;
+    const w = useWorld.getState().world;
     const [dx, dy] = DIRS[p.facing];
-    ref.current.position.set(Math.round(p.x) + dx, 0.07, Math.round(p.y) + dy);
+    const x = Math.round(p.x) + dx, y = Math.round(p.y) + dy;
+    ref.current.position.set(x, 0.07 + (w && !w.mine ? heightAt(w.tiles, x, y) : 0), y);
   });
   return (
     <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]}>
@@ -432,7 +440,7 @@ function BuildGhost() {
   const [bw, bh] = BUILDING_SIZE[kind];
   const rot = rotatable(kind) ? (w.placeRot ?? 0) : 0;
   return (
-    <group position={[o.x + (bw - 1) / 2, 0, o.y + (bh - 1) / 2]}>
+    <group position={[o.x + (bw - 1) / 2, heightAt(w.tiles, o.x, o.y), o.y + (bh - 1) / 2]}>
       <mesh position={[0, 0.5, 0]}>
         <boxGeometry args={[bw - 0.05, 1, bh - 0.05]} />
         <meshBasicMaterial color={ok ? "#5fd16f" : "#e0533d"} transparent opacity={0.3} depthWrite={false} />
@@ -535,11 +543,11 @@ function Precipitation({ weather }: { weather: WeatherId }) {
   );
 }
 
-function Critters({ critters }: { critters: WorldState["critters"] }) {
+function Critters({ critters, tiles }: { critters: WorldState["critters"]; tiles: WorldState["tiles"] }) {
   return (
     <group>
       {critters.map((c) => (
-        <Html key={c.id} position={[c.x, 0.5, c.y]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
+        <Html key={c.id} position={[c.x, 0.5 + heightAt(tiles, c.x, c.y), c.y]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
           <div className="animate-bounce select-none text-2xl drop-shadow">{critterIcon(c.kind)}</div>
         </Html>
       ))}
@@ -578,9 +586,9 @@ function Surface() {
       <Pond tiles={tiles} />
       <Obstacles tiles={tiles} season={season} buildings={buildings} />
       <Crops tiles={tiles} />
-      <Buildings buildings={buildings} />
+      <Buildings buildings={buildings} tiles={tiles} />
       <LockedPlots owned={plots} />
-      <Critters critters={critters} />
+      <Critters critters={critters} tiles={tiles} />
       <Player />
       <Townsfolk />
       <OtherFarmers />

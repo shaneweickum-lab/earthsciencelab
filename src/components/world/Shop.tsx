@@ -26,7 +26,7 @@ export function StoreMenu() {
   const seeds = all.filter((i) => i.kind === "seed" && (!seasonal || hasGreenhouse || WORLD_CROPS[i.crop!].seasons.includes(season)));
   const kitchenware = (i: ItemDef) => i.kind === "utensil" || i.building === "stove" || i.building === "oven";
   const science = (i: ItemDef) => i.id in SHOP_UNLOCKS && !kitchenware(i);
-  const farmTools = all.filter((i) => i.kind === "tool" && i.price && !science(i));
+  const farmTools = all.filter((i) => i.kind === "tool" && i.price && !science(i) && i.tool?.use !== "rod");
   const scienceTools = all.filter(science);
   const soil = all.filter((i) => i.kind === "amendment" && !science(i));
   const kits = all.filter((i) => i.kind === "kit" && !kitchenware(i));

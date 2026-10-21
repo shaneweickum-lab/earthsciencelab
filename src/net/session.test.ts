@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLOTS } from "@/world/map";
+import { FARM_W, PLOTS, W } from "@/world/map";
 import { newMultiWorld, viewFor } from "@/world/multi";
 import { fingerprint } from "./protocol";
 import { ClientSession, HostSession } from "./session";
@@ -53,7 +53,7 @@ describe("multiplayer sessions", () => {
     expect(JSON.stringify(ben.world)).toBe(JSON.stringify(host.world));
     // Ben's view is Ana's garden.
     const p = PLOTS[0];
-    expect(viewFor(ben.world, "ben").tiles[p.y0 * 76 + p.x0]).toEqual(host.world.farms[0].tiles[p.y0 * 38 + p.x0]);
+    expect(viewFor(ben.world, "ben").tiles[p.y0 * W + p.x0]).toEqual(host.world.farms[0].tiles[p.y0 * FARM_W + p.x0]);
   });
 
   it("pass the night once everyone online is in bed", async () => {

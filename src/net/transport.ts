@@ -1,4 +1,4 @@
-import type { MultiWorld } from "@/world/multi";
+import { packMultiWorld, unpackMultiWorld, type MultiWorld } from "@/world/multi";
 import type { Message } from "./protocol";
 
 /** Who's in a world right now. */
@@ -76,11 +76,13 @@ export class MemoryTransport implements Transport {
   }
 
   async saveSnapshot(seq: number, world: MultiWorld) {
-    this.hub.snapshot = JSON.parse(JSON.stringify({ seq, world }));
+    this.hub.snapshot = JSON.parse(JSON.stringify({ seq, world: packMultiWorld(world) }));
   }
 
   async loadSnapshot() {
-    return this.hub.snapshot ? JSON.parse(JSON.stringify(this.hub.snapshot)) : null;
+    if (!this.hub.snapshot) return null;
+    const snap = JSON.parse(JSON.stringify(this.hub.snapshot));
+    return { seq: snap.seq, world: unpackMultiWorld(snap.world) };
   }
 
   close() {
@@ -154,12 +156,14 @@ export class LocalTransport implements Transport {
   }
 
   async saveSnapshot(seq: number, world: MultiWorld) {
-    localStorage.setItem(`soil-mp:${this.worldId}`, JSON.stringify({ seq, world }));
+    localStorage.setItem(`soil-mp:${this.worldId}`, JSON.stringify({ seq, world: packMultiWorld(world) }));
   }
 
   async loadSnapshot() {
     const raw = localStorage.getItem(`soil-mp:${this.worldId}`);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    return { seq: snap.seq, world: unpackMultiWorld(snap.world) };
   }
 
   close() {

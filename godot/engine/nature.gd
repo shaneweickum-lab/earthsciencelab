@@ -67,9 +67,9 @@ static func spawn_critters(state: Dictionary, day: int) -> Dictionary:
 				found = i
 				break
 		var spec: Dictionary = pool[found] if found >= 0 else pool[0]
-		# Try some random spots for its habitat.
+		# Try some random spots for its habitat: mostly around the farm and the country road, then anywhere in the valley.
 		for tries in 60:
-			var x := int(floorf(rand.next() * WorldMap.W))
+			var x := int(floorf(rand.next() * (WorldMap.TOWN.x0 if tries < 40 else WorldMap.W)))
 			var y := int(floorf(rand.next() * WorldMap.H))
 			if critters.any(func(c): return c.x == x and c.y == y):
 				continue

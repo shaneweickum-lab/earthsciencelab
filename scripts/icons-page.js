@@ -377,6 +377,42 @@ ICONS.sandwich = () => food("sandwich");
 ICONS.pizza = () => food("pizza");
 ICONS.pie = () => food("pie");
 
+// Fishing: Kai's rod, the fish of the river, pond, and sea (the Food Kit's fish, tinted), and the dishes.
+/** A model painted one color (keeping its shading). */
+function tint(root, color) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = (Array.isArray(o.material) ? o.material[0] : o.material).clone();
+    o.material.map = null;
+    o.material.color.set(color);
+  });
+  return root;
+}
+const FISH_COLORS = {
+  brookTrout: "#8f9a5a", rainbowTrout: "#d98a9a", catfish: "#7a6f60", salmon: "#e0846a", bluegill: "#4f7fb8", perch: "#e0b83a",
+  bass: "#5f8f3f", flounder: "#b8a07a", mackerel: "#3f8fa0", stripedBass: "#a8b0b8", anyFish: "#8fb0c8",
+};
+for (const [id, color] of Object.entries(FISH_COLORS)) ICONS[id] = async () => tint(await food("fish"), color);
+ICONS.crab = async () => group(
+  ball(0.42, "#4f7fb8", [0, 0.25, 0], [1.3, 0.55, 1]),
+  [-1, 1].flatMap((side) => [
+    ...[0, 1, 2].map((k) => cyl(0.04, 0.04, 0.5, "#3f6fa0", [side * (0.55 + k * 0.02), 0.15, -0.25 + k * 0.25], [0, 0, side * 1.1], 5)),
+    ball(0.13, "#d9452f", [side * 0.5, 0.35, 0.4], [1.2, 0.8, 1]),
+  ]),
+  ball(0.05, "#1a1410", [-0.12, 0.45, 0.35]), ball(0.05, "#1a1410", [0.12, 0.45, 0.35]),
+);
+ICONS.kelp = async () => group([-0.25, 0, 0.25].map((x, i) => mesh(new THREE.CapsuleGeometry(0.09, 1.0 + i * 0.2, 3, 6), i === 1 ? "#5d7d2f" : "#6f8f3a", [x, 0.6, 0], [0, 0, (i - 1) * 0.25])));
+ICONS.rod = async () => group(
+  cyl(0.03, 0.05, 2.2, "#8a5a3c", [0, 1.1, 0], [0, 0, -0.5], 6),
+  cyl(0.11, 0.11, 0.12, "#c9ced6", [-0.2, 0.55, 0.06], [Math.PI / 2, 0, 0], 10),
+  cyl(0.008, 0.008, 1.3, "#eeeeee", [0.75, 1.0, 0], [0, 0, 0], 4),
+  ball(0.08, "#d9452f", [0.75, 0.35, 0]),
+);
+ICONS.panFish = () => on(food("frying-pan"), food("fish"), 0.55);
+ICONS.fishStew = () => food("bowl-broth");
+ICONS.bakedFish = () => on(food("plate"), food("fish"), 0.7);
+ICONS.fishTacos = () => food("taco");
+
 for (const [tier, color] of Object.entries(TIER_COLORS)) {
   ICONS[`axe_${tier}`] = async () => metal(await survival("tool-axe-upgraded"), color);
   ICONS[`pickaxe_${tier}`] = async () => metal(await survival("tool-pickaxe-upgraded"), color);

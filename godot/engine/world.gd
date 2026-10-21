@@ -2,14 +2,14 @@ class_name World
 ## Port of src/world/engine.ts. The world is a Dictionary in the exact shape of the save JSON,
 ## and every function returns a new world instead of changing the one it's given.
 
-const WORLD_VERSION := 10
+const WORLD_VERSION := 11
 const INVENTORY_SIZE := 30
 const HOTBAR_SIZE := 10
 const MAX_ENERGY := 100
 const ORGANIC_BONUS := 1.25
 
 const DIRS := {"up": [0, -1], "down": [0, 1], "left": [-1, 0], "right": [1, 0]}
-const ENERGY := {"hoe": 2, "can": 1, "scythe": 1, "axe": 2, "pickaxe": 2, "shovel": 2, "ring": 1}
+const ENERGY := {"hoe": 2, "can": 1, "scythe": 1, "axe": 2, "pickaxe": 2, "shovel": 2, "ring": 1, "rod": 3}
 ## How many swings' worth of power it takes to clear each obstacle (a basic tool does 1 a swing).
 const OBSTACLE_HP := {
 	"stick": 1, "sapling": 1, "stone": 2, "log": 4, "stump": 5, "tree": 8,
@@ -140,10 +140,15 @@ static func building_at(state: Dictionary, x: int, y: int) -> Variant:
 	return null
 
 
+## Ponds, the river, and the sea.
+static func is_water(g: String) -> bool:
+	return g == "water" or g == "river" or g == "sea"
+
+
 ## Can the player stand on this tile?
 static func is_walkable(state: Dictionary, x: int, y: int) -> bool:
 	var t = tile_at(state, x, y)
-	if t == null or t.ground == "water" or t.ground == "caveWall":
+	if t == null or is_water(t.ground) or t.ground == "caveWall":
 		return false
 	if t.obstacle:
 		return false
@@ -158,6 +163,22 @@ static func is_walkable(state: Dictionary, x: int, y: int) -> bool:
 			return true
 		return WorldMap.greenhouse_interior(b).any(func(p): return p.x == x and p.y == y)
 	return false
+
+
+## Can you step from one tile to the next? Only on the level, or up or down one terrace by a
+## trail ramp: the mountain's cliffs are too steep to climb.
+static func can_step(state: Dictionary, ax: int, ay: int, bx: int, by: int) -> bool:
+	var a = tile_at(state, ax, ay)
+	var b = tile_at(state, bx, by)
+	if a == null or b == null:
+		return false
+	var ea := int(a.get("elev", 0))
+	var eb := int(b.get("elev", 0))
+	if ea == eb:
+		return true
+	if absi(ea - eb) != 1:
+		return false
+	return bool((a if ea > eb else b).get("ramp", false))
 
 
 static func player_tile(state: Dictionary) -> Dictionary:
@@ -176,8 +197,17 @@ static func say(state: Dictionary, text: String) -> Dictionary:
 	return Js.with(state, {"messages": messages.slice(-6)})
 
 
+## In a recipe, "anyFish" takes whichever fish you have.
 static func _matches(s: Variant, id: String, grade: Variant) -> bool:
-	return s != null and s.item == id and (grade == null or s.get("grade") == grade)
+	if s == null:
+		return false
+	var hit: bool
+	if id == "anyFish":
+		var def = Data.items().get(s.item)
+		hit = def != null and def.kind == "fish"
+	else:
+		hit = s.item == id
+	return hit and (grade == null or s.get("grade") == grade)
 
 
 ## How many of an item you have (all grades, unless a grade is given).
@@ -781,8 +811,10 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 				return Js.with(tt, {"tilled": true, "soil": soil}))
 			return say(tilled, "Tilled! (Each tilling breaks soil crumbs a little, so only till where you'll plant.)" if tillage else "Tilled!")
 		"can":
-			if t.ground == "water":
-				return say(Js.with(paid, {"water": state.canSize}), "Filled your watering can at the pond.")
+			if t.ground == "sea":
+				return say(state, "Sea water is salty: it would dry out your plants' roots. Fill up at the pond or the river.")
+			if is_water(t.ground):
+				return say(Js.with(paid, {"water": state.canSize}), "Filled your watering can at the %s." % ("river" if t.ground == "river" else "pond"))
 			if b and b.kind == "rainBarrel":
 				return _refill_from_barrel(paid, b)
 			if b and b.kind == "well":
@@ -827,7 +859,85 @@ static func apply_tool(state: Dictionary) -> Dictionary:
 			var mins := maxf(1, Js.round(30 - t.soil.water / 4))
 			var s := _set_tile(paid, x, y, func(tt): return Js.with(tt, {"known": Js.with(tt.known, {"water": true})}))
 			return say(s, "Infiltration test: an inch of water soaked in after %s minutes. Water holding: %s." % [Js.num(mins), Js.num(Js.round(t.soil.water))])
+		"rod":
+			var water := water_at(t.ground)
+			if water == "":
+				return say(state, "Face the water to cast: the river, a pond, or the sea.")
+			return _cast_line(paid, x, y, water)
 	return state
+
+
+# ───────────────────────── fishing ─────────────────────────
+
+## Which kind of water a tile is, for fishing ("river", "sea", "pond", or "").
+static func water_at(g: String) -> String:
+	return "river" if g == "river" else ("sea" if g == "sea" else ("pond" if g == "water" else ""))
+
+
+static func _hour_now(state: Dictionary) -> int:
+	return int(floorf(Clock.time_of_day(state.minute) / 60.0)) % 24
+
+
+static func _in_hours(h: int, hours: Array) -> bool:
+	var from := int(hours[0])
+	var to := int(hours[1])
+	return (h >= from and h < to) if from <= to else (h >= from or h < to)
+
+
+## What could bite here, now: the catches of this water that like the season and the hour.
+static func biting_now(state: Dictionary, water: String) -> Array:
+	var season := season_now(state)
+	var hour := _hour_now(state)
+	var out := []
+	for c in Data.catches():
+		if c.water != water:
+			continue
+		if c.get("seasons") != null and state.settings.seasons and not season in c.seasons:
+			continue
+		if c.get("hours") != null and not _in_hours(hour, c.hours):
+			continue
+		out.append(c)
+	return out
+
+
+## The chance of a bite: fish feed in the rain, hide from storms, and sulk in the midday heat.
+static func bite_chance(state: Dictionary) -> float:
+	var w := today_weather(state)
+	var hour := _hour_now(state)
+	if w == "storm":
+		return 0.2
+	if w == "rain" or w == "cloudy" or w == "fog":
+		return 0.6
+	if (w == "heat" or w == "sunny") and hour >= 11 and hour < 15:
+		return 0.3
+	return 0.45
+
+
+## One cast: a seeded roll on the spot, the minute, and how many casts you've made.
+static func _cast_line(state: Dictionary, x: int, y: int, water: String) -> Dictionary:
+	var casts := 0
+	if state.get("tally") is Dictionary:
+		casts = int(state.tally.get("casts", 0))
+	var roll := Rng.stream(int(state.seed) ^ U32.imul(int(state.minute) + 1, 0x2c1b3c6d) ^ U32.imul(y * WorldMap.W + x + 1, 0x297a2d39) ^ U32.imul(casts + 1, 0x9e3779b1))
+	var s := tally(state, "casts")
+	var pool := biting_now(state, water)
+	if pool.is_empty() or roll.next() >= bite_chance(state):
+		return say(s, "Nothing's biting. Try another spot, another time of day, or another season.")
+	var total := 0.0
+	for c in pool:
+		total += c.weight
+	var r := roll.next() * total
+	var caught: Dictionary = pool[pool.size() - 1]
+	for c in pool:
+		r -= c.weight
+		if r < 0:
+			caught = c
+			break
+	var got = add_item(s, caught.id, 1)
+	if got == null:
+		return say(s, "A fish bit, but your bag is full!")
+	var landed := tally(got, "fished")
+	return discover(say(landed, "You caught a %s!" % Items.get_def(caught.id).name), caught.id)
 
 
 static func _from_well(state: Dictionary) -> Dictionary:
@@ -963,6 +1073,10 @@ static func interact_target(state: Dictionary) -> String:
 			return "gate"
 		"marketStall":
 			return "stall"
+		"signpost":
+			return "travel"
+		"fishingHut":
+			return "hut"
 		"mineEntrance":
 			# Once you've been deep enough, the mine cart at the entrance can take you down.
 			if mine_open(state) and int(state.get("deepest", 0)) >= 5:
@@ -985,6 +1099,10 @@ static func interact(state: Dictionary) -> Dictionary:
 	var b = building_at(state, x, y)
 	if b != null:
 		return _operate_building(state, b)
+	if t.ground == "sea":
+		return say(state, "The waves roll in, cold and salty. Sea water is no good for the garden.")
+	if t.ground == "river":
+		return say(Js.with(state, {"water": state.canSize}), "Filled your watering can at the river.")
 	if t.ground == "water":
 		return discover(say(Js.with(state, {"water": state.canSize}), "Filled your watering can at the pond."), "pond-life")
 	var c = t.crop
@@ -1214,7 +1332,7 @@ static func can_place(state: Dictionary, kind: String, x: int, y: int) -> String
 				return "Build on your own farm, not in town."
 			if plot_locked(state, xx, yy):
 				return "That plot isn't yours yet."
-			if t.ground == "water" or t.ground == "forest":
+			if is_water(t.ground) or t.ground == "forest":
 				return "Can't build on water or in the forest."
 			if t.obstacle:
 				return "Clear the %s first." % t.obstacle
@@ -1349,9 +1467,12 @@ const R := 0.3
 ## Move the player by (dx, dy) tiles, sliding along walls. Returns the new player.
 static func move_player(state: Dictionary, dx: float, dy: float) -> Dictionary:
 	var p: Dictionary = state.player
+	var from := player_tile(state)
 	var free := func(x: float, y: float) -> bool:
 		for o in [[-R, -R], [R, -R], [-R, R], [R, R]]:
-			if not is_walkable(state, int(Js.round(x + o[0])), int(Js.round(y + o[1]))):
+			var tx := int(Js.round(x + o[0]))
+			var ty := int(Js.round(y + o[1]))
+			if not is_walkable(state, tx, ty) or not can_step(state, from.x, from.y, tx, ty):
 				return false
 		return true
 	var x: float = p.x
@@ -1391,26 +1512,35 @@ static func plot_locked(state: Dictionary, x: int, y: int) -> bool:
 	return p >= 0 and not Js.includes(owned_plots(state), p)
 
 
+## What the next plot of your farm costs (allotments in the park rent for a flat price).
 static func next_plot_price(state: Dictionary) -> int:
-	return WorldMap.plot_price(owned_plots(state).size())
+	return WorldMap.plot_price(owned_plots(state).filter(func(p): return not WorldMap.is_allotment(int(p))).size())
 
 
-## Buy a plot of farmland.
+static func price_of_plot(state: Dictionary, id: int) -> int:
+	return WorldMap.ALLOTMENT_RENT if WorldMap.is_allotment(id) else next_plot_price(state)
+
+
+## Buy a plot of farmland, or rent an allotment in the park.
 static func buy_plot(state: Dictionary, id: int) -> Dictionary:
 	if id < 0 or id >= WorldMap.plots().size() or Js.includes(owned_plots(state), id):
 		return state
-	var price := next_plot_price(state)
+	var price := price_of_plot(state, id)
+	var allotment := WorldMap.is_allotment(id)
 	if state.coins < price:
-		return say(state, "This plot costs %d coins." % price)
-	return say(Js.with(state, {"coins": state.coins - price, "plots": owned_plots(state) + [id]}), "You bought a new plot for %d coins! Clear it and get planting." % price)
+		return say(state, "This %s costs %d coins." % ["allotment" if allotment else "plot", price])
+	var done := Js.with(state, {"coins": state.coins - price, "plots": owned_plots(state) + [id]})
+	if allotment:
+		return say(done, "You rented an allotment in the park for %d coins! It's yours to farm." % price)
+	return say(done, "You bought a new plot for %d coins! Clear it and get planting." % price)
 
 
-## Unlock the next plots for free (a quest reward), nearest the house first.
+## Unlock the next plots of your farm for free (a quest reward), nearest the house first.
 static func grant_plots(state: Dictionary, n: int) -> Dictionary:
 	var owned := owned_plots(state)
 	var add := []
 	for p in WorldMap.plots():
-		if add.size() < n and not Js.includes(owned, p.id):
+		if add.size() < n and not Js.includes(owned, p.id) and not WorldMap.is_allotment(p.id):
 			add.append(p.id)
 	return Js.with(state, {"plots": owned + add}) if add.size() else state
 
@@ -1534,6 +1664,46 @@ static func eat(state: Dictionary, slot_index: int) -> Dictionary:
 	if energy_on:
 		return say(fed, "Ate %s. +%d energy." % [def.name, gain])
 	return say(fed, "Ate %s. Yum! (Energy is turned off in this game.)" % def.name)
+
+
+# ───────────────────────── signposts ─────────────────────────
+
+## True when you're standing by a signpost (they show you around the valley).
+static func near_signpost(state: Dictionary) -> bool:
+	if state.get("mine") != null:
+		return false
+	var p := player_tile(state)
+	for b in state.buildings:
+		if b.kind == "signpost" and absi(int(b.x) - p.x) + absi(int(b.y) - p.y) <= 2:
+			return true
+	return false
+
+
+## Game minutes the walk to a place takes: about one for every 3 tiles of road.
+static func travel_minutes(steps: int) -> int:
+	return maxi(5, int(Js.round(steps / 3.0)))
+
+
+## Travel from a signpost: the walk passes in a few minutes, and you arrive.
+static func travel(state: Dictionary, id: String, steps: int) -> Dictionary:
+	var d = WorldMap.destination(id)
+	if d == null or not near_signpost(state):
+		return state
+	var minutes := travel_minutes(steps)
+	var after := tick(state, minutes)
+	# Fainted on the way (it got too late): you're home in bed instead.
+	if day(after) != day(state):
+		return after
+	return say(Js.with(after, {"player": {"x": d.x, "y": d.y, "facing": d.facing}}), "You walked to the %s (%d minutes)." % [d.name.to_lower(), minutes])
+
+
+## The travel op (ops.ts): the walk's length is the route from where you stand to the destination.
+static func travel_to(state: Dictionary, id: String) -> Dictionary:
+	var d = WorldMap.destination(id)
+	if d == null:
+		return state
+	var p := player_tile(state)
+	return travel(state, id, Town.route(state, [p.x, p.y], [int(d.x), int(d.y)]).size())
 
 
 # ───────────────────────── Garden Lane ─────────────────────────
@@ -1771,19 +1941,101 @@ static func put_in_chest(state: Dictionary, id: String, inv_slot: int) -> Dictio
 
 # ───────────────────────── saves ─────────────────────────
 
-## Saves from before the town: keep the farm, rebuild the map at the new size, and add the town.
+## Saves from before the town. The store moved into town (the valley is already laid out by
+## _grow_valley); the farm keeps everything you built.
 static func _add_town(old: Dictionary) -> Dictionary:
-	var old_w: int = old.tiles.size() / WorldMap.OLD_H
+	return Js.with(old, {"version": 4, "buildings": old.buildings.filter(func(b): return not (b.kind == "store" and b.x < WorldMap.FARM_W))})
+
+
+## Where the community garden was before the valley grew.
+const OLD_GARDEN := {"x0": 63, "y0": 21, "x1": 69, "y1": 27}
+
+
+## Version 11 grew the valley: a long country road to town, the market and park, the river,
+## mountains, forest, and beach. Old maps (76 wide, or narrower, and 36 or 64 rows) keep their
+## farm exactly as it was; everything east of the lane is the new valley, with the community
+## garden's progress carried over to where the garden is now.
+static func _grow_valley(old: Dictionary) -> Dictionary:
+	# Already the size of the valley.
+	if old.tiles.size() == WorldMap.W * WorldMap.H:
+		return old
+	var rows := WorldMap.OLD_ROWS if old.tiles.size() == WorldMap.OLD_W * WorldMap.OLD_ROWS else WorldMap.OLD_H
+	var old_w: int = old.tiles.size() / rows
 	var fresh := WorldMap.create_map(int(old.seed))
-	var tiles := []
-	for i in WorldMap.W * WorldMap.H:
-		var x := i % WorldMap.W
-		var y := i / WorldMap.W
-		tiles.append(old.tiles[y * old_w + x] if x < WorldMap.FARM_W and x < old_w and y < WorldMap.OLD_H else fresh.tiles[i])
-	# The store moved into town; the farm keeps everything you built.
-	var farm: Array = old.buildings.filter(func(b): return b.kind != "store" and b.x < WorldMap.FARM_W)
-	var town: Array = fresh.buildings.filter(func(b): return not farm.any(func(f): return f.id == b.id))
-	return Js.with(old, {"version": 4, "tiles": tiles, "buildings": farm + town})
+	var tiles: Array = fresh.tiles
+	for y in rows:
+		for x in mini(WorldMap.FARM_W, old_w):
+			tiles[WorldMap.idx(x, y)] = old.tiles[y * old_w + x]
+	if old_w >= WorldMap.OLD_W:
+		var g: Dictionary = WorldMap.TOWN.garden
+		for y in range(OLD_GARDEN.y0, OLD_GARDEN.y1 + 1):
+			for x in range(OLD_GARDEN.x0, OLD_GARDEN.x1 + 1):
+				tiles[WorldMap.idx(x + g.x0 - OLD_GARDEN.x0, y + g.y0 - OLD_GARDEN.y0)] = old.tiles[y * old_w + x]
+	var buildings: Array = old.buildings.filter(func(b): return b.x < WorldMap.FARM_W) + fresh.buildings.filter(func(b): return b.x >= WorldMap.FARM_W)
+	var critters: Array = old.get("critters", []).filter(func(c): return c.x < WorldMap.FARM_W)
+	var s := Js.with(old, {"tiles": tiles, "buildings": buildings, "critters": critters})
+	# Out in the old town: the same spot, now further east (or the square, if it's built over).
+	var p: Dictionary = s.player
+	if s.get("mine") == null and Js.round(p.x) >= WorldMap.LANE_X + 2:
+		var moved := Js.with(p, {"x": p.x + WorldMap.TOWN_SHIFT})
+		var ok := is_walkable(s, int(Js.round(moved.x)), int(Js.round(moved.y)))
+		var sq: Dictionary = WorldMap.DESTINATIONS[1]
+		s = Js.with(s, {"player": moved if ok else {"x": sq.x, "y": sq.y, "facing": sq.facing}})
+	return s
+
+
+# ───────────────────────── packed saves ─────────────────────────
+
+static var _base_cache := {}
+
+
+## The valley as it is on day one, for a seed (saves only store the tiles that have changed).
+static func base_tiles(seed: int) -> Array:
+	if not _base_cache.has(seed):
+		if _base_cache.size() > 4:
+			_base_cache.clear()
+		_base_cache[seed] = WorldMap.create_map(seed).tiles
+	return _base_cache[seed]
+
+
+## Same value, whatever the key order (and whether a number is an int or a float).
+static func same_value(a: Variant, b: Variant) -> bool:
+	var an := typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT
+	var bn := typeof(b) == TYPE_INT or typeof(b) == TYPE_FLOAT
+	if an or bn:
+		return an and bn and float(a) == float(b)
+	if a is Dictionary and b is Dictionary:
+		if a.size() != b.size():
+			return false
+		for k in a:
+			if not b.has(k) or not same_value(a[k], b[k]):
+				return false
+		return true
+	if a is Array and b is Array:
+		if a.size() != b.size():
+			return false
+		for i in a.size():
+			if not same_value(a[i], b[i]):
+				return false
+		return true
+	return typeof(a) == typeof(b) and a == b
+
+
+## A tile that's still as it was on day one is saved as 0.
+static func pack_tiles(tiles: Array, base: Array) -> Array:
+	var out := []
+	out.resize(tiles.size())
+	for i in tiles.size():
+		out[i] = 0 if i < base.size() and same_value(tiles[i], base[i]) else tiles[i]
+	return out
+
+
+static func unpack_tiles(tiles: Array, base: Array) -> Array:
+	var out := []
+	out.resize(tiles.size())
+	for i in tiles.size():
+		out[i] = tiles[i] if tiles[i] is Dictionary else base[i]
+	return out
 
 
 ## Version 5 added landmarks (barns, silos, the windmill, the water tower). Older saves get each
@@ -1917,7 +2169,7 @@ static func _migrate_v1(old: Dictionary) -> Dictionary:
 
 
 static func save_world(state: Dictionary) -> String:
-	return Js.stringify(state)
+	return Js.stringify(Js.with(state, {"tiles": pack_tiles(state.tiles, base_tiles(int(state.seed)))}))
 
 
 ## Parse a save (any version), upgrading old ones. Null if it can't be read.
@@ -1933,12 +2185,16 @@ static func load_world(raw: String) -> Variant:
 	var version = s.get("version")
 	if not (typeof(version) == TYPE_FLOAT or typeof(version) == TYPE_INT) or version < 1 or version > WORLD_VERSION:
 		return null
+	# Saves store only the tiles that have changed since day one.
+	if version >= 11:
+		s.tiles = unpack_tiles(s.tiles, base_tiles(int(s.seed)))
 	var up: Dictionary = _migrate_v1(s) if version == 1 else s
+	# Version 11 grew the valley: lay the old farm onto the new map first.
+	if up.version < 11:
+		up = _grow_valley(up)
 	# Version 4 grew the map east to add the town.
 	if up.version < 4:
 		up = _add_town(up)
-	if up.tiles.size() == WorldMap.W * WorldMap.OLD_H:
-		up = Js.with(up, {"tiles": up.tiles + WorldMap.create_map(int(up.seed)).tiles.slice(WorldMap.W * WorldMap.OLD_H)})
 	if up.tiles.size() != WorldMap.W * WorldMap.H:
 		return null
 	if up.version < 5:
@@ -1954,6 +2210,8 @@ static func load_world(raw: String) -> Variant:
 		up = _finish_lessons(up)
 	if up.version < 10:
 		up = _add_garden_lane_v10(up)
+	if up.version < 11:
+		up = Js.with(up, {"version": 11})
 	# Version 3 added crop grades: older tiles have no amendment points, crops no stress.
 	if up.version != WORLD_VERSION:
 		return null

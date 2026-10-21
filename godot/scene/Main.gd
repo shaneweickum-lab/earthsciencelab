@@ -172,7 +172,8 @@ func _refresh() -> void:
 			sprite.texture = Emoji.texture(Nature.critter_icon(c.kind))
 			sprite.pixel_size = 0.008
 			sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			sprite.position = Vector3(c.x, 0.6, c.y)
+			sprite.position = Vector3(c.x, 0.6 + TerrainView.height_at(w.tiles, c.x, c.y), c.y)
+			sprite.set_meta("y", sprite.position.y)
 			_critters.add_child(sprite)
 
 
@@ -188,7 +189,8 @@ func _update_ghost() -> void:
 	var ok := World.can_place(w, kind, o.x, o.y) == ""
 	var sz := WorldMap.size_of(kind)
 	(_ghost.mesh as BoxMesh).size = Vector3(sz[0] - 0.05, 1, sz[1] - 0.05)
-	_ghost.position = Vector3(o.x + (sz[0] - 1) / 2.0, 0.5, o.y + (sz[1] - 1) / 2.0)
+	var ground := 0.0 if w.get("mine") != null else TerrainView.height_at(w.tiles, o.x, o.y)
+	_ghost.position = Vector3(o.x + (sz[0] - 1) / 2.0, 0.5 + ground, o.y + (sz[1] - 1) / 2.0)
 	(_ghost.material_override as StandardMaterial3D).albedo_color = Color("#5fd16f" if ok else "#e0533d", 0.3)
 	# Which way its front will face (R turns it).
 	_ghost.rotation.y = (int(w.get("placeRot", 0)) if World.rotatable(kind) else 0) * PI / 2
@@ -248,24 +250,32 @@ func _process(delta: float) -> void:
 	var player: Dictionary = rt.player
 	# Your lantern lights up at night, and always underground.
 	var slot = w.inventory[int(w.selected)]
-	_player.update_player(player, rt.moving, _action_anim, dt, 0.0 if w.get("mine") != null else Clock.daylight(w.minute), slot.item if slot else "")
+	var up: bool = w.get("mine") == null
+	var ground := TerrainView.height_at(w.tiles, player.x, player.y) if up else 0.0
+	_player.update_player(player, rt.moving, _action_anim, dt, Clock.daylight(w.minute) if up else 0.0, slot.item if slot else "", ground)
 	_action_anim = ""
 	for a in _npcs:
 		a.update_npc(w, w.minute + rt.minute_frac, player, dt)
 	_sky.update(w, player)
 	var d: Array = World.DIRS[player.facing]
-	_marker.position = Vector3(Js.round(player.x) + d[0], 0.07, Js.round(player.y) + d[1])
+	var mx: float = Js.round(player.x) + d[0]
+	var mz: float = Js.round(player.y) + d[1]
+	_marker.position = Vector3(mx, 0.07 + (TerrainView.height_at(w.tiles, mx, mz) if up else 0.0), mz)
 	for c in _critters.get_children():
-		c.position.y = 0.6 + absf(sin(Time.get_ticks_msec() / 250.0)) * 0.15
+		c.position.y = c.get_meta("y", 0.6) + absf(sin(Time.get_ticks_msec() / 250.0)) * 0.15
 
-	# Camera follows the player (and jumps there when you go in or out of the mine).
-	var target := Vector3(player.x, 12 * _zoom, player.y + 0.5 + 9.5 * _zoom)
+	# Camera follows the player (and jumps there when you go in or out of the mine). Up the
+	# mountain the camera rises too; at the map's edges it stops short of the void.
+	var z := _zoom
+	var tx: float = player.x if not up else minf(WorldMap.W - 9 * z, maxf(9 * z, player.x))
+	var tz: float = (player.y if not up else minf(WorldMap.H - 4 * z, maxf(2, player.y))) + 0.5
+	var target := Vector3(tx, ground + 12 * z, tz + 9.5 * z)
 	var place: String = "mine-%d" % int(w.mine.floor) if w.get("mine") != null else "up"
 	if place != _place:
 		_place = place
 		_camera.position = target
 	_camera.position += (target - _camera.position) * minf(1, dt * 5)
-	_camera.look_at(Vector3(_camera.position.x, 0, _camera.position.z - 9.5 * _zoom))
+	_camera.look_at(Vector3(_camera.position.x, _camera.position.y - 12 * _zoom, _camera.position.z - 9.5 * _zoom))
 
 
 func _unhandled_input(event: InputEvent) -> void:

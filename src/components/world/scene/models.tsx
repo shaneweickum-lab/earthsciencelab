@@ -4,7 +4,7 @@ import { useGLTF } from "@react-three/drei";
 import type { ThreeElements } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { Matrix4, Object3D, type BufferGeometry, type InstancedMesh, type Material, type Mesh, type MeshStandardMaterial } from "three";
-import type { Inst } from "./Instanced";
+import { chunked, type Inst } from "./Instanced";
 
 /** CC0 models (Kenney, and Quaternius crops, nature and farm buildings) prepared in public/models by `npm run assets`. */
 export type Pack = "nature" | "town" | "survival" | "food" | "crops" | "characters" | "qnature" | "qbuildings" | "furniture";
@@ -79,17 +79,18 @@ function PartInstances({ part, items, castShadow }: { part: Part; items: Inst[];
     mesh.computeBoundingSphere();
   }, [items, part]);
   return (
-    <instancedMesh key={cap} ref={ref} args={[part.geometry, part.material, cap]} castShadow={castShadow} receiveShadow frustumCulled={false} />
+    <instancedMesh key={cap} ref={ref} args={[part.geometry, part.material, cap]} castShadow={castShadow} receiveShadow />
   );
 }
 
-/** Draws many copies of a model (all its meshes) with one draw call per mesh. */
+/** Draws many copies of a model (all its meshes): a draw call per mesh per chunk of the valley, skipping chunks off screen. */
 export function ModelInstances({ url, items, castShadow }: { url: string; items: Inst[]; castShadow?: boolean }) {
   const parts = useParts(url);
+  const chunks = useMemo(() => chunked(items), [items]);
   if (!items.length) return null;
   return (
     <>
-      {parts.map((p, i) => <PartInstances key={i} part={p} items={items} castShadow={castShadow} />)}
+      {chunks.map((c, k) => parts.map((p, i) => <PartInstances key={`${k}-${i}`} part={p} items={c} castShadow={castShadow} />))}
     </>
   );
 }

@@ -1,8 +1,8 @@
 import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
-import { cropDays, ITEMS, item, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type Recipe, type Station, type ToolUse } from "./items";
-import { addGardenLane, atGardenExit, BUILDING_SIZE, CHEST_SIZE, GARDEN_ENTRY, GATE_ROWS, LANE_X, laneBuildings, STALL_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { CATCHES, cropDays, ITEMS, item, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type Recipe, type Station, type ToolUse, type Water } from "./items";
+import { ALLOTMENT_RENT, DESTINATIONS, isAllotment, OLD_ROWS, OLD_W, TOWN, TOWN_SHIFT, addGardenLane, atGardenExit, BUILDING_SIZE, CHEST_SIZE, GARDEN_ENTRY, GATE_ROWS, LANE_X, laneBuildings, STALL_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
@@ -10,7 +10,7 @@ import { TOWN_KINDS, type Building, type BuildingKind, type Dir, type Grade, typ
 import { formatTemp, normalizeSettings, on, type GameSettings } from "./settings";
 import { isWet, WEATHER, weatherFor, type DayWeather } from "./weather";
 
-export const WORLD_VERSION = 10;
+export const WORLD_VERSION = 11;
 export const INVENTORY_SIZE = 30;
 export const HOTBAR_SIZE = 10;
 export const MAX_ENERGY = 100;
@@ -124,10 +124,13 @@ export function buildingAt(state: WorldState, x: number, y: number): Building | 
   return null;
 }
 
+/** Ponds, the river, and the sea. */
+export const isWater = (g: Tile["ground"]) => g === "water" || g === "river" || g === "sea";
+
 /** Can the player stand on this tile? */
 export function isWalkable(state: WorldState, x: number, y: number): boolean {
   const t = tileAt(state, x, y);
-  if (!t || t.ground === "water" || t.ground === "caveWall") return false;
+  if (!t || isWater(t.ground) || t.ground === "caveWall") return false;
   if (t.obstacle) return false;
   const b = buildingAt(state, x, y);
   if (!b) return true;
@@ -137,6 +140,19 @@ export function isWalkable(state: WorldState, x: number, y: number): boolean {
     return (x === door.x && y === door.y) || greenhouseInterior(b).some((p) => p.x === x && p.y === y);
   }
   return false;
+}
+
+/**
+ * Can you step from one tile to the next? Only on the level, or up or down one terrace by a
+ * trail ramp: the mountain's cliffs are too steep to climb.
+ */
+export function canStep(state: WorldState, ax: number, ay: number, bx: number, by: number): boolean {
+  const a = tileAt(state, ax, ay), b = tileAt(state, bx, by);
+  if (!a || !b) return false;
+  const ea = a.elev ?? 0, eb = b.elev ?? 0;
+  if (ea === eb) return true;
+  if (Math.abs(ea - eb) !== 1) return false;
+  return !!(ea > eb ? a.ramp : b.ramp);
 }
 
 export const DIRS: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
@@ -155,7 +171,9 @@ export function say(state: WorldState, text: string): WorldState {
   return { ...state, messages: [...state.messages, { text, at: state.minute }].slice(-6) };
 }
 
-const matches = (s: Slot | null, id: string, grade?: Grade) => !!s && s.item === id && (grade === undefined || s.grade === grade);
+/** In a recipe, "anyFish" takes whichever fish you have. */
+const matches = (s: Slot | null, id: string, grade?: Grade) =>
+  !!s && (id === "anyFish" ? ITEMS[s.item]?.kind === "fish" : s.item === id) && (grade === undefined || s.grade === grade);
 
 /** How many of an item you have (all grades, unless a grade is given). */
 export function countItem(state: WorldState, id: string, grade?: Grade) {
@@ -532,7 +550,7 @@ export function faint(state: WorldState): WorldState {
 
 // ───────────────────────── tools ─────────────────────────
 
-const ENERGY: Record<ToolUse, number> = { hoe: 2, can: 1, scythe: 1, axe: 2, pickaxe: 2, shovel: 2, ring: 1 };
+const ENERGY: Record<ToolUse, number> = { hoe: 2, can: 1, scythe: 1, axe: 2, pickaxe: 2, shovel: 2, ring: 1, rod: 3 };
 
 /** How many swings' worth of power it takes to clear each obstacle (a basic tool does 1 a swing). */
 export const OBSTACLE_HP: Record<NonNullable<Obstacle>, number> = {
@@ -674,7 +692,8 @@ export function applyTool(state: WorldState): WorldState {
       })), on(state, "tillage") ? "Tilled! (Each tilling breaks soil crumbs a little, so only till where you'll plant.)" : "Tilled!");
     }
     case "can": {
-      if (t.ground === "water") return say({ ...paid, water: state.canSize }, "Filled your watering can at the pond.");
+      if (t.ground === "sea") return say(state, "Sea water is salty: it would dry out your plants' roots. Fill up at the pond or the river.");
+      if (isWater(t.ground)) return say({ ...paid, water: state.canSize }, `Filled your watering can at the ${t.ground === "river" ? "river" : "pond"}.`);
       if (b?.kind === "rainBarrel") return refillFromBarrel(paid, b);
       if (b?.kind === "well") return fromWell(paid);
       if (state.water <= 0) return say(state, "Your watering can is empty. Refill it at the pond or a rain barrel.");
@@ -717,8 +736,61 @@ export function applyTool(state: WorldState): WorldState {
       return say(setTile(paid, x, y, (tt) => ({ ...tt, known: { ...tt.known, water: true } })),
         `Infiltration test: an inch of water soaked in after ${mins} minutes. Water holding: ${Math.round(t.soil.water)}.`);
     }
+    case "rod": {
+      const water = waterAt(t.ground);
+      if (!water) return say(state, "Face the water to cast: the river, a pond, or the sea.");
+      return castLine(paid, x, y, water);
+    }
   }
   return state;
+}
+
+// ───────────────────────── fishing ─────────────────────────
+
+/** Which kind of water a tile is, for fishing. */
+export const waterAt = (g: Tile["ground"]): Water | null => (g === "river" ? "river" : g === "sea" ? "sea" : g === "water" ? "pond" : null);
+
+/** What could bite here, now: the catches of this water that like the season and the hour. */
+export function bitingNow(state: WorldState, water: Water) {
+  const season = seasonNow(state);
+  const hour = Math.floor(timeOfDay(state.minute) / 60) % 24;
+  return CATCHES.filter((c) => c.water === water && (!c.seasons || !state.settings.seasons || c.seasons.includes(season)) && (!c.hours || inHours(hour, c.hours)));
+}
+
+const inHours = (h: number, [from, to]: [number, number]) => (from <= to ? h >= from && h < to : h >= from || h < to);
+
+/** The chance of a bite: fish feed in the rain, hide from storms, and sulk in the midday heat. */
+export function biteChance(state: WorldState): number {
+  const w = todayWeather(state);
+  const hour = Math.floor(timeOfDay(state.minute) / 60) % 24;
+  if (w === "storm") return 0.2;
+  if (w === "rain" || w === "cloudy" || w === "fog") return 0.6;
+  if ((w === "heat" || w === "sunny") && hour >= 11 && hour < 15) return 0.3;
+  return 0.45;
+}
+
+/** One cast: a seeded roll on the spot, the minute, and how many casts you've made. */
+function castLine(state: WorldState, x: number, y: number, water: Water): WorldState {
+  const casts = state.tally?.casts ?? 0;
+  const roll = rollAt(state.seed ^ Math.imul(state.minute + 1, 0x2c1b3c6d) ^ Math.imul(y * W + x + 1, 0x297a2d39) ^ Math.imul(casts + 1, 0x9e3779b1));
+  const s = tally(state, "casts");
+  const pool = bitingNow(state, water);
+  if (!pool.length || roll() >= biteChance(state)) return say(s, "Nothing's biting. Try another spot, another time of day, or another season.");
+  let r = roll() * pool.reduce((n, c) => n + c.weight, 0);
+  const caught = pool.find((c) => (r -= c.weight) < 0) ?? pool[pool.length - 1];
+  const got = addItem(s, caught.id, 1);
+  if (!got) return say(s, "A fish bit, but your bag is full!");
+  const landed = tally(got, "fished");
+  return discover(say(landed, `You caught a ${ITEMS[caught.id].name}!`), caught.id);
+}
+
+function rollAt(seed: number) {
+  let v = seed >>> 0;
+  return () => {
+    const [n, next] = nextRandom(v);
+    v = next;
+    return n;
+  };
 }
 
 function fromWell(state: WorldState): WorldState {
@@ -822,7 +894,7 @@ export function applyAmendment(state: WorldState, x: number, y: number, id: stri
 
 // ───────────────────────── interact ─────────────────────────
 
-export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | "plot" | "gate" | "stall" | null;
+export type InteractTarget = "house" | "store" | "tv" | "shipping" | "board" | "chest" | "mine" | "craft" | "plot" | "gate" | "stall" | "travel" | "hut" | null;
 
 /** Harvest, use buildings, or pick up critters on the facing tile. Returns which menu to open, if any. */
 export function interactTarget(state: WorldState): InteractTarget {
@@ -835,6 +907,8 @@ export function interactTarget(state: WorldState): InteractTarget {
   if (b?.kind === "chest") return "chest";
   if (b?.kind === "gardenGate") return "gate";
   if (b?.kind === "marketStall") return "stall";
+  if (b?.kind === "signpost") return "travel";
+  if (b?.kind === "fishingHut") return "hut";
   if (!b && plotLocked(state, x, y)) return "plot";
   if (b && b.kind in STATIONS) return "craft";
   // Once you've been deep enough, the mine cart at the entrance can take you down.
@@ -850,6 +924,8 @@ export function interact(state: WorldState): WorldState {
   if (critter) return discover({ ...state, critters: state.critters.filter((c) => c.id !== critter.id) }, critter.kind);
   const b = buildingAt(state, x, y);
   if (b) return operateBuilding(state, b);
+  if (t.ground === "sea") return say(state, "The waves roll in, cold and salty. Sea water is no good for the garden.");
+  if (t.ground === "river") return say({ ...state, water: state.canSize }, "Filled your watering can at the river.");
   if (t.ground === "water") return discover(say({ ...state, water: state.canSize }, "Filled your watering can at the pond."), "pond-life");
   const c = t.crop;
   if (c?.dead) {
@@ -1044,7 +1120,7 @@ export function canPlace(state: WorldState, kind: BuildingKind, x: number, y: nu
     if (!t) return "Too close to the edge.";
     if (xx >= FARM_W) return "Build on your own farm, not in town.";
     if (plotLocked(state, xx, yy)) return "That plot isn't yours yet.";
-    if (t.ground === "water" || t.ground === "forest") return "Can't build on water or in the forest.";
+    if (isWater(t.ground) || t.ground === "forest") return "Can't build on water or in the forest.";
     if (t.obstacle) return `Clear the ${t.obstacle} first.`;
     if (t.crop) return "Something is planted there.";
     if (buildingAt(state, xx, yy)) return "Something is already built there.";
@@ -1141,8 +1217,12 @@ const R = 0.3;
 /** Move the player by (dx, dy) tiles, sliding along walls. */
 export function movePlayer(state: WorldState, dx: number, dy: number): WorldState["player"] {
   const p = state.player;
+  const from = { x: Math.round(p.x), y: Math.round(p.y) };
   const free = (x: number, y: number) =>
-    [[-R, -R], [R, -R], [-R, R], [R, R]].every(([ox, oy]) => isWalkable(state, Math.round(x + ox), Math.round(y + oy)));
+    [[-R, -R], [R, -R], [-R, R], [R, R]].every(([ox, oy]) => {
+      const tx = Math.round(x + ox), ty = Math.round(y + oy);
+      return isWalkable(state, tx, ty) && canStep(state, from.x, from.y, tx, ty);
+    });
   let { x, y } = p;
   if (dx && free(x + dx, y)) x += dx;
   if (dy && free(x, y + dy)) y += dy;
@@ -1167,21 +1247,24 @@ export function plotLocked(state: WorldState, x: number, y: number): boolean {
   return p !== null && !ownedPlots(state).includes(p);
 }
 
-/** What the next plot costs. */
-export const nextPlotPrice = (state: WorldState) => plotPrice(ownedPlots(state).length);
+/** What the next plot of your farm costs (allotments in the park rent for a flat price). */
+export const nextPlotPrice = (state: WorldState) => plotPrice(ownedPlots(state).filter((p) => !isAllotment(p)).length);
+export const priceOfPlot = (state: WorldState, id: number) => (isAllotment(id) ? ALLOTMENT_RENT : nextPlotPrice(state));
 
-/** Buy a plot of farmland. */
+/** Buy a plot of farmland, or rent an allotment in the park. */
 export function buyPlot(state: WorldState, id: number): WorldState {
   if (!PLOTS[id] || ownedPlots(state).includes(id)) return state;
-  const price = nextPlotPrice(state);
-  if (state.coins < price) return say(state, `This plot costs ${price} coins.`);
-  return say({ ...state, coins: state.coins - price, plots: [...ownedPlots(state), id] }, `You bought a new plot for ${price} coins! Clear it and get planting.`);
+  const price = priceOfPlot(state, id);
+  const what = isAllotment(id) ? "allotment" : "plot";
+  if (state.coins < price) return say(state, `This ${what} costs ${price} coins.`);
+  const done = { ...state, coins: state.coins - price, plots: [...ownedPlots(state), id] };
+  return say(done, isAllotment(id) ? `You rented an allotment in the park for ${price} coins! It's yours to farm.` : `You bought a new plot for ${price} coins! Clear it and get planting.`);
 }
 
-/** Unlock the next plots for free (a quest reward), nearest the house first. */
+/** Unlock the next plots of your farm for free (a quest reward), nearest the house first. */
 export function grantPlots(state: WorldState, n: number): WorldState {
   const owned = ownedPlots(state);
-  const add = PLOTS.map((p) => p.id).filter((id) => !owned.includes(id)).slice(0, n);
+  const add = PLOTS.map((p) => p.id).filter((id) => !owned.includes(id) && !isAllotment(id)).slice(0, n);
   return add.length ? { ...state, plots: [...owned, ...add] } : state;
 }
 
@@ -1248,6 +1331,31 @@ export function eat(state: WorldState, slotIndex: number): WorldState {
   const gain = Math.min(def.energy, state.maxEnergy - state.energy);
   const fed = tally({ ...eaten, energy: state.energy + gain }, "ate");
   return say(fed, on(state, "energy") ? `Ate ${def.name}. +${gain} energy.` : `Ate ${def.name}. Yum! (Energy is turned off in this game.)`);
+}
+
+// ───────────────────────── signposts ─────────────────────────
+
+/** True when you're standing by a signpost (they show you around the valley). */
+export function nearSignpost(state: WorldState): boolean {
+  if (state.mine) return false;
+  const p = playerTile(state);
+  return state.buildings.some((b) => b.kind === "signpost" && Math.abs(b.x - p.x) + Math.abs(b.y - p.y) <= 2);
+}
+
+/** Game minutes the walk to a place takes: about one for every 3 tiles of road. */
+export function travelMinutes(steps: number): number {
+  return Math.max(5, Math.round(steps / 3));
+}
+
+/** Travel from a signpost: the walk passes in a few minutes, and you arrive. */
+export function travel(state: WorldState, id: string, steps: number): WorldState {
+  const d = DESTINATIONS.find((x) => x.id === id);
+  if (!d || !nearSignpost(state)) return state;
+  const minutes = travelMinutes(steps);
+  const after = tick(state, minutes);
+  // Fainted on the way (it got too late): you're home in bed instead.
+  if (day(after) !== day(state)) return after;
+  return say({ ...after, player: { x: d.x, y: d.y, facing: d.facing } }, `You walked to the ${d.name.toLowerCase()} (${minutes} minutes).`);
 }
 
 // ───────────────────────── Garden Lane ─────────────────────────
@@ -1432,16 +1540,76 @@ export function putInChest(state: WorldState, id: string, invSlot: number): Worl
 
 /** Saves from before the town: keep the farm, rebuild the map at the new size, and add the town. */
 function addTown(old: WorldState): WorldState {
-  const oldW = old.tiles.length / OLD_H;
+  // The store moved into town (the valley is already laid out by growValley); the farm keeps everything you built.
+  return { ...old, version: 4, buildings: old.buildings.filter((b) => !(b.kind === "store" && b.x < FARM_W)) };
+}
+
+/** Where the community garden was before the valley grew. */
+const OLD_GARDEN = { x0: 63, y0: 21, x1: 69, y1: 27 };
+
+/**
+ * Version 11 grew the valley: a long country road to town, the market and park, the river,
+ * mountains, forest, and beach. Old maps (76 wide, or narrower, and 36 or 64 rows) keep their
+ * farm exactly as it was; everything east of the lane is the new valley, with the community
+ * garden's progress carried over to where the garden is now.
+ */
+function growValley(old: WorldState): WorldState {
+  // Already the size of the valley.
+  if (old.tiles.length === W * H) return old;
+  const rows = old.tiles.length === OLD_W * OLD_ROWS ? OLD_ROWS : OLD_H;
+  const oldW = old.tiles.length / rows;
   const fresh = createMap(old.seed);
-  const tiles = fresh.tiles.map((t, i) => {
-    const x = i % W, y = Math.floor(i / W);
-    return x < FARM_W && x < oldW && y < OLD_H ? old.tiles[y * oldW + x] : t;
-  });
-  // The store moved into town; the farm keeps everything you built.
-  const farm = old.buildings.filter((b) => b.kind !== "store" && b.x < FARM_W);
-  const town = fresh.buildings.filter((b) => !farm.some((f) => f.id === b.id));
-  return { ...old, version: 4, tiles, buildings: [...farm, ...town] };
+  const tiles = [...fresh.tiles];
+  for (let y = 0; y < rows; y++) for (let x = 0; x < Math.min(FARM_W, oldW); x++) tiles[idx(x, y)] = old.tiles[y * oldW + x];
+  if (oldW >= OLD_W) {
+    for (let y = OLD_GARDEN.y0; y <= OLD_GARDEN.y1; y++) for (let x = OLD_GARDEN.x0; x <= OLD_GARDEN.x1; x++) {
+      tiles[idx(x + TOWN.garden.x0 - OLD_GARDEN.x0, y + TOWN.garden.y0 - OLD_GARDEN.y0)] = old.tiles[y * oldW + x];
+    }
+  }
+  const buildings = [...old.buildings.filter((b) => b.x < FARM_W), ...fresh.buildings.filter((b) => b.x >= FARM_W)];
+  let s: WorldState = { ...old, tiles, buildings, critters: old.critters.filter((c) => c.x < FARM_W) };
+  // Out in the old town: the same spot, now further east (or the square, if it's built over).
+  const p = s.player;
+  if (!s.mine && Math.round(p.x) >= LANE_X + 2) {
+    const moved = { ...p, x: p.x + TOWN_SHIFT };
+    const ok = isWalkable(s, Math.round(moved.x), Math.round(moved.y));
+    s = { ...s, player: ok ? moved : { x: DESTINATIONS[1].x, y: DESTINATIONS[1].y, facing: DESTINATIONS[1].facing } };
+  }
+  return s;
+}
+
+// ───────────────────────── packed saves ─────────────────────────
+
+const baseCache = new Map<number, Tile[]>();
+
+/** The valley as it is on day one, for a seed (saves only store the tiles that have changed). */
+export function baseTiles(seed: number): Tile[] {
+  let t = baseCache.get(seed);
+  if (!t) {
+    if (baseCache.size > 4) baseCache.clear();
+    t = createMap(seed).tiles;
+    baseCache.set(seed, t);
+  }
+  return t;
+}
+
+/** Same value, whatever the key order (saves from the Godot port may order keys differently). */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) => sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** A tile that's still as it was on day one is saved as 0. */
+export function packTiles(tiles: Tile[], base: Tile[]): (Tile | 0)[] {
+  return tiles.map((t, i) => (base[i] && sameValue(t, base[i]) ? 0 : t));
+}
+
+export function unpackTiles(tiles: (Tile | 0)[], base: Tile[]): Tile[] {
+  return tiles.map((t, i) => (t === 0 ? base[i] : t));
 }
 
 /**
@@ -1491,9 +1659,7 @@ function finishLessons(old: WorldState): WorldState {
  * farms keep the whole field they had, gain the new rows, and get a path cut through the forest.
  */
 function addSouthFields(old: WorldState): WorldState {
-  let tiles = old.tiles;
-  if (tiles.length === W * OLD_H) tiles = [...tiles, ...createMap(old.seed).tiles.slice(W * OLD_H)];
-  let s: WorldState = { ...old, version: 8, tiles, plots: PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id) };
+  let s: WorldState = { ...old, version: 8, plots: PLOTS.filter((p) => p.y1 < OLD_H).map((p) => p.id) };
   for (const [x, y] of SOUTH_PATH) {
     if (buildingAt(s, x, y) || s.tiles[idx(x, y)].crop) continue;
     s = setTile(s, x, y, (t) => ({ ...unmarked(t), ground: "path", obstacle: null, weeds: false }));
@@ -1550,7 +1716,7 @@ function migrateV1(old: WorldState): WorldState {
 }
 
 export function saveWorld(state: WorldState): string {
-  return JSON.stringify(state);
+  return JSON.stringify({ ...state, tiles: packTiles(state.tiles, baseTiles(state.seed)) });
 }
 
 export function loadWorld(raw: string | null): WorldState | null {
@@ -1558,10 +1724,13 @@ export function loadWorld(raw: string | null): WorldState | null {
   try {
     const s = JSON.parse(raw) as WorldState;
     if (!Array.isArray(s.tiles) || !(s.version >= 1 && s.version <= WORLD_VERSION)) return null;
+    // Saves store only the tiles that have changed since day one.
+    if (s.version >= 11) s.tiles = unpackTiles(s.tiles as (Tile | 0)[], baseTiles(s.seed));
     let up = s.version === 1 ? migrateV1(s) : s;
+    // Version 11 grew the valley: lay the old farm onto the new map first.
+    if (up.version < 11) up = growValley(up);
     // Version 4 grew the map east to add the town.
     if (up.version < 4) up = addTown(up);
-    if (up.tiles.length === W * OLD_H) up = { ...up, tiles: [...up.tiles, ...createMap(up.seed).tiles.slice(W * OLD_H)] };
     if (up.tiles.length !== W * H) return null;
     if (up.version < 5) up = addLandmarks(up);
     if (up.version < 6) up = addChest(up);
@@ -1570,6 +1739,7 @@ export function loadWorld(raw: string | null): WorldState | null {
     if (up.version < 8) up = addSouthFields(up);
     if (up.version < 9) up = finishLessons(up);
     if (up.version < 10) up = addGardenLaneV10(up);
+    if (up.version < 11) up = { ...up, version: 11 };
     // Version 3 added crop grades: older tiles have no amendment points, crops no stress.
     return up.version === WORLD_VERSION ? { ...up, settings: normalizeSettings(up.settings) } : null;
   } catch {

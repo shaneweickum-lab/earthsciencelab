@@ -24,6 +24,10 @@ static func preview_action(state: Dictionary) -> Dictionary:
 	if t == null:
 		return _r("", "", false)
 	var b = World.building_at(state, x, y)
+	if b != null and b.kind == "signpost":
+		return _r("Travel", "A signpost. Press E to see where it points, and walk there in a few minutes.", true)
+	if b != null and b.kind == "fishingHut":
+		return _r("Shop", "Kai's Fishing Hut: fishing rods, and Kai buys fish. Press E.", true)
 	if b != null and b.kind == "chest":
 		return _r("Open", "Open the chest to take things out or put them away.", true)
 	if b != null and b.kind == "gardenGate":
@@ -49,7 +53,10 @@ static func preview_action(state: Dictionary) -> Dictionary:
 	if World._crit_at(state, x, y) != null:
 		return _r("Observe", "Look closely and add it to your Nature Journal.", true)
 	if b == null and World.plot_locked(state, x, y):
-		var price := World.next_plot_price(state)
+		var id := WorldMap.plot_at(x, y)
+		var price := World.price_of_plot(state, id)
+		if WorldMap.is_allotment(id):
+			return _r("Rent", "A park allotment. Press E to rent it for %d coins and farm it as your own." % price, state.coins >= price)
 		return _r("Buy", "This plot isn't yours yet. Press E to buy it for %d coins, or earn it from a quest." % price, state.coins >= price)
 	var c = t.crop
 
@@ -110,7 +117,9 @@ static func preview_action(state: Dictionary) -> Dictionary:
 				return _r("Till", "Loosen the soil for seeds. Tilling breaks soil crumbs a little (structure −2).", true)
 			return _r("Till", "Loosen the soil for seeds.", true)
 		"can":
-			if t.ground == "water":
+			if t.ground == "sea":
+				return _r("Refill", "Sea water is too salty for your garden.", false)
+			if World.is_water(t.ground):
 				return _r("Refill", "Fill your watering can.", true)
 			if b and b.kind == "rainBarrel":
 				return _r("Refill", "Refill with rainwater.", true)
@@ -151,6 +160,17 @@ static func preview_action(state: Dictionary) -> Dictionary:
 			if not is_garden:
 				return _r("Test", "Test the garden soil.", false)
 			return _r("Test", "Infiltration test: time how fast water soaks in (water holding).", true)
+		"rod":
+			var water := World.water_at(t.ground)
+			if water == "":
+				return _r("Cast", "Face the water to fish: the river, a pond, or the sea.", false)
+			var biting := World.biting_now(state, water)
+			if biting.is_empty():
+				return _r("Cast", "Nothing bites in the %s at this time of year or day." % water, false)
+			var names := []
+			for k in biting:
+				names.append(Items.get_def(k.id).name)
+			return _r("Cast", "Cast into the %s. Biting now: %s." % [water, ", ".join(names)], true)
 	return _r("", "", false)
 
 

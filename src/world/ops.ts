@@ -1,9 +1,10 @@
 import {
   HOTBAR_SIZE, act, applyTool, buy, buyPlot, craft, eat, enterGate, enterMine, interact, leaveFarm, pickUpBuilding, putInChest, rotateBuilding, sellNow, ship, sleep,
-  stockStall, swapSlots, takeAllFromChest, takeFromChest, turnPlacing, unstockStall,
+  playerTile, stockStall, swapSlots, takeAllFromChest, takeFromChest, travel, turnPlacing, unstockStall,
 } from "./engine";
+import { DESTINATIONS } from "./map";
 import { accept, claimLesson, skipTutorial, turnIn, type ActiveQuest } from "./quests";
-import { giveGift, talk } from "./town";
+import { giveGift, route, talk } from "./town";
 import type { WorldState } from "./types";
 
 /**
@@ -35,6 +36,12 @@ export const OPS = {
   leaveGarden: leaveFarm,
   stock: stockStall,
   unstock: unstockStall,
+  // From a signpost: the walk there passes in a few minutes.
+  travel: (s: WorldState, id: string) => {
+    const d = DESTINATIONS.find((x) => x.id === id);
+    const p = playerTile(s);
+    return d ? travel(s, id, route(s, [p.x, p.y], [d.x, d.y]).length) : s;
+  },
   sleep,
   avatar: (s: WorldState, avatar: string): WorldState => ({ ...s, avatar }),
   introSeen: (s: WorldState): WorldState => ({ ...s, introSeen: true }),

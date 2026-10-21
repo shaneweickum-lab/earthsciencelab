@@ -123,6 +123,7 @@ export function Messages() {
 
 const GROUND_NAME: Record<Tile["ground"], string> = {
   grass: "Grass", farm: "Garden soil", path: "Path", water: "Pond", sand: "Sandy shore", forest: "Forest", cave: "Cave floor", caveWall: "Rock wall",
+  river: "River", sea: "Sea", rock: "Mountain rock", dock: "Wooden dock",
 };
 
 function SoilRow({ label, value, known, unit = "", tip }: { label: string; value: number; known: boolean; unit?: string; tip: string }) {
@@ -210,6 +211,7 @@ function labelFor(kind: string) {
     house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", chest: "Tool Chest", extension: "Extension Office", cottage: "Cottage",
     fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
     mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down", gardenGate: "Garden gate", marketStall: "Market stall", stove: "Stove", oven: "Oven",
+    signpost: "Signpost", fishingHut: "Kai's Fishing Hut",
   }[kind] ?? kind;
 }
 

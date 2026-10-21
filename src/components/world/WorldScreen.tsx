@@ -23,6 +23,7 @@ import { ShippingMenu, StoreMenu } from "./Shop";
 import { ChestMenu, MineCart, PlotMenu } from "./Chest";
 import { plotAt } from "@/world/map";
 import { Cookbook, CraftMenu } from "./Craft";
+import { HutMenu, TravelMenu } from "./Travel";
 import { isHubTab, labelLayer, runtime, useWorld, type HubTab } from "./useWorld";
 import { fullClasses, useFullscreen, useFullscreenTarget } from "./useFullscreen";
 
@@ -81,6 +82,8 @@ export function doAction(mode: "use" | "interact" = "use") {
   else if (target === "store") st.open("store");
   else if (target === "shipping") st.open("shipping");
   else if (target === "mine") st.open("mine");
+  else if (target === "travel") st.open("travel");
+  else if (target === "hut") st.open("hut");
   else if (target === "plot") {
     const { x, y } = facingTile(here);
     st.openChest(String(plotAt(x, y)), "plot");
@@ -345,6 +348,8 @@ export function WorldScreen() {
           {menu === "npc" && <NpcDialog />}
           {menu === "board" && <NoticeBoard />}
           {menu === "quests" && <QuestLog />}
+          {menu === "travel" && <TravelMenu />}
+          {menu === "hut" && <HutMenu />}
         </>
       )}
     </div>

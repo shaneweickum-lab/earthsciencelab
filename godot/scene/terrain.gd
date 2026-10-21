@@ -14,6 +14,12 @@ const GRASS := {
 const TREES := ["CommonTree", "CommonTree", "PineTree", "BirchTree"]
 const SEASON_SUFFIX := {"Spring": "", "Summer": "", "Fall": "_Autumn", "Winter": "_Snow"}
 const N := "qnature/"
+## How tall one mountain terrace is, in world units (height.ts).
+const STEP := 0.7
+## Chunks of the valley, in tiles: each is drawn (or skipped, when it's off screen) on its own.
+const CHUNK := 16
+const WATER_TOP := {"water": "#5fa3cf", "river": "#6fb4dc", "sea": "#4f8fc4"}
+const ORE_COLOR := {"copperOre": "#3fae7a", "tinOre": "#5a5060", "ironOre": "#b24a2c", "goldOre": "#f2c230", "mithrilOre": "#5fd8f0"}
 
 var _ground: Node3D
 var _land: Node3D
@@ -25,6 +31,8 @@ var _box := BoxMesh.new()
 var _furrow := BoxMesh.new()
 var _mulch := BoxMesh.new()
 var _stick := BoxMesh.new()
+var _foam := BoxMesh.new()
+var _crystal := SphereMesh.new()
 
 
 func _init() -> void:
@@ -32,6 +40,12 @@ func _init() -> void:
 	_furrow.size = Vector3(0.16, 0.08, 0.92)
 	_mulch.size = Vector3(0.92, 0.05, 0.92)
 	_stick.size = Vector3(0.7, 0.06, 0.07)
+	_foam.size = Vector3(1, 0.03, 1)
+	# A little octahedron: a sphere with four sides and one ring.
+	_crystal.radius = 0.12
+	_crystal.height = 0.24
+	_crystal.radial_segments = 4
+	_crystal.rings = 1
 	_ground = Node3D.new()
 	_land = Node3D.new()
 	add_child(_ground)
@@ -40,6 +54,39 @@ func _init() -> void:
 
 static func _h(i: float) -> float:
 	return Models.hash(i)
+
+
+## The height of a tile's top: terraces stack up, and a trail ramp sits halfway between two.
+static func tile_top(t: Variant) -> float:
+	if t == null:
+		return 0.0
+	return (float(t.get("elev", 0)) - (0.5 if t.get("ramp", false) else 0.0)) * STEP
+
+
+## The ground height under a point (for the player, townsfolk, and buildings).
+static func height_at(tiles: Array, x: float, z: float) -> float:
+	var tx := int(Js.round(x))
+	var tz := int(Js.round(z))
+	return tile_top(tiles[WorldMap.idx(tx, tz)]) if WorldMap.in_bounds(tx, tz) and tiles.size() == WorldMap.W * WorldMap.H else 0.0
+
+
+static func _chunk_key(x: float, z: float) -> int:
+	return int(floorf(z / CHUNK)) * 1000 + int(floorf(x / CHUNK))
+
+
+## Many copies of one mesh, split into chunks of the valley so the camera can skip the ones it can't see.
+static func _chunked(mesh: Mesh, items: Array, material: Material = null) -> Array:
+	var groups := {}
+	for it in items:
+		var o: Vector3 = it.xf.origin
+		var k := _chunk_key(o.x, o.z)
+		if not groups.has(k):
+			groups[k] = []
+		groups[k].append(it)
+	var out := []
+	for k in groups:
+		out.append(Models.colored(mesh, groups[k], material))
+	return out
 
 
 static func _pick(list: Array, r: float) -> String:
@@ -58,6 +105,16 @@ func _ground_color(t: Dictionary, i: int, season: String) -> String:
 			return "#e6d3a3"
 		"water":
 			return "#3f7fae"
+		"river":
+			return "#356f9a"
+		"sea":
+			return "#244f78"
+		"rock":
+			if season == "Winter" and int(t.get("elev", 0)) >= 2:
+				return "#e8eef0"
+			return ["#8f8a80", "#97928a", "#888378"][int(floorf(_h(i) * 3))]
+		"dock":
+			return "#9a7048" if (i % WorldMap.W) % 2 else "#a57a50"
 		"farm":
 			if t.tilled:
 				return "#4a2f1c" if t.moisture > 45 else "#7a5233"
@@ -102,35 +159,55 @@ func _build_ground(tiles: Array, season: String) -> void:
 	var furrows := []
 	var mulch := []
 	var water := []
+	var foam := []
 	for i in tiles.size():
 		var t: Dictionary = tiles[i]
 		var x := float(i % W)
 		var z := float(i / W)
-		var y := -0.25 if t.ground == "water" else (-0.08 if t.tilled else -0.1)
-		blocks.append({"xf": Transform3D(Basis(), Vector3(x, y, z)), "color": Color(_ground_color(t, i, season))})
+		var color := Color(_ground_color(t, i, season))
+		# Mountain terraces: a taller block, so the cliff sides show.
+		var top := tile_top(t)
+		if top > 0:
+			blocks.append({"xf": Transform3D(Basis.from_scale(Vector3(1, (top + 0.2) / 0.2, 1)), Vector3(x, (top - 0.2) / 2, z)), "color": color})
+		else:
+			var y := -0.25 if World.is_water(t.ground) else (-0.08 if t.tilled else -0.1)
+			blocks.append({"xf": Transform3D(Basis(), Vector3(x, y, z)), "color": color})
 		if t.tilled:
 			var c := Color("#3a2415" if t.moisture > 45 else "#6a4529")
 			for dx in [-0.3, 0.0, 0.3]:
 				furrows.append({"xf": Transform3D(Basis(), Vector3(x + dx, 0.03, z)), "color": c})
 		if t.mulch:
 			mulch.append({"xf": Models.xf(Vector3(x, 0.04, z), Vector3(0, _h(i) * 3, 0)), "color": Color("#d8b75a")})
-		if t.ground == "water":
-			water.append({"xf": Transform3D(Basis(), Vector3(x, -0.06, z))})
-	var ground := Models.colored(_box, blocks)
-	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_ground.add_child(ground)
+		if World.is_water(t.ground):
+			water.append({"xf": Transform3D(Basis(), Vector3(x, -0.06, z)), "color": Color(WATER_TOP[t.ground], 0.78)})
+			# Surf where the sea meets the sand.
+			if t.ground == "sea" and i >= W and tiles[i - W].ground == "sand":
+				foam.append({"xf": Transform3D(Basis.from_scale(Vector3(1, 1, 0.3)), Vector3(x, -0.04, z - 0.35)), "color": Color("#f4f8fa", 0.85)})
+	for ground in _chunked(_box, blocks):
+		ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ground.add_child(ground)
 	if furrows.size():
 		_ground.add_child(Models.colored(_furrow, furrows))
 	if mulch.size():
 		_ground.add_child(Models.colored(_mulch, mulch))
-	# The pond's surface.
+	# The surface of ponds, the river, and the sea, with surf along the beach.
 	var surface := BoxMesh.new()
 	surface.size = Vector3(1, 0.02, 1)
 	var wm := StandardMaterial3D.new()
-	wm.albedo_color = Color("#5fa3cf", 0.75)
+	wm.vertex_color_use_as_albedo = true
+	wm.vertex_color_is_srgb = true
 	wm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	wm.roughness = 0.15
-	_ground.add_child(Models.colored(surface, water, wm))
+	wm.metallic = 0.1
+	for n in _chunked(surface, water, wm):
+		_ground.add_child(n)
+	if foam.size():
+		var fm := StandardMaterial3D.new()
+		fm.vertex_color_use_as_albedo = true
+		fm.vertex_color_is_srgb = true
+		fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		fm.roughness = 0.6
+		_ground.add_child(Models.colored(_foam, foam, fm))
 	# Land beyond the map edge.
 	var edge := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
@@ -156,6 +233,7 @@ func _build_land(world: Dictionary, season: String) -> void:
 	var tall := {}
 	var low := {}
 	var sticks := []
+	var ores := []
 	# Grouped by model and by 12×12-tile chunk, so the camera can skip chunks it can't see.
 	var add := func(group: Dictionary, name: String, xf: Transform3D) -> void:
 		var key := "%s|%d,%d" % [name, int(xf.origin.x) / 12, int(xf.origin.z) / 12]
@@ -169,9 +247,11 @@ func _build_land(world: Dictionary, season: String) -> void:
 		var r := _h(i + 7)
 		var r2 := _h(i * 3 + 1)
 		var ry := _h(i * 5 + 2) * PI * 2
+		var y := tile_top(t)
 		match t.obstacle:
 			"tree":
-				var kind: String = _pick(TREES, r2)
+				# Pines up on the mountain; a mix down in the valley.
+				var kind: String = "PineTree" if t.ground == "rock" else _pick(TREES, r2)
 				var name: String
 				if r > 0.96:
 					# A few old dead snags, for woodpeckers and fungi.
@@ -179,19 +259,25 @@ func _build_land(world: Dictionary, season: String) -> void:
 				else:
 					name = "%s%s_%d" % [kind, suffix, 1 + int(floorf(_h(i * 9 + 4) * 3))]
 				var size := (0.75 if kind == "BirchTree" else 0.95) + r * 0.35
-				add.call(tall, N + name, Models.xf(Vector3(x + (r2 - 0.5) * 0.2, 0, z + (r - 0.5) * 0.2), Vector3(0, ry, 0), size))
+				add.call(tall, N + name, Models.xf(Vector3(x + (r2 - 0.5) * 0.2, y, z + (r - 0.5) * 0.2), Vector3(0, ry, 0), size))
 			"stone":
 				var rock := "Rock_Snow_%d" % (1 + int(r2 * 4)) if winter else ("Rock_Moss_%d" % (1 + int(r2 * 2)) if r > 0.8 else "Rock_%d" % (1 + int(r2 * 4)))
-				add.call(low, N + rock, Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.55))
+				add.call(low, N + rock, Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.55))
 			"stump":
-				add.call(low, N + ("TreeStump_Snow" if winter else ("TreeStump_Moss" if r2 > 0.6 else "TreeStump")), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.6))
+				add.call(low, N + ("TreeStump_Snow" if winter else ("TreeStump_Moss" if r2 > 0.6 else "TreeStump")), Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.6))
 			"log":
-				add.call(low, N + ("WoodLog_Snow" if winter else ("WoodLog_Moss" if r2 > 0.5 else "WoodLog")), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.38))
+				add.call(low, N + ("WoodLog_Snow" if winter else ("WoodLog_Moss" if r2 > 0.5 else "WoodLog")), Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.38))
 			"sapling":
 				var kind: String = _pick(TREES, r2)
-				add.call(low, N + "%s%s_1" % [kind, suffix], Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.35))
+				add.call(low, N + "%s%s_1" % [kind, suffix], Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.35))
 			"stick":
-				sticks.append({"xf": Models.xf(Vector3(x, 0.05, z), Vector3(0, ry, 0.1)), "color": Color("#7a5636")})
+				sticks.append({"xf": Models.xf(Vector3(x, y + 0.05, z), Vector3(0, ry, 0.1)), "color": Color("#7a5636")})
+			"copperOre", "tinOre", "ironOre", "goldOre", "mithrilOre":
+				# Ore poking out of the mountainside: a rock with colored crystals.
+				add.call(low, N + ("Rock_Snow_2" if winter else "Rock_2"), Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.6))
+				var oc := Color(ORE_COLOR[t.obstacle])
+				ores.append({"xf": Models.xf(Vector3(x + 0.12, y + 0.22, z + 0.1), Vector3(0.4, ry, 0)), "color": oc})
+				ores.append({"xf": Models.xf(Vector3(x - 0.15, y + 0.16, z - 0.05), Vector3(0, ry + 1, 0.5), 0.75), "color": oc})
 		if t.weeds:
 			for k in 3:
 				var name := _pick(["Grass", "Grass_2", "Grass_Short", "Plant_1"], _h(i * 17 + k))
@@ -221,3 +307,5 @@ func _build_land(world: Dictionary, season: String) -> void:
 			_land.add_child(n)
 	if sticks.size():
 		_land.add_child(Models.colored(_stick, sticks))
+	if ores.size():
+		_land.add_child(Models.colored(_crystal, ores))

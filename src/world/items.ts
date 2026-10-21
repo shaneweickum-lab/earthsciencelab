@@ -55,10 +55,10 @@ export function tempFactor(type: WorldCrop["type"], meanF: number): number {
   return Math.max(0.3, 1 - ((meanF - bestHi) / (hot - bestHi)) * 0.7);
 }
 
-export type ItemKind = "tool" | "seed" | "produce" | "amendment" | "material" | "kit" | "food" | "utensil";
+export type ItemKind = "tool" | "seed" | "produce" | "amendment" | "material" | "kit" | "food" | "utensil" | "fish";
 
 /** What a tool does when you use it. Axes and pickaxes come in tiers; the rest have one kind. */
-export type ToolUse = "hoe" | "can" | "scythe" | "axe" | "pickaxe" | "shovel" | "ring";
+export type ToolUse = "hoe" | "can" | "scythe" | "axe" | "pickaxe" | "shovel" | "ring" | "rod";
 export type Tier = "base" | "copper" | "bronze" | "iron" | "gold" | "mithril";
 
 /**
@@ -118,6 +118,7 @@ const tools: ItemDef[] = [
   { id: "pickaxe", name: "Pickaxe", icon: "🔨", kind: "tool", price: 50, tool: tool("pickaxe", TIERS.base.durability), desc: "Break stones. Also un-tills a tile." },
   { id: "shovel", name: "Shovel", icon: "🕳️", kind: "tool", price: 60, tool: tool("shovel", 100), desc: "Dig a test hole: reveals soil life and structure (the shovel test)." },
   { id: "ring", name: "Infiltration Ring", icon: "💧", kind: "tool", price: 45, tool: tool("ring", 100), desc: "Time how fast water soaks in: reveals water holding." },
+  { id: "rod", name: "Fishing Rod", icon: "🎣", kind: "tool", price: 120, tool: tool("rod", 120), desc: "Cast it into the river, a pond, or the sea. Different fish bite in different places, seasons, and times of day. Kai sells them at the fishing hut." },
   ...TIER_ORDER.slice(1).flatMap((t) => [tiered("axe", t), tiered("pickaxe", t)]),
 ];
 
@@ -199,7 +200,58 @@ const foods: ItemDef[] = [
   { id: "bread", name: "Bread", icon: "🍞", kind: "food", energy: 40, sell: 100, desc: "Yeast eats sugar in the dough and breathes out bubbles that make it rise." },
   { id: "sandwich", name: "Tomato Sandwich", icon: "🥪", kind: "food", energy: 55, sell: 150, desc: "Fresh bread and sliced tomato. Simple and perfect." },
   { id: "pizza", name: "Garden Pizza", icon: "🍕", kind: "food", energy: 70, sell: 170, desc: "Flour, tomato, and sweet corn, baked hot." },
+  { id: "panFish", name: "Pan-Fried Fish", icon: "🐟", kind: "food", energy: 45, sell: 110, desc: "Fish is full of protein and healthy oils. Pan-fried with a little salt." },
+  { id: "fishStew", name: "Fish Stew", icon: "🍲", kind: "food", energy: 70, sell: 170, desc: "Fish, potatoes, and carrots, simmered slowly. Kai's favorite." },
+  { id: "bakedFish", name: "Baked Fish", icon: "🐟", kind: "food", energy: 40, sell: 95, desc: "Baked whole in the oven, the way Kai's grandmother made it." },
+  { id: "fishTacos", name: "Fish Tacos", icon: "🌮", kind: "food", energy: 65, sell: 160, desc: "Crispy fish with corn and fresh tomato." },
   { id: "pie", name: "Squash Pie", icon: "🥧", kind: "food", energy: 80, sell: 230, desc: "Squash, flour, an egg, and honey. A harvest feast." },
+];
+
+export type Water = "river" | "pond" | "sea";
+
+/** A fish (or other catch): where it lives, when it bites, and how often. */
+export interface Catch {
+  id: string;
+  water: Water;
+  /** Seasons it bites (all, when missing). */
+  seasons?: Season[];
+  /** Hours it bites, as [from, to) on a 24-hour clock (to may wrap past midnight). All day when missing. */
+  hours?: [number, number];
+  /** How likely it is compared with the others that could bite. */
+  weight: number;
+}
+
+/** What you can catch, from Kai's notes. */
+export const CATCHES: Catch[] = [
+  { id: "brookTrout", water: "river", seasons: ["Spring", "Fall", "Winter"], weight: 3 },
+  { id: "rainbowTrout", water: "river", seasons: ["Spring", "Summer", "Fall"], weight: 3 },
+  { id: "catfish", water: "river", hours: [19, 5], weight: 3 },
+  { id: "salmon", water: "river", seasons: ["Fall"], weight: 2 },
+  { id: "bluegill", water: "pond", weight: 4 },
+  { id: "perch", water: "pond", seasons: ["Fall", "Winter", "Spring"], weight: 3 },
+  { id: "bass", water: "pond", seasons: ["Spring", "Summer", "Fall"], hours: [5, 10], weight: 2 },
+  { id: "flounder", water: "sea", weight: 3 },
+  { id: "mackerel", water: "sea", seasons: ["Summer", "Fall"], weight: 3 },
+  { id: "stripedBass", water: "sea", seasons: ["Spring", "Fall"], weight: 2 },
+  { id: "crab", water: "sea", seasons: ["Summer", "Fall"], weight: 2 },
+  { id: "kelp", water: "sea", weight: 2 },
+];
+
+const fish: ItemDef[] = [
+  { id: "brookTrout", name: "Brook Trout", icon: "🐟", kind: "fish", sell: 45, desc: "A speckled trout of cold, clear streams. It needs lots of oxygen, so it's a sign of a healthy river." },
+  { id: "rainbowTrout", name: "Rainbow Trout", icon: "🐟", kind: "fish", sell: 55, desc: "Named for the pink stripe along its side. It eats insects that land on the water." },
+  { id: "catfish", name: "Channel Catfish", icon: "🐟", kind: "fish", sell: 60, desc: "Its whiskers (barbels) taste the water, so it hunts in the dark. Bites at night." },
+  { id: "salmon", name: "Chinook Salmon", icon: "🐟", kind: "fish", sell: 120, desc: "Swims up the river from the sea each fall to lay its eggs where it hatched." },
+  { id: "bluegill", name: "Bluegill", icon: "🐟", kind: "fish", sell: 25, desc: "A little sunfish of warm ponds, with a dark blue patch on its gill cover." },
+  { id: "perch", name: "Yellow Perch", icon: "🐟", kind: "fish", sell: 35, desc: "Swims in schools in cool water, striped like a little tiger." },
+  { id: "bass", name: "Largemouth Bass", icon: "🐟", kind: "fish", sell: 80, desc: "The pond's top predator. It ambushes smaller fish from the weeds at dawn." },
+  { id: "flounder", name: "Flounder", icon: "🐟", kind: "fish", sell: 50, desc: "A flatfish that lies on the sandy bottom. Both its eyes are on one side of its head!" },
+  { id: "mackerel", name: "Mackerel", icon: "🐟", kind: "fish", sell: 40, desc: "A fast, shiny ocean fish that swims in huge schools in summer." },
+  { id: "stripedBass", name: "Striped Bass", icon: "🐟", kind: "fish", sell: 90, desc: "Lives in the sea but swims into rivers to spawn in spring." },
+  { id: "crab", name: "Blue Crab", icon: "🦀", kind: "fish", sell: 70, desc: "Walks sideways on the sea floor. Its back legs are shaped like paddles for swimming." },
+  { id: "kelp", name: "Kelp", icon: "🌿", kind: "material", sell: 12, desc: "A giant seaweed. Dug into the soil, it adds potassium and trace minerals, like a natural fertilizer." },
+  // In recipes, "any fish" means any fish you've caught.
+  { id: "anyFish", name: "Any fish", icon: "🐟", kind: "material", desc: "Any fish you've caught works in this recipe." },
 ];
 
 const SEED_NAME: Record<CropId, string> = {
@@ -231,7 +283,7 @@ const produce: ItemDef[] = Object.values(WORLD_CROPS)
 
 /** Every item has a picture icon in public/icons, rendered from the game's models by `npm run icons`. */
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  [...tools, ...amendments, ...materials, ...kits, ...utensils, ...foods, ...seeds, ...produce].map((i) => [i.id, { ...i, image: `/icons/${i.id}.png` }]),
+  [...tools, ...amendments, ...materials, ...kits, ...utensils, ...foods, ...fish, ...seeds, ...produce].map((i) => [i.id, { ...i, image: `/icons/${i.id}.png` }]),
 );
 
 /** What the store or shipping bin pays for one item of a given grade, with the organic bonus. */
@@ -291,6 +343,10 @@ export const COOKING: Recipe[] = [
   cook("sandwich", [["bread", 1], ["crop_tomato", 1]], ["knife"]),
   cook("pizza", [["flour", 1], ["crop_tomato", 1], ["crop_corn", 1]], ["knife"], ["oven"]),
   cook("pie", [["crop_squash", 1], ["flour", 1], ["egg", 1], ["honey", 1]], ["knife"], ["stove", "oven"]),
+  cook("panFish", [["anyFish", 1]], ["knife", "pan"], ["stove"]),
+  cook("fishStew", [["anyFish", 1], ["crop_potato", 1], ["crop_carrot", 1]], ["knife", "pot"], ["stove"]),
+  cook("bakedFish", [["anyFish", 1]], [], ["oven"]),
+  cook("fishTacos", [["anyFish", 1], ["crop_corn", 1], ["crop_tomato", 1]], ["knife", "pan"], ["stove"]),
 ];
 
 /** What each station makes. */

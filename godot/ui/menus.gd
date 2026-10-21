@@ -23,6 +23,8 @@ static func build(game_ui: GameUi, menu: String) -> Variant:
 		"npc": return TownMenus.npc_dialog(game_ui)
 		"board": return TownMenus.notice_board(game_ui)
 		"quests": return TownMenus.quest_log()
+		"travel": return TownMenus.travel_menu()
+		"hut": return TownMenus.hut_menu()
 	return null
 
 
@@ -246,7 +248,7 @@ static func store(game_ui: GameUi) -> Dictionary:
 			var science := func(i): return Data.shop_unlocks().has(i.id) and not kitchenware.call(i)
 			body.add_child(Ui.text("Tools wear out with use. Buy a new one here, or craft a better one at a workbench.", 14, Ui.MUTED))
 			body.add_child(Ui.heading("Farm tools"))
-			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "tool" and i.get("price") and not science.call(i)), buy))
+			body.add_child(_item_list(w, items.filter(func(i): return i.kind == "tool" and i.get("price") and not science.call(i) and i.tool.use != "rod"), buy))
 			body.add_child(Ui.heading("Science tools"))
 			body.add_child(_item_list(w, items.filter(science), buy))
 		"soil":
@@ -519,7 +521,21 @@ static func plot_menu() -> Dictionary:
 	if id < 0 or id >= WorldMap.plots().size():
 		return m
 	var p: Dictionary = WorldMap.plots()[id]
-	var price := World.next_plot_price(w)
+	var price := World.price_of_plot(w, id)
+	# The park's allotments rent for a flat price.
+	if WorldMap.is_allotment(id):
+		var am := Ui.modal("Allotment for rent", "🌳", Game.close)
+		am.body.add_child(Ui.text("This park allotment is %d × %d tiles of garden soil in town. Rent it once and it's yours to farm." % [p.x1 - p.x0 + 1, p.y1 - p.y0 + 1], 15))
+		am.body.add_child(Ui.small("Every allotment rents for the same price, and renting one doesn't raise the price of your farm's plots."))
+		var arow := Ui.hbox(10)
+		var acoins := Ui.text("🪙 %s" % Js.num(w.coins), 15, Ui.INK, 900)
+		acoins.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		arow.add_child(acoins)
+		arow.add_child(Ui.button("Rent for 🪙 %d" % price, func():
+			Game.update(func(s): return World.buy_plot(s, id))
+			Game.close(), "primary", 15, w.coins < price))
+		am.body.add_child(arow)
+		return am
 	body.add_child(Ui.text("This plot is %d × %d tiles of %s. You own %d of %d plots." % [p.x1 - p.x0 + 1, p.y1 - p.y0 + 1, "rich South Fields bottomland" if p.y0 >= WorldMap.OLD_H else "field by the house", World.owned_plots(w).size(), WorldMap.plots().size()], 15))
 	body.add_child(Ui.small("Each plot costs a little more than the last. Some quests give you land for free, too."))
 	var row := Ui.hbox(10)

@@ -3,12 +3,15 @@ class_name Hud
 ## the hotbar; and the tile inspector. Port of Hud.tsx.
 
 const SEASON_ICON := {"Spring": "🌸", "Summer": "☀️", "Fall": "🍂", "Winter": "❄️"}
-const GROUND_NAME := {"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest", "cave": "Cave floor", "caveWall": "Rock wall"}
+const GROUND_NAME := {
+	"grass": "Grass", "farm": "Garden soil", "path": "Path", "water": "Pond", "sand": "Sandy shore", "forest": "Forest", "cave": "Cave floor", "caveWall": "Rock wall",
+	"river": "River", "sea": "Sea", "rock": "Mountain rock", "dock": "Wooden dock",
+}
 const LABELS := {
 	"house": "Farmhouse", "store": "Seed & Soil Co.", "shippingBin": "Shipping Bin", "chest": "Tool Chest", "extension": "Extension Office", "cottage": "Cottage",
 	"mineEntrance": "Old Mine", "ladderUp": "Ladder up", "ladderDown": "Ladder down",
 	"workbench": "Workbench", "grinder": "Grinder", "spinningWheel": "Spinning Wheel", "furnace": "Furnace", "stove": "Stove", "oven": "Oven",
-	"gardenGate": "Garden gate", "marketStall": "Market stall",
+	"gardenGate": "Garden gate", "marketStall": "Market stall", "signpost": "Signpost", "fishingHut": "Kai's Fishing Hut",
 	"fountain": "Fountain", "noticeBoard": "Notice board", "field": "Cornfield", "lamp": "Street lamp", "prop": "Market cart",
 }
 

@@ -14,16 +14,16 @@ const at = (s: WorldState, hour: number, day = 1) => ({ ...s, minute: startOfDay
 
 describe("the town", () => {
   const s = newWorld(3);
-  it("sits east of the farm, past Garden Lane", () => {
-    expect(buildingAt(s, 45, 7)?.kind).toBe("store");
+  it("sits far east of the farm, past Garden Lane and down the country road", () => {
+    expect(buildingAt(s, 67, 7)?.kind).toBe("store");
     expect(buildingAt(s, 30, 6)).toBeNull(); // the store moved off the farm
     // The farm road runs to the hedge; your gate on the lane leads into town.
     const farmRoad = route(s, [10, 11], [37, 11]);
     expect(farmRoad.at(-1)).toEqual([37, 11]);
     expect(isWalkable(s, 39, 11)).toBe(false);
-    const road = route(s, [40, 4], [56, 18]);
-    expect(road.at(-1)).toEqual([56, 18]);
-    expect(road.length).toBeGreaterThan(20);
+    const road = route(s, [40, 4], [78, 18]);
+    expect(road.at(-1)).toEqual([78, 18]);
+    expect(road.length).toBeGreaterThan(45);
     for (const [x, y] of [...farmRoad, ...road]) expect(isWalkable(s, x, y)).toBe(true);
   });
   it("has the community garden overgrown and waiting", () => {
@@ -57,7 +57,7 @@ describe("townsfolk", () => {
     const noonish = npcPose(s, mei, startOfDay(1) + (12 - 6) * 60 + 1);
     expect(noonish.moving).toBe(true);
     const settled = npcPose(s, mei, startOfDay(1) + (12 - 6) * 60 + 59);
-    expect([settled.x, settled.y]).toEqual([54, 18]);
+    expect([settled.x, settled.y]).toEqual([76, 18]);
     expect(npcPose(s, mei, startOfDay(1) + (23 - 6) * 60).visible).toBe(false);
   });
   it("can be talked to when you face them", () => {

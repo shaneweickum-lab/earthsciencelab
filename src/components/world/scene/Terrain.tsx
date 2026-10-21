@@ -5,6 +5,8 @@ import { Suspense, useMemo } from "react";
 import { H, W } from "@/world/map";
 import type { Building, Season, Tile } from "@/world/types";
 import { BUILDING_SIZE } from "@/world/map";
+import { isWater } from "@/world/engine";
+import { tileTop } from "./height";
 import { hash, Instanced, type Inst } from "./Instanced";
 import { groupBy, model, ModelGroups } from "./models";
 
@@ -27,17 +29,25 @@ function groundColor(t: Tile, i: number, season: Season): string {
     case "farm":
       if (t.tilled) return t.moisture > 45 ? "#4a2f1c" : "#7a5233";
       return t.greenhouse ? "#8a6a45" : season === "Winter" ? "#c9c3b4" : "#9c8458";
+    case "river": return "#356f9a";
+    case "sea": return "#244f78";
+    case "rock": return season === "Winter" && (t.elev ?? 0) >= 2 ? "#e8eef0" : ["#8f8a80", "#97928a", "#888378"][Math.floor(hash(i) * 3)];
+    case "dock": return (i % W) % 2 ? "#9a7048" : "#a57a50";
   }
 }
+
+const WATER_TOP: Record<string, string> = { water: "#5fa3cf", river: "#6fb4dc", sea: "#4f8fc4" };
 
 /** The ground: one flat block per tile, colored by what's on it. */
 export function Terrain({ tiles, season }: { tiles: Tile[]; season: Season }) {
   const ground = useMemo<Inst[]>(
-    () => tiles.map((t, i) => ({
-      x: i % W, z: Math.floor(i / W),
-      y: t.ground === "water" ? -0.25 : t.tilled ? -0.08 : -0.1,
-      color: groundColor(t, i, season),
-    })),
+    () => tiles.map((t, i) => {
+      const base = { x: i % W, z: Math.floor(i / W), color: groundColor(t, i, season) };
+      // Mountain terraces: a taller block, so the cliff sides show.
+      const top = tileTop(t);
+      if (top > 0) return { ...base, y: (top - 0.2) / 2, s: [1, (top + 0.2) / 0.2, 1] as [number, number, number] };
+      return { ...base, y: isWater(t.ground) ? -0.25 : t.tilled ? -0.08 : -0.1 };
+    }),
     [tiles, season],
   );
   const furrows = useMemo<Inst[]>(() => {
@@ -77,17 +87,29 @@ export function Terrain({ tiles, season }: { tiles: Tile[]; season: Season }) {
   );
 }
 
-/** Water surface over the pond tiles. */
+/** Water surface over ponds, the river, and the sea, with surf where the sea meets the sand. */
 export function Pond({ tiles }: { tiles: Tile[] }) {
-  const water = useMemo<Inst[]>(
-    () => tiles.flatMap((t, i) => (t.ground === "water" ? [{ x: i % W, y: -0.06, z: Math.floor(i / W) }] : [])),
-    [tiles],
-  );
+  const { water, foam } = useMemo(() => {
+    const water: Inst[] = [], foam: Inst[] = [];
+    tiles.forEach((t, i) => {
+      if (!isWater(t.ground)) return;
+      const x = i % W, z = Math.floor(i / W);
+      water.push({ x, y: -0.06, z, color: WATER_TOP[t.ground] });
+      if (t.ground === "sea" && tiles[i - W]?.ground === "sand") foam.push({ x, y: -0.04, z: z - 0.35, s: [1, 1, 0.3] });
+    });
+    return { water, foam };
+  }, [tiles]);
   return (
-    <Instanced items={water}>
-      <boxGeometry args={[1, 0.02, 1]} />
-      <meshStandardMaterial color="#5fa3cf" transparent opacity={0.75} roughness={0.15} metalness={0.1} />
-    </Instanced>
+    <>
+      <Instanced items={water}>
+        <boxGeometry args={[1, 0.02, 1]} />
+        <meshStandardMaterial transparent opacity={0.78} roughness={0.15} metalness={0.1} />
+      </Instanced>
+      <Instanced items={foam}>
+        <boxGeometry args={[1, 0.03, 1]} />
+        <meshStandardMaterial color="#f4f8fa" transparent opacity={0.85} roughness={0.6} />
+      </Instanced>
+    </>
   );
 }
 
@@ -173,6 +195,7 @@ function ProceduralObstacles({ tiles, season }: { tiles: Tile[]; season: Season 
   );
 }
 
+const ORE_COLOR: Record<string, string> = { copperOre: "#3fae7a", tinOre: "#5a5060", ironOre: "#b24a2c", goldOre: "#f2c230", mithrilOre: "#5fd8f0" };
 const PINES = ["tree_pineRoundA", "tree_pineRoundC", "tree_pineTallA", "tree_pineSmallB"];
 const LEAFY = ["tree_default", "tree_oak", "tree_detailed"];
 const LEAF_SUFFIX: Record<Season, string> = { Spring: "", Summer: "", Fall: "_fall", Winter: "_dark" };
@@ -186,28 +209,36 @@ if (typeof window !== "undefined") {
 
 /** Kenney models for trees, rocks, stumps, logs, weeds, and wild plants. */
 function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: Season; buildings: Building[] }) {
-  const { tall, low, sticks } = useMemo(() => {
+  const { tall, low, sticks, ores } = useMemo(() => {
     const covered = new Set<number>();
     for (const b of buildings) {
       const [bw, bh] = BUILDING_SIZE[b.kind];
       for (let y = b.y; y < b.y + bh; y++) for (let x = b.x; x < b.x + bw; x++) covered.add(y * W + x);
     }
-    const tallE: [string, Inst][] = [], lowE: [string, Inst][] = [], sticksL: Inst[] = [];
+    const tallE: [string, Inst][] = [], lowE: [string, Inst][] = [], sticksL: Inst[] = [], ores: Inst[] = [];
     const flowers = ["flower_yellowA", "flower_redA", "flower_purpleA", "flower_yellowB"];
     tiles.forEach((t, i) => {
       const x = i % W, z = Math.floor(i / W);
       const r = hash(i + 7), r2 = hash(i * 3 + 1), ry = hash(i * 5 + 2) * Math.PI * 2;
+      const y = tileTop(t);
       switch (t.obstacle) {
         case "tree": {
-          const name = r < 0.35 ? pick(PINES, r2) : pick(LEAFY, r2) + LEAF_SUFFIX[season];
-          tallE.push([n(name), { x: x + (r2 - 0.5) * 0.2, z: z + (r - 0.5) * 0.2, s: 1.3 + r * 0.45, ry }]);
+          // Pines up on the mountain; a mix down in the valley.
+          const name = t.ground === "rock" || r < 0.35 ? pick(PINES, r2) : pick(LEAFY, r2) + LEAF_SUFFIX[season];
+          tallE.push([n(name), { x: x + (r2 - 0.5) * 0.2, y, z: z + (r - 0.5) * 0.2, s: 1.3 + r * 0.45, ry }]);
           break;
         }
-        case "stone": lowE.push([n(pick(["stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA"], r2)), { x, z, s: 1.9, ry }]); break;
-        case "stump": lowE.push([n(r2 > 0.5 ? "stump_round" : "stump_old"), { x, z, s: 2, ry }]); break;
-        case "log": lowE.push([n(r2 > 0.5 ? "log" : "log_large"), { x, z, s: 1.4, ry }]); break;
-        case "stick": sticksL.push({ x, y: 0.05, z, ry, rz: 0.1 }); break;
-        case "sapling": lowE.push([n(pick(LEAFY, r2) + LEAF_SUFFIX[season]), { x, z, s: 0.45, ry }]); break;
+        case "stone": lowE.push([n(pick(["stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA"], r2)), { x, y, z, s: 1.9, ry }]); break;
+        case "stump": lowE.push([n(r2 > 0.5 ? "stump_round" : "stump_old"), { x, y, z, s: 2, ry }]); break;
+        case "log": lowE.push([n(r2 > 0.5 ? "log" : "log_large"), { x, y, z, s: 1.4, ry }]); break;
+        case "stick": sticksL.push({ x, y: y + 0.05, z, ry, rz: 0.1 }); break;
+        case "sapling": lowE.push([n(pick(LEAFY, r2) + LEAF_SUFFIX[season]), { x, y, z, s: 0.45, ry }]); break;
+        case "copperOre": case "tinOre": case "ironOre": case "goldOre": case "mithrilOre":
+          // Ore poking out of the mountainside: a rock with colored crystals.
+          lowE.push([n("stone_smallB"), { x, y, z, s: 2.1, ry }]);
+          ores.push({ x: x + 0.12, y: y + 0.22, z: z + 0.1, s: 1, ry, rx: 0.4, color: ORE_COLOR[t.obstacle] });
+          ores.push({ x: x - 0.15, y: y + 0.16, z: z - 0.05, s: 0.75, ry: ry + 1, rz: 0.5, color: ORE_COLOR[t.obstacle] });
+          break;
       }
       if (t.weeds) {
         for (let k = 0; k < 3; k++) {
@@ -226,7 +257,7 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
         if (t.ground === "water" && r < 0.18) lowE.push([n(r2 > 0.5 ? "lily_large" : "lily_small"), { x, y: -0.06, z, s: 1.8, ry }]);
       }
     });
-    return { tall: groupBy(tallE), low: groupBy(lowE), sticks: sticksL };
+    return { tall: groupBy(tallE), low: groupBy(lowE), sticks: sticksL, ores };
   }, [tiles, season, buildings]);
   return (
     <group>
@@ -235,6 +266,10 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
       <Instanced items={sticks}>
         <boxGeometry args={[0.7, 0.06, 0.07]} />
         <meshStandardMaterial color="#7a5636" />
+      </Instanced>
+      <Instanced items={ores}>
+        <octahedronGeometry args={[0.12, 0]} />
+        <meshStandardMaterial flatShading roughness={0.4} />
       </Instanced>
     </group>
   );

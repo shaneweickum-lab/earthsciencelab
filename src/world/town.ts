@@ -1,7 +1,7 @@
 import { dayOf, seasonOf, timeOfDay } from "./clock";
-import { DIRS, facingTile, isWalkable, todayWeather } from "./engine";
+import { addItem, canStep, DIRS, facingTile, isWalkable, todayWeather } from "./engine";
 import { ITEMS } from "./items";
-import { W } from "./map";
+import { H, W } from "./map";
 import type { Dir, WorldState } from "./types";
 
 /** One stop in an NPC's day: from `hour` on, they stand here (or are indoors). */
@@ -35,17 +35,19 @@ export interface Npc {
   dislikes: string[];
   /** Little stories they share once you're close enough friends. */
   stories: { hearts: number; text: string }[];
+  /** Something they hand you the first time you meet. */
+  welcome?: { item: string; text: string };
 }
 
 export const NPCS: Npc[] = [
   {
     id: "mei", short: "Mei", name: "Mei Tanaka", role: "Shopkeeper, Seed & Soil Co.", avatar: "female-d",
     schedule: [
-      { hour: 7, x: 44, y: 10, facing: "down", doing: "opening the shop" },
-      { hour: 12, x: 54, y: 18, facing: "up", doing: "eating lunch by the fountain" },
-      { hour: 13, x: 44, y: 10, facing: "down", doing: "minding the shop" },
-      { hour: 18, x: 57, y: 17, facing: "left", doing: "chatting in the square" },
-      { hour: 21, x: 44, y: 10, facing: "down", inside: true, doing: "closed for the night" },
+      { hour: 7, x: 66, y: 10, facing: "down", doing: "opening the shop" },
+      { hour: 12, x: 76, y: 18, facing: "up", doing: "eating lunch by the fountain" },
+      { hour: 13, x: 66, y: 10, facing: "down", doing: "minding the shop" },
+      { hour: 18, x: 92, y: 17, facing: "up", doing: "checking prices at the market" },
+      { hour: 21, x: 66, y: 10, facing: "down", inside: true, doing: "closed for the night" },
     ],
     greeting: "Welcome to town! I'm Mei. I run Seed & Soil Co. If it grows, I probably sell the seeds for it.",
     lines: [
@@ -63,11 +65,11 @@ export const NPCS: Npc[] = [
   {
     id: "amara", short: "Dr. Okafor", name: "Dr. Amara Okafor", role: "Soil scientist, County Extension Office", avatar: "female-a",
     schedule: [
-      { hour: 8, x: 51, y: 10, facing: "down", doing: "reading soil test reports" },
-      { hour: 11, x: 65, y: 21, facing: "down", doing: "checking on the community garden" },
-      { hour: 14, x: 51, y: 10, facing: "down", doing: "running samples in the lab" },
-      { hour: 17, x: 56, y: 14, facing: "down", doing: "taking an evening walk" },
-      { hour: 19, x: 51, y: 10, facing: "down", inside: true, doing: "home for the night" },
+      { hour: 8, x: 73, y: 10, facing: "down", doing: "reading soil test reports" },
+      { hour: 11, x: 87, y: 21, facing: "down", doing: "checking on the community garden" },
+      { hour: 14, x: 73, y: 10, facing: "down", doing: "running samples in the lab" },
+      { hour: 17, x: 84, y: 44, facing: "down", doing: "taking an evening walk in the park" },
+      { hour: 19, x: 73, y: 10, facing: "down", inside: true, doing: "home for the night" },
     ],
     greeting: "Hello! I'm Dr. Okafor, the county soil scientist. Bring me your questions. And your dirt!",
     lines: [
@@ -85,11 +87,11 @@ export const NPCS: Npc[] = [
   {
     id: "june", short: "June", name: "June Hale", role: "Beekeeper and naturalist", avatar: "female-c",
     schedule: [
-      { hour: 6, x: 63, y: 10, facing: "down", doing: "checking the hives" },
-      { hour: 9, x: 59, y: 18, facing: "right", doing: "watching butterflies in the flowers" },
-      { hour: 13, x: 69, y: 23, facing: "left", doing: "tending the garden beehive" },
-      { hour: 16, x: 63, y: 10, facing: "down", doing: "jarring honey" },
-      { hour: 20, x: 63, y: 10, facing: "down", inside: true, doing: "asleep early. Bees start at dawn!" },
+      { hour: 6, x: 85, y: 10, facing: "down", doing: "checking the hives" },
+      { hour: 9, x: 84, y: 47, facing: "left", doing: "watching butterflies in the park flowers" },
+      { hour: 13, x: 92, y: 24, facing: "up", doing: "tending the garden beehive" },
+      { hour: 16, x: 85, y: 10, facing: "down", doing: "jarring honey" },
+      { hour: 20, x: 85, y: 10, facing: "down", inside: true, doing: "asleep early. Bees start at dawn!" },
     ],
     greeting: "Oh, hello! Careful, the bees are busy. I'm June. If it buzzes, flutters, or crawls, I can tell you its name.",
     lines: [
@@ -107,11 +109,11 @@ export const NPCS: Npc[] = [
   {
     id: "luis", short: "Luis", name: "Luis Ortega", role: "Neighbor farmer", avatar: "male-a",
     schedule: [
-      { hour: 6, x: 51, y: 26, facing: "up", doing: "working his corn field" },
-      { hour: 12, x: 46, y: 13, facing: "right", doing: "taking a lunch break" },
-      { hour: 13, x: 51, y: 26, facing: "up", doing: "pulling weeds" },
-      { hour: 18, x: 46, y: 26, facing: "down", doing: "resting on the porch" },
-      { hour: 21, x: 46, y: 26, facing: "down", inside: true, doing: "inside with the family" },
+      { hour: 6, x: 73, y: 26, facing: "up", doing: "working his corn field" },
+      { hour: 12, x: 68, y: 13, facing: "right", doing: "taking a lunch break" },
+      { hour: 13, x: 73, y: 26, facing: "up", doing: "pulling weeds" },
+      { hour: 18, x: 68, y: 26, facing: "down", doing: "resting on the porch" },
+      { hour: 21, x: 68, y: 26, facing: "down", inside: true, doing: "inside with the family" },
     ],
     greeting: "So you're the new farmer! Luis Ortega. My family's been growing corn here for three generations.",
     lines: [
@@ -129,11 +131,11 @@ export const NPCS: Npc[] = [
   {
     id: "pip", short: "Pip", name: "Pip Ortega", role: "Luis's kid, full of questions", avatar: "male-e", scale: 0.8,
     schedule: [
-      { hour: 8, x: 54, y: 17, facing: "up", doing: "looking for frogs in the fountain" },
+      { hour: 8, x: 76, y: 17, facing: "up", doing: "looking for frogs in the fountain" },
       { hour: 11, x: 40, y: 5, facing: "left", doing: "peeking through your garden gate" },
-      { hour: 14, x: 60, y: 16, facing: "right", doing: "collecting rocks" },
-      { hour: 17, x: 47, y: 24, facing: "left", doing: "doing homework on the steps" },
-      { hour: 20, x: 46, y: 26, facing: "down", inside: true, doing: "in bed (supposedly)" },
+      { hour: 14, x: 66, y: 77, facing: "down", doing: "skipping stones at the beach" },
+      { hour: 17, x: 69, y: 24, facing: "left", doing: "doing homework on the steps" },
+      { hour: 20, x: 68, y: 26, facing: "down", inside: true, doing: "in bed (supposedly)" },
     ],
     greeting: "Whoa, you're the new farmer?! I'm Pip! Do worms have eyes? Do YOU know?",
     lines: [
@@ -148,6 +150,29 @@ export const NPCS: Npc[] = [
       { hearts: 9, text: "When I'm a soil scientist I'm going to name a microbe after you. A good one. Not a stinky one." },
     ],
   },
+  {
+    id: "kai", short: "Kai", name: "Kai Nakoa", role: "Fisher, Kai's Fishing Hut", avatar: "male-b",
+    schedule: [
+      { hour: 5, x: 71, y: 82, facing: "down", doing: "fishing off the end of the dock" },
+      { hour: 9, x: 74, y: 76, facing: "up", doing: "mending nets at the hut" },
+      { hour: 13, x: 99, y: 32, facing: "right", doing: "checking the river for trout" },
+      { hour: 17, x: 74, y: 76, facing: "up", doing: "cleaning the day's catch" },
+      { hour: 21, x: 74, y: 76, facing: "up", inside: true, doing: "asleep. The fish bite early!" },
+    ],
+    greeting: "Ahoy! Kai Nakoa. I fish this whole valley: the river, the forest pond, and the sea out past the dock. Ever held a rod?",
+    welcome: { item: "rod", text: "Here, take my spare rod. Face the water and use it to cast. Different fish bite in different places and seasons!" },
+    lines: [
+      ["Trout like cold, moving water. The river's full of them in spring.", "Catfish feed at night. Bring a lantern and some patience.", "Sea water's salty, but the river water's sweet. That's why salmon swim upstream to lay their eggs."],
+      ["You're getting a feel for it! Watch the water, not the rod.", "Healthy rivers need shady banks. Tree roots hold the soil, so the water stays clear.", "Every fish you catch goes in your journal. Keep track of where and when!"],
+      ["You fish like you've done it all your life.", "When I was a kid this river was muddy from farm runoff. Farms like yours keep it clean.", "Take my lucky spot at the end of the dock anytime. Just don't tell the gulls."],
+    ],
+    loves: ["fishStew", "crop_corn"], likes: ["crop_potato", "bread", "honey"], dislikes: ["synthFert", "fiber"],
+    stories: [
+      { hearts: 3, text: "My grandmother taught me to read the water: ripples over rocks, dark pools where the big fish wait. She never needed a fish finder." },
+      { hearts: 6, text: "Salmon are born in the river, swim out to the ocean, and come back to the same stream years later to spawn. They smell their way home." },
+      { hearts: 9, text: "The town wants to put a factory up the river. I told them about you: a farm that keeps its soil out of the water. They're thinking twice." },
+    ],
+  },
 ];
 
 export const NPC_BY_ID: Record<string, Npc> = Object.fromEntries(NPCS.map((n) => [n.id, n]));
@@ -157,25 +182,36 @@ export const NPC_BY_ID: Record<string, Npc> = Object.fromEntries(NPCS.map((n) =>
 /** Game minutes per tile when walking. */
 const WALK_MINUTES = 2;
 
-const pathCache = new WeakMap<WorldState["buildings"], Map<string, [number, number][]>>();
+const pathCache = new WeakMap<WorldState["buildings"], { routes: Map<string, [number, number][]>; walk: Int8Array }>();
 
-/** Shortest walkable route between two tiles (breadth-first search). Falls back to a straight hop. */
+/**
+ * Shortest walkable route between two tiles (breadth-first search over the whole valley, minding
+ * the mountain cliffs). Falls back to a straight hop. Routes, and which tiles can be walked, are
+ * remembered until something is built or taken down.
+ */
 export function route(state: WorldState, from: [number, number], to: [number, number]): [number, number][] {
   let cache = pathCache.get(state.buildings);
-  if (!cache) pathCache.set(state.buildings, (cache = new Map()));
+  if (!cache) pathCache.set(state.buildings, (cache = { routes: new Map(), walk: new Int8Array(W * H).fill(-1) }));
   const key = `${from}>${to}`;
-  const hit = cache.get(key);
+  const hit = cache.routes.get(key);
   if (hit) return hit;
+  const walk = cache.walk;
+  const walkable = (x: number, y: number) => {
+    const i = y * W + x;
+    if (walk[i] < 0) walk[i] = isWalkable(state, x, y) ? 1 : 0;
+    return walk[i] === 1;
+  };
   const start = from[1] * W + from[0], goal = to[1] * W + to[0];
   const prev = new Map<number, number>([[start, -1]]);
   const queue = [start];
-  while (queue.length) {
-    const cur = queue.shift()!;
+  for (let head = 0; head < queue.length; head++) {
+    const cur = queue[head];
     if (cur === goal) break;
     const cx = cur % W, cy = Math.floor(cur / W);
     for (const [dx, dy] of Object.values(DIRS)) {
       const nx = cx + dx, ny = cy + dy, n = ny * W + nx;
-      if (prev.has(n) || !(n === goal || isWalkable(state, nx, ny))) continue;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H || prev.has(n)) continue;
+      if (!(n === goal || walkable(nx, ny)) || !canStep(state, cx, cy, nx, ny)) continue;
       prev.set(n, cur);
       queue.push(n);
     }
@@ -183,7 +219,7 @@ export function route(state: WorldState, from: [number, number], to: [number, nu
   const path: [number, number][] = [];
   if (prev.has(goal)) for (let c = goal; c !== -1; c = prev.get(c)!) path.unshift([c % W, Math.floor(c / W)]);
   const result = path.length ? path : [from, to];
-  cache.set(key, result);
+  cache.routes.set(key, result);
   return result;
 }
 
@@ -264,7 +300,11 @@ export function talk(state: WorldState, id: string): { state: WorldState; text: 
   const npc = NPC_BY_ID[id];
   const f = friendship(state, id);
   const d = dayOf(state.minute);
-  if (!f.met) return { state: setFriend(state, id, { ...f, met: true, talked: d, points: f.points + 20 }), text: npc.greeting };
+  if (!f.met) {
+    const met = setFriend(state, id, { ...f, met: true, talked: d, points: f.points + 20 });
+    const gift = npc.welcome && addItem(met, npc.welcome.item, 1);
+    return gift ? { state: gift, text: `${npc.greeting} ${npc.welcome!.text}` } : { state: met, text: npc.greeting };
+  }
   const h = hearts(state, id);
   const story = npc.stories.find((st) => st.hearts <= h && !(f.stories ?? []).includes(st.hearts));
   if (story) {

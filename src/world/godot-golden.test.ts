@@ -15,12 +15,13 @@ import { dateOf, dayOfSeason, formatDate, formatTime, seasonOf, startOfDay, time
 import {
   act, addItem, applyTool, buy, buyPlot, growthFactor, interact, loadWorld, movePlayer, newWorld, pickUpBuilding, sellNow, ship, sleep,
   swapSlots, tick, STARTER_CHEST, takeAllFromChest, putInChest, takeFromChest, enterMine, tileAt, facingTile, craft,
-  eat, enterGate, leaveFarm, rotateBuilding, stockStall, turnPlacing, unstockStall,
+  eat, enterGate, leaveFarm, rotateBuilding, stockStall, turnPlacing, unstockStall, saveWorld,
 } from "./engine";
 import { expectedGrade, GRADE_INFO, GRADES, harvestAmount, soilHealth } from "./grades";
-import { cropDays, ITEMS, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
+import { CATCHES, cropDays, ITEMS, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS } from "./items";
 import { CATEGORY_INFO, JOURNAL, MUSHROOM_SAFETY } from "./journal";
-import { BUILDING_SIZE, FARM, MINE_ENTRANCE, MINE_START, MINE_W, OLD_H, PLOTS, TOWN, W } from "./map";
+import { ALLOTMENT0, BUILDING_SIZE, DOCK, FARM, MINE_ENTRANCE, MINE_START, MINE_W, OLD_H, OLD_ROWS, OLD_W, PLOTS, RIVER, TOWN, W } from "./map";
+import { OPS } from "./ops";
 import { SPAWNS } from "./nature";
 import { previewAction } from "./preview";
 import { accept, boardRequests, claimLesson, expireBoard, goalLabel, offers, QUESTS, questState, questStatus, rewardText, skipTutorial, TUTORIAL, turnIn } from "./quests";
@@ -65,7 +66,7 @@ const CALENDARS: Calendar[] = [
 describe("Godot data tables", () => {
   it("are exported", () => {
     emit("data/crops.json", { crops: CROPS, order: CROP_ORDER, familyLabel: FAMILY_LABEL, world: WORLD_CROPS });
-    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST, tiers: TIERS, recipes: RECIPES });
+    emit("data/items.json", { items: ITEMS, upgrades: UPGRADES, gradeInfo: GRADE_INFO, shopUnlocks: SHOP_UNLOCKS, starterChest: STARTER_CHEST, tiers: TIERS, recipes: RECIPES, catches: CATCHES });
     emit("data/settings.json", { features: SCIENCE_FEATURES, presets: PRESETS, defaults: DEFAULT_SETTINGS });
     emit("data/weather.json", WEATHER);
     emit("data/journal.json", { entries: JOURNAL, categories: CATEGORY_INFO, mushroomSafety: MUSHROOM_SAFETY });
@@ -130,13 +131,16 @@ describe("Godot golden fixtures", () => {
   });
 
   it("maps", () => {
-    const G = ["grass", "farm", "path", "water", "sand", "forest"];
-    const O = [null, "stone", "stick", "stump", "tree", "log"];
+    const G = ["grass", "farm", "path", "water", "sand", "forest", "river", "sea", "rock", "dock"];
+    const O = [null, "stone", "stick", "stump", "tree", "log", "copperOre", "tinOre"];
     golden("maps", [3, 42, 2024].map((seed) => {
       const s = newWorld(seed);
       return {
         seed,
-        tiles: s.tiles.map((t) => [G.indexOf(t.ground), O.indexOf(t.obstacle), +t.weeds, t.soil.om, t.soil.life, t.soil.structure, t.soil.water, t.soil.nutrients, t.soil.ph]),
+        tiles: s.tiles.map((t) => [
+          G.indexOf(t.ground), O.indexOf(t.obstacle), +t.weeds, t.soil.om, t.soil.life, t.soil.structure, t.soil.water, t.soil.nutrients, t.soil.ph,
+          t.elev ?? 0, +("ramp" in t), +("elev" in t),
+        ]),
         buildings: s.buildings,
         weather: s.weather,
       };
@@ -212,6 +216,8 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "craft": return { state: craft(s, op.id as string, (op.at as string) ?? undefined) };
     case "eat": return { state: eat(s, op.slot as number) };
     case "energy": return { state: { ...s, energy: op.n as number } };
+    case "coins": return { state: { ...s, coins: op.n as number } };
+    case "travel": return { state: OPS.travel(s, op.id as string) };
     case "turnPlacing": return { state: turnPlacing(s) };
     case "rotate": return { state: rotateBuilding(s) };
     case "stock": return { state: stockStall(s, op.slot as number, op.qty as number, op.price as number) };
@@ -243,7 +249,7 @@ function apply(s: WorldState, op: Op): { state: WorldState; text?: string } {
     case "accept": {
       if (op.board === undefined) return { state: accept(s, op.id as string) };
       const r = boardRequests(s)[op.board as number];
-      return { state: accept(s, r.id, r.board) };
+      return { state: r ? accept(s, r.id, r.board) : s };
     }
     case "turnIn": {
       const r = turnIn(s, op.id as string);
@@ -361,6 +367,88 @@ function kitchen(id: (kind: string) => string | undefined, slot: (item: string) 
   return ops;
 }
 
+/**
+ * Around the valley: meet Kai (he hands you a rod), walk from signposts, fish the sea, the river,
+ * and the forest pond, cook the catch, climb the mountain trail (and bump into a cliff), and rent
+ * allotments in the park.
+ */
+function valley(id: (kind: string) => string | undefined, today: () => number): (() => Op)[] {
+  const ops: (() => Op)[] = [];
+  const add = (op: Op) => ops.push(() => op);
+  add({ op: "talk", id: "kai" });
+  add({ op: "talk", id: "kai" });
+  // Too far from a signpost to travel; then from the one by Garden Lane, down to the beach.
+  add({ op: "player", x: 30, y: 20, facing: "up" });
+  add({ op: "travel", id: "beach" });
+  add({ op: "player", x: 42, y: 11, facing: "up" });
+  add({ op: "travel", id: "beach" });
+  add({ op: "travel", id: "nowhere" });
+  // The sea, off the end of the dock: the can won't fill with salt water, then cast after cast.
+  add({ op: "player", x: DOCK.x1, y: DOCK.y1 - 2, facing: "right" });
+  add({ op: "selectItem", item: "can" });
+  add({ op: "applyTool" });
+  add({ op: "interact" });
+  add({ op: "selectItem", item: "rod" });
+  for (let k = 0; k < 8; k++) {
+    add({ op: "applyTool" });
+    add({ op: "tick", n: 7 + k * 13 });
+  }
+  add({ op: "player", x: DOCK.x1, y: DOCK.y1 - 2, facing: "down" });
+  add({ op: "applyTool" });
+  // The river, from its bank in town.
+  add({ op: "player", x: RIVER.x0 - 1, y: 20, facing: "right" });
+  for (let k = 0; k < 6; k++) {
+    add({ op: "applyTool" });
+    add({ op: "tick", n: 11 + k * 17 });
+  }
+  ops.push(() => ({ op: "weather", day: today(), w: { kind: "storm", high: 70, low: 55 } }));
+  add({ op: "applyTool" });
+  add({ op: "selectItem", item: "can" });
+  add({ op: "applyTool" });
+  add({ op: "interact" });
+  // From the beach signpost to the forest pond, and fish it.
+  add({ op: "player", x: 69, y: 76, facing: "up" });
+  add({ op: "travel", id: "pond" });
+  add({ op: "player", x: 110, y: 56, facing: "right" });
+  add({ op: "selectItem", item: "rod" });
+  for (let k = 0; k < 6; k++) {
+    add({ op: "applyTool" });
+    add({ op: "tick", n: 5 + k * 23 });
+  }
+  add({ op: "energy", n: 2 });
+  add({ op: "applyTool" });
+  add({ op: "energy", n: 100 });
+  // Cook what you caught.
+  add({ op: "give", item: "bluegill", qty: 2, grade: null });
+  ops.push(() => ({ op: "craft", id: "bakedFish", at: id("oven") }));
+  ops.push(() => ({ op: "craft", id: "panFish", at: id("stove") }));
+  ops.push(() => ({ op: "craft", id: "fishStew", at: id("stove") }));
+  // Up the mountain trail: a ramp climbs a terrace; a cliff doesn't let you.
+  add({ op: "player", x: 104, y: 11, facing: "up" });
+  add({ op: "travel", id: "trail" });
+  for (let m = 0; m < 6; m++) add({ op: "move", dx: 0.35, dy: 0 });
+  for (const [x, y] of [[108, 20], [109, 20], [110, 20], [111, 20]]) add({ op: "tile", i: y * W + x, patch: { obstacle: null } });
+  add({ op: "player", x: 109, y: 20, facing: "right" });
+  for (let m = 0; m < 6; m++) add({ op: "move", dx: 0.35, dy: 0 });
+  add({ op: "player", x: 110, y: 20, facing: "left" });
+  for (let m = 0; m < 6; m++) add({ op: "move", dx: -0.35, dy: 0 });
+  // Rent allotments in the park (a flat price, not the next plot's), and dig in.
+  const a = PLOTS[ALLOTMENT0];
+  add({ op: "player", x: a.x0, y: a.y0 - 1, facing: "down" });
+  add({ op: "coins", n: 100 });
+  add({ op: "buyPlot", id: ALLOTMENT0 });
+  add({ op: "coins", n: 2000 });
+  add({ op: "buyPlot", id: ALLOTMENT0 });
+  add({ op: "buyPlot", id: ALLOTMENT0 + 4 });
+  add({ op: "buyPlot", id: 30 });
+  add({ op: "tile", i: a.y0 * W + a.x0, patch: { obstacle: null, weeds: false } });
+  add({ op: "selectItem", item: "hoe" });
+  add({ op: "applyTool" });
+  add({ op: "player", x: a.x0 + 1, y: a.y0 - 1, facing: "down" });
+  add({ op: "travel", id: "square" });
+  return ops;
+}
+
 function playthrough(seed: number, settings: Partial<GameSettings>, steps: number, prelude: Op[] = [], mine = false, lessons = false) {
   const r = stream(seed * 31 + 7);
   const pick = <T,>(xs: readonly T[]) => xs[Math.floor(r() * xs.length)];
@@ -444,6 +532,7 @@ function playthrough(seed: number, settings: Partial<GameSettings>, steps: numbe
     (kind) => s.buildings.find((b) => b.kind === kind)?.id,
     (item) => s.inventory.findIndex((x) => x?.item === item),
   )) run(op());
+  for (const op of valley((kind) => s.buildings.find((b) => b.kind === kind)?.id, () => Math.floor((s.minute - 360) / 1440) + 1)) run(op());
   if (mine) {
     // Open the old mine, then dig down floor by floor, sometimes going straight for the ladder rock.
     run({ op: "give", item: "wood", qty: 20, grade: null });
@@ -578,7 +667,28 @@ describe("Godot playthroughs", () => {
     const v3 = { ...s, version: 3, tiles: oldTiles, buildings: [...s.buildings.filter((b) => b.x < 38 && b.kind !== "chest"), { id: "store", kind: "store" as const, x: 30, y: 5, data: {} }] };
     const v1: Record<string, unknown> = { ...v3, version: 1, weather: "sunny" };
     delete v1.settings;
-    golden("migrations", [v3, v1].map((old) => finalState(loadWorld(JSON.stringify(old))!)));
+    // A version 10 save, from before the valley grew: 76 by 64, with the community garden
+    // (mulched here) at its old spot, and the player out in the old town.
+    const oldGarden = { x0: 63, y0: 21, x1: 69, y1: 27 };
+    const v10Tiles = Array.from({ length: OLD_W * OLD_ROWS }, (_, i) => {
+      const x = i % OLD_W, y = Math.floor(i / OLD_W);
+      const t = s.tiles[y * W + x];
+      return x >= oldGarden.x0 && x <= oldGarden.x1 && y >= oldGarden.y0 && y <= oldGarden.y1 ? { ...t, ground: "farm" as const, mulch: x === y + 42 } : t;
+    });
+    const v10 = {
+      ...s, version: 10, tiles: v10Tiles,
+      buildings: [...s.buildings.filter((b) => b.x < 38), { id: "old-lamp", kind: "lamp" as const, x: 50, y: 10, data: {} }],
+      critters: [...s.critters, { id: "old-town-bee", kind: "ladybug", x: 60, y: 14, until: s.minute + 600 }],
+      player: { x: 50, y: 11, facing: "down" as const },
+    };
+    // Standing where a building now is: you're moved to the square.
+    const v10b = { ...v10, player: { x: 43.2, y: 6, facing: "up" as const } };
+    golden("migrations", [v3, v1, v10, v10b].map((old) => finalState(loadWorld(JSON.stringify(old))!)));
     expect(loadWorld(JSON.stringify(v1))).not.toBeNull();
+    // A packed version 11 save: only the tiles that changed since day one are stored.
+    let w = s;
+    w = { ...w, tiles: w.tiles.map((t, i) => (i === 20 * W + 15 ? { ...t, tilled: true, moisture: 55 } : i === 40 * W + 90 ? { ...t, obstacle: null, ground: "path" as const } : t)) };
+    const raw = saveWorld(w);
+    golden("packed", { raw, final: finalState(loadWorld(raw)!), changed: JSON.parse(raw).tiles.flatMap((t: unknown, i: number) => (t === 0 ? [] : [i])) });
   });
 });

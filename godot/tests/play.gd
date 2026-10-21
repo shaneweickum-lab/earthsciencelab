@@ -33,6 +33,10 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 			return {"state": World.eat(s, int(op.slot))}
 		"energy":
 			return {"state": Js.with(s, {"energy": op.n})}
+		"coins":
+			return {"state": Js.with(s, {"coins": op.n})}
+		"travel":
+			return {"state": World.travel_to(s, op.id)}
 		"turnPlacing":
 			return {"state": World.turn_placing(s)}
 		"rotate":
@@ -90,7 +94,10 @@ static func apply(s: Dictionary, op: Dictionary) -> Dictionary:
 		"accept":
 			if op.get("board") == null:
 				return {"state": Quests.accept(s, op.id)}
-			var r: Dictionary = Quests.board_requests(s)[int(op.board)]
+			var reqs := Quests.board_requests(s)
+			if int(op.board) >= reqs.size():
+				return {"state": s}
+			var r: Dictionary = reqs[int(op.board)]
 			return {"state": Quests.accept(s, r.id, r.board)}
 		"turnIn":
 			var r := Quests.turn_in(s, op.id)

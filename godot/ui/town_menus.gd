@@ -190,3 +190,73 @@ static func quest_log() -> Dictionary:
 			story += 1
 	body.add_child(Ui.small("Finished: %d story quests, %d notice-board requests." % [story, board]))
 	return m
+
+
+# ───────────────────────── around the valley ─────────────────────────
+
+## A signpost: everywhere it points, and how long the walk takes. Port of TravelMenu in Travel.tsx.
+static func travel_menu() -> Dictionary:
+	var w := Game.world
+	var m := Ui.modal("Signpost", "🪧", Game.close)
+	var body: VBoxContainer = m.body
+	body.add_child(Ui.text("Pick a place and you'll walk there. The clock keeps running on the way.", 14, Ui.MUTED))
+	var p := World.player_tile(w)
+	for d in WorldMap.DESTINATIONS:
+		var row := Ui.hbox(10)
+		row.add_child(Ui.emoji_icon(d.icon, 28))
+		var name := Ui.text(d.name, 15, Ui.INK, 800, false)
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name)
+		var here: bool = absi(int(d.x) - p.x) + absi(int(d.y) - p.y) <= 3
+		if here:
+			row.add_child(Ui.pill("You're here", Ui.PAPER, Ui.MUTED, 13))
+		else:
+			var steps := Town.route(w, [p.x, p.y], [int(d.x), int(d.y)]).size()
+			var id: String = d.id
+			row.add_child(Ui.button("🚶 %d min" % World.travel_minutes(steps), func():
+				Game.update(func(s): return World.travel_to(s, id))
+				Game.close(), "primary", 14))
+		body.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+	return m
+
+
+## Kai's fishing hut: a rod for sale, and Kai buys whatever you've caught. Port of HutMenu in Travel.tsx.
+static func hut_menu() -> Dictionary:
+	var w := Game.world
+	var m := Ui.modal("Kai's Fishing Hut", "🎣", Game.close)
+	var body: VBoxContainer = m.body
+	var rod := Items.get_def("rod")
+	var row := Ui.hbox(10)
+	row.add_child(Ui.item_icon("rod", 32))
+	var info := Ui.vbox(2)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info.add_child(Ui.text(rod.name, 15, Ui.INK, 900))
+	info.add_child(Ui.text(rod.desc, 12, Ui.MUTED))
+	row.add_child(info)
+	row.add_child(Ui.button("🪙 %s" % Js.num(rod.price), func(): Game.update(func(s): return World.buy(s, "rod", 1)), "primary", 14, w.coins < rod.price))
+	body.add_child(Ui.panel(row, Ui.CARD, 12, 8))
+	body.add_child(Ui.heading("Kai buys your catch"))
+	var catches := {}
+	for c in Data.catches():
+		catches[c.id] = true
+	var any := false
+	for i in w.inventory.size():
+		var s = w.inventory[i]
+		if s == null or not catches.has(s.item):
+			continue
+		any = true
+		var def := Items.get_def(s.item)
+		var each := Items.sell_price(def, s.get("grade"), false)
+		var fish := Ui.hbox(10)
+		fish.add_child(Ui.item_icon(s.item, 30))
+		var label := Ui.text("%s ×%s" % [def.name, Js.num(s.qty)], 15, Ui.INK, 800)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		fish.add_child(label)
+		var slot: int = i
+		var qty := int(s.qty)
+		fish.add_child(Ui.button("Sell 1 · %s" % Js.num(each), func(): Game.update(func(x): return World.sell_now(x, slot, 1)), "ghost", 13))
+		fish.add_child(Ui.button("All · %s" % Js.num(each * qty), func(): Game.update(func(x): return World.sell_now(x, slot, qty)), "primary", 13))
+		body.add_child(Ui.panel(fish, Ui.CARD, 12, 8))
+	if not any:
+		body.add_child(Ui.panel(Ui.text("No fish yet. Try the dock at dawn or dusk.", 14, Ui.MUTED), Ui.PAPER, 12, 14, Color(0, 0, 0, 0), 0))
+	return m

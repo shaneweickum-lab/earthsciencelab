@@ -32,22 +32,30 @@ static func npc(id: String) -> Variant:
 
 # ───────────────────────── where NPCs are ─────────────────────────
 
-## Shortest walkable route between two tiles (breadth-first search). Falls back to a straight hop.
+## Shortest walkable route between two tiles (breadth-first search over the whole valley, minding
+## the mountain cliffs). Falls back to a straight hop. Routes, and which tiles can be walked, are
+## remembered until something is built or taken down.
 static func route(state: Dictionary, from: Array, to: Array) -> Array:
 	var cache: Dictionary = {}
+	var walk: Array
 	var found := false
 	for entry in _route_caches:
 		if is_same(entry[0], state.buildings):
 			cache = entry[1]
+			walk = entry[2]
 			found = true
 			break
+	var W := WorldMap.W
+	var H := WorldMap.H
 	if not found:
-		_route_caches.push_front([state.buildings, cache])
+		walk = []
+		walk.resize(W * H)
+		walk.fill(2)
+		_route_caches.push_front([state.buildings, cache, walk])
 		_route_caches.resize(mini(_route_caches.size(), 8))
 	var key := "%d,%d>%d,%d" % [from[0], from[1], to[0], to[1]]
 	if cache.has(key):
 		return cache[key]
-	var W := WorldMap.W
 	var start: int = int(from[1]) * W + int(from[0])
 	var goal: int = int(to[1]) * W + int(to[0])
 	var prev := {start: -1}
@@ -64,7 +72,14 @@ static func route(state: Dictionary, from: Array, to: Array) -> Array:
 			var nx: int = cx + d[0]
 			var ny: int = cy + d[1]
 			var n := ny * W + nx
-			if prev.has(n) or not (n == goal or World.is_walkable(state, nx, ny)):
+			if nx < 0 or ny < 0 or nx >= W or ny >= H or prev.has(n):
+				continue
+			if n != goal:
+				if walk[n] == 2:
+					walk[n] = 1 if World.is_walkable(state, nx, ny) else 0
+				if walk[n] == 0:
+					continue
+			if not World.can_step(state, cx, cy, nx, ny):
 				continue
 			prev[n] = cur
 			queue.append(n)
@@ -155,7 +170,13 @@ static func talk(state: Dictionary, id: String) -> Dictionary:
 	var f := friendship(state, id)
 	var d := Clock.day_of(state.minute)
 	if not f.get("met", false):
-		return {"state": _set_friend(state, id, Js.with(f, {"met": true, "talked": d, "points": f.points + 20})), "text": n.greeting}
+		var met := _set_friend(state, id, Js.with(f, {"met": true, "talked": d, "points": f.points + 20}))
+		# Something they hand you the first time you meet.
+		var welcome = n.get("welcome")
+		var gift = World.add_item(met, welcome.item, 1) if welcome != null else null
+		if gift != null:
+			return {"state": gift, "text": "%s %s" % [n.greeting, welcome.text]}
+		return {"state": met, "text": n.greeting}
 	var h := hearts(state, id)
 	var told: Array = f.get("stories", [])
 	for st in n.stories:
