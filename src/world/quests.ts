@@ -150,6 +150,13 @@ export const QUESTS: QuestDef[] = [
     reward: { coins: 40, items: [{ item: "knife", qty: 1 }, { item: "pan", qty: 1 }, { item: "carrotSticks", qty: 2 }], friendship: 40 },
   },
   {
+    id: "first-catch", giver: "kai", title: "First catch",
+    ask: "Let's see what you've got! Catch me a fish. Any fish. The river's best in spring, the pond at dawn, and the sea any time.",
+    thanks: "There it is! You've got the knack. Every water has its own fish, so keep a list in your journal. Here, a little something for the cooking pot.",
+    steps: [{ goal: { kind: "tally", key: "fished", count: 1 }, label: "Catch a fish" }],
+    reward: { coins: 80, items: [{ item: "crop_potato", qty: 2 }], friendship: 60 },
+  },
+  {
     id: "reopen-mine", giver: "luis", title: "The old mine",
     ask: "My grandfather dug copper and tin in the old mine past town. It's been boarded up for years. Bring me 20 wood for timbers and 10 stone, and we'll shore it up together.",
     thanks: "There! The tunnel's safe again. Watch for ladders hidden under the rocks; the deeper you go, the better the ore. And bring a good pickaxe.",

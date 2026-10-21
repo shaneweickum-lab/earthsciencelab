@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { Color, Object3D, type InstancedMesh } from "three";
 
 export interface Inst {
@@ -18,8 +18,32 @@ export interface Inst {
 const dummy = new Object3D();
 const tmp = new Color();
 
-/** Draws many copies of one shape in a single draw call. */
+/** Chunks of the valley, in tiles: each is drawn (or skipped, when it's off screen) on its own. */
+export const CHUNK = 16;
+
+/** Split instances by the chunk of the valley they stand in. */
+export function chunked(items: Inst[]): Inst[][] {
+  const out = new Map<number, Inst[]>();
+  for (const it of items) {
+    const key = Math.floor(it.z / CHUNK) * 1000 + Math.floor(it.x / CHUNK);
+    const list = out.get(key);
+    if (list) list.push(it);
+    else out.set(key, [it]);
+  }
+  return [...out.values()];
+}
+
+/** Draws many copies of one shape, a draw call per chunk of the valley, skipping chunks off screen. */
 export function Instanced({ items, children, castShadow }: { items: Inst[]; children: React.ReactNode; castShadow?: boolean }) {
+  const chunks = useMemo(() => chunked(items), [items]);
+  return (
+    <>
+      {chunks.map((c, i) => <InstancedChunk key={i} items={c} castShadow={castShadow}>{children}</InstancedChunk>)}
+    </>
+  );
+}
+
+function InstancedChunk({ items, children, castShadow }: { items: Inst[]; children: React.ReactNode; castShadow?: boolean }) {
   const ref = useRef<InstancedMesh>(null);
   useLayoutEffect(() => {
     const mesh = ref.current;
@@ -43,7 +67,7 @@ export function Instanced({ items, children, castShadow }: { items: Inst[]; chil
   // Allocate a little headroom so small changes don't rebuild the mesh.
   const cap = Math.ceil(items.length / 64) * 64;
   return (
-    <instancedMesh key={cap} ref={ref} args={[undefined, undefined, cap]} castShadow={castShadow} receiveShadow frustumCulled={false}>
+    <instancedMesh key={cap} ref={ref} args={[undefined, undefined, cap]} castShadow={castShadow} receiveShadow>
       {children}
     </instancedMesh>
   );

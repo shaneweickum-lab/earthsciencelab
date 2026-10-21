@@ -4,7 +4,9 @@ import type { DayWeather } from "./weather";
 
 export type Season = "Spring" | "Summer" | "Fall" | "Winter";
 export type WeatherId = "sunny" | "cloudy" | "rain" | "storm" | "heat" | "fog" | "frost" | "snow";
-export type Ground = "grass" | "farm" | "path" | "water" | "sand" | "forest" | "cave" | "caveWall";
+export type Ground = "grass" | "farm" | "path" | "water" | "sand" | "forest" | "cave" | "caveWall"
+  // The valley: the river and sea (water too), mountain rock, and wooden planks on bridges and the dock.
+  | "river" | "sea" | "rock" | "dock";
 /** Rocks with ore in them, found in the mine. */
 export type OreRock = "copperOre" | "tinOre" | "ironOre" | "goldOre" | "mithrilOre";
 export type Obstacle = "stone" | "stick" | "stump" | "tree" | "log" | "sapling" | OreRock | null;
@@ -53,6 +55,10 @@ export interface Tile {
   boost?: number;
   /** Damage done so far to the obstacle here (see OBSTACLE_HP). */
   hits?: number;
+  /** How high it stands: mountain terraces are 1 to 3 (missing means 0). */
+  elev?: number;
+  /** A trail step that climbs one terrace (you can walk up or down it). */
+  ramp?: boolean;
   /** The day a felled tree's stump sprouts (or its sapling grows back into a tree). */
   regrow?: number;
 }
@@ -69,13 +75,13 @@ export type BuildingKind =
   | "extension" | "cottage" | "fountain" | "noticeBoard" | "field" | "lamp" | "prop" | "barn" | "silo" | "windmill" | "waterTower"
   // The mine: its entrance in town, and the ladders on each floor.
   | "mineEntrance" | "ladderUp" | "ladderDown"
-  // The gates along Garden Lane, and the market stalls in the square.
-  | "gardenGate" | "marketStall";
+  // The gates along Garden Lane, the market stalls, signposts, and Kai's fishing hut.
+  | "gardenGate" | "marketStall" | "signpost" | "fishingHut";
 
 /** Town buildings the player can't build, pick up, or build over. */
 export const TOWN_KINDS: BuildingKind[] = [
   "house", "store", "shippingBin", "extension", "cottage", "fountain", "noticeBoard", "field", "lamp", "prop", "barn", "silo", "windmill", "waterTower",
-  "mineEntrance", "ladderUp", "ladderDown", "gardenGate", "marketStall",
+  "mineEntrance", "ladderUp", "ladderDown", "gardenGate", "marketStall", "signpost", "fishingHut",
 ];
 
 export interface Building {

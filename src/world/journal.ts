@@ -1,6 +1,6 @@
 import type { Level } from "@/content/soil/curriculum/types";
 
-export type JournalCategory = "insect" | "fungus" | "bird" | "animal" | "soil" | "weather" | "rock";
+export type JournalCategory = "insect" | "fungus" | "bird" | "animal" | "soil" | "weather" | "rock" | "fish";
 
 export interface JournalEntry {
   id: string;
@@ -25,6 +25,7 @@ export const CATEGORY_INFO: Record<JournalCategory, { label: string; icon: strin
   soil: { label: "Soil science", icon: "🪱" },
   weather: { label: "Weather & sky", icon: "🌦️" },
   rock: { label: "Rocks & minerals", icon: "🪨" },
+  fish: { label: "Fish & sea life", icon: "🐟" },
 };
 
 const UC_IPM = { org: "University of California Statewide IPM Program", url: "https://ipm.ucanr.edu" };
@@ -36,6 +37,8 @@ const NOAA = { org: "NOAA National Weather Service, JetStream", url: "https://ww
 const USGS = { org: "U.S. Geological Survey, Water Science School", url: "https://www.usgs.gov/special-topics/water-science-school" };
 const PSU = { org: "Penn State Extension, Manure and Composting", url: "https://extension.psu.edu" };
 const USGS_MINERALS = { org: "U.S. Geological Survey, National Minerals Information Center", url: "https://www.usgs.gov/centers/national-minerals-information-center" };
+const NOAA_FISH = { org: "NOAA Fisheries", url: "https://www.fisheries.noaa.gov/species-directory" };
+const USFWS = { org: "U.S. Fish & Wildlife Service", url: "https://www.fws.gov/program/fish-and-aquatic-conservation" };
 const MYPLATE = { org: "USDA MyPlate", url: "https://www.myplate.gov" };
 const MUSHROOM = { org: "North American Mycological Association", url: "https://namyco.org" };
 
@@ -360,6 +363,114 @@ export const JOURNAL: JournalEntry[] = [
       elementary: "Plants catch sunlight and store its energy in their leaves, roots, and seeds. When you eat food from your garden, that sunshine energy becomes yours!",
       middle: "Photosynthesis turns sunlight, water, and carbon dioxide into sugar. Plants store it as starch (potatoes, wheat) or oil (sunflower seeds). Cooking breaks down tough cell walls and starch so your body can use more of that energy.",
       high: "Heat gelatinizes starch granules and denatures proteins, making them easier for digestive enzymes to break down. Your cells then release the stored chemical energy through cellular respiration, the reverse of photosynthesis: C₆H₁₂O₆ + 6O₂ → 6CO₂ + 6H₂O + energy.",
+    },
+  },
+  {
+    id: "brookTrout", name: "Brook Trout", icon: "🐟", category: "fish", source: USFWS,
+    hint: "Catch one in the river (not in summer).",
+    fact: {
+      elementary: "Brook trout live in cold, clean streams. They need lots of oxygen, so finding them means the river is healthy.",
+      middle: "Cold water holds more dissolved oxygen than warm water. Brook trout need over 6 milligrams per liter, so scientists use them as an indicator species for clean, cold streams.",
+      high: "Brook trout are a char (Salvelinus fontinalis) that can't tolerate water much above 20 °C. Shade from streamside trees (the riparian buffer) keeps rivers cool, and erosion from bare fields fills the gravel they spawn in with silt.",
+    },
+  },
+  {
+    id: "rainbowTrout", name: "Rainbow Trout", icon: "🐟", category: "fish", source: USFWS,
+    hint: "Catch one in the river in spring, summer, or fall.",
+    fact: {
+      elementary: "Rainbow trout have a pink stripe down their side. They eat bugs that fall onto the water.",
+      middle: "Trout eat aquatic insects like mayfly and caddisfly larvae that live under river rocks. Where there are lots of those insects, the water is clean.",
+      high: "Stream invertebrate surveys (counting mayflies, stoneflies, and caddisflies, the 'EPT' taxa) are a standard way to measure water quality. Rainbow trout (Oncorhynchus mykiss) depend on that food web.",
+    },
+  },
+  {
+    id: "catfish", name: "Channel Catfish", icon: "🐟", category: "fish", source: USFWS,
+    hint: "Fish the river at night.",
+    fact: {
+      elementary: "Catfish have whiskers that can taste! They find food in dark, muddy water at night.",
+      middle: "A catfish's barbels (whiskers) and skin are covered in taste buds, so it can find food without seeing it. That's why it hunts at night.",
+      high: "Channel catfish (Ictalurus punctatus) have taste receptors over their whole body, up to about 100,000 of them. Being nocturnal reduces competition with sight-hunting fish.",
+    },
+  },
+  {
+    id: "salmon", name: "Chinook Salmon", icon: "🐟", category: "fish", source: NOAA_FISH,
+    hint: "Fish the river in fall, when salmon swim upstream.",
+    fact: {
+      elementary: "Salmon hatch in rivers, grow up in the ocean, and swim all the way back to the same river to lay eggs.",
+      middle: "Salmon are anadromous: they live in salt water but breed in fresh water. They find their home stream by smell, years later.",
+      high: "When Chinook (Oncorhynchus tshawytscha) die after spawning, their bodies carry ocean nitrogen and phosphorus far inland. Studies find marine nitrogen in streamside trees, so salmon literally fertilize the forest.",
+    },
+  },
+  {
+    id: "bluegill", name: "Bluegill", icon: "🐟", category: "fish", source: USFWS,
+    hint: "Fish a pond.",
+    fact: {
+      elementary: "Bluegills are little sunfish that live in warm ponds. Look for the dark blue spot near their gills.",
+      middle: "Male bluegills sweep out round nests in the pond bottom and guard the eggs until they hatch.",
+      high: "Bluegill (Lepomis macrochirus) are a key middle link in pond food webs: they eat insects and zooplankton, and are eaten by bass and herons. Ponds need that balance of prey and predators.",
+    },
+  },
+  {
+    id: "perch", name: "Yellow Perch", icon: "🐟", category: "fish", source: USFWS,
+    hint: "Fish a pond in the cooler seasons.",
+    fact: {
+      elementary: "Yellow perch have stripes like a tiger. They swim together in groups called schools.",
+      middle: "Swimming in a school helps small fish stay safe: a predator has a hard time picking out one fish in a moving crowd.",
+      high: "Schooling reduces each fish's risk (the 'dilution effect') and confuses predators. Yellow perch (Perca flavescens) stay active under winter ice, which is why ice fishers catch them.",
+    },
+  },
+  {
+    id: "bass", name: "Largemouth Bass", icon: "🐟", category: "fish", source: USFWS,
+    hint: "Fish a pond at dawn, when bass hunt.",
+    fact: {
+      elementary: "Largemouth bass are the biggest hunters in the pond. They hide in weeds and ambush smaller fish.",
+      middle: "A top predator keeps the rest of the pond in balance. Without bass, small fish can grow so crowded that they all stay stunted.",
+      high: "Largemouth bass (Micropterus salmoides) are crepuscular: most active at dawn and dusk, when low light gives an ambush predator the advantage.",
+    },
+  },
+  {
+    id: "flounder", name: "Flounder", icon: "🐟", category: "fish", source: NOAA_FISH,
+    hint: "Fish the sea off the dock.",
+    fact: {
+      elementary: "Flounder are flat fish that lie on the sandy sea floor. Both of their eyes are on the same side of their head!",
+      middle: "Baby flounder swim upright like other fish. As they grow, one eye moves across the head to the other side, and they lie flat on the bottom.",
+      high: "During metamorphosis a larval flatfish's skull reshapes and one eye migrates. Flounder can also change their skin pattern to match the seafloor (camouflage).",
+    },
+  },
+  {
+    id: "mackerel", name: "Mackerel", icon: "🐟", category: "fish", source: NOAA_FISH,
+    hint: "Fish the sea in summer or fall.",
+    fact: {
+      elementary: "Mackerel are fast, shiny ocean fish that swim in giant groups.",
+      middle: "Mackerel have to keep swimming: water flowing over their gills as they move is how they breathe.",
+      high: "Atlantic mackerel (Scomber scombrus) use ram ventilation and lack a swim bladder. They migrate along the coast with water temperature, so warming oceans are shifting where they're found.",
+    },
+  },
+  {
+    id: "stripedBass", name: "Striped Bass", icon: "🐟", category: "fish", source: NOAA_FISH,
+    hint: "Fish the sea in spring or fall.",
+    fact: {
+      elementary: "Striped bass live in the sea but swim up rivers in spring to lay their eggs.",
+      middle: "Like salmon, striped bass move between salt and fresh water. Their eggs need flowing river water to stay afloat until they hatch.",
+      high: "Striped bass (Morone saxatilis) populations crashed in the 1980s from overfishing and pollution, then recovered after fishing limits: an example of fisheries management working.",
+    },
+  },
+  {
+    id: "crab", name: "Blue Crab", icon: "🦀", category: "fish", source: NOAA_FISH,
+    hint: "Fish the sea in summer or fall.",
+    fact: {
+      elementary: "Blue crabs walk sideways and swim with paddle-shaped back legs.",
+      middle: "Crabs have a hard outer skeleton (exoskeleton). To grow, they molt: they crawl out of the old shell and their new soft shell hardens.",
+      high: "Blue crabs (Callinectes sapidus) are omnivores and scavengers that recycle nutrients on the seafloor. Their larvae drift in the ocean before returning to estuaries, where rivers meet the sea.",
+    },
+  },
+  {
+    id: "kelp", name: "Kelp", icon: "🌿", category: "fish", source: NOAA_FISH,
+    hint: "Fish the sea.",
+    fact: {
+      elementary: "Kelp is a giant seaweed. It grows in underwater forests that are home to lots of sea animals.",
+      middle: "Seaweed isn't a plant, but it makes food from sunlight too. Farmers have long spread it on fields: it adds potassium and minerals to the soil.",
+      high: "Kelp is a brown alga that can grow up to half a meter a day. Kelp forests store carbon and buffer waves; as a soil amendment, seaweed adds potassium, trace minerals, and plant growth hormones.",
     },
   },
 ];

@@ -1,6 +1,6 @@
 import { nextRandom } from "@/game/rng";
 import { seasonOf, startOfDay } from "./clock";
-import { BUILDING_SIZE, H, idx, W } from "./map";
+import { BUILDING_SIZE, H, idx, TOWN, W } from "./map";
 import type { Critter, Season, WeatherId, WorldState } from "./types";
 
 /** Where and when each critter or fungus can turn up. */
@@ -81,9 +81,9 @@ export function spawnCritters(state: WorldState, day: number): WorldState {
   for (let n = 0; n < count && total > 0; n++) {
     let r = rand() * total;
     const spec = pool[weights.findIndex((w) => (r -= w) < 0)] ?? pool[0];
-    // Try some random spots for its habitat.
+    // Try some random spots for its habitat: mostly around the farm and the country road, then anywhere in the valley.
     for (let tries = 0; tries < 60; tries++) {
-      const x = Math.floor(rand() * W), y = Math.floor(rand() * H);
+      const x = Math.floor(rand() * (tries < 40 ? TOWN.x0 : W)), y = Math.floor(rand() * H);
       if (critters.some((c) => c.x === x && c.y === y)) continue;
       if (!habitatOk(state, x, y, spec.habitat)) continue;
       critters.push({ id: `${spec.kind}-${day}-${n}`, kind: spec.kind, x, y, until });

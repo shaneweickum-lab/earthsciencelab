@@ -1,12 +1,21 @@
 import { nextRandom } from "@/game/rng";
 import type { Building, Ground, MineFloor, Obstacle, OreRock, SoilState, Tile } from "./types";
 
-/** The farm is the west part of the map (x < 38); the town is east of the forest strip. */
-export const W = 76;
-export const H = 64;
+/**
+ * The valley. The farm is the west part (x < 38), behind the hedge and Garden Lane. A long
+ * country road leads east to the town, with its square, market, and park; past the town are the
+ * river, the mountains (the mine is up there), the forest pond, and the beach along the south.
+ */
+export const W = 128;
+export const H = 84;
 export const FARM_W = 38;
 /** The map was 36 rows tall before the South Fields were added below the forest belt. */
 export const OLD_H = 36;
+/** Before the valley grew (save version 11), the map was 76 wide and 64 tall, with the town just past the lane. */
+export const OLD_W = 76;
+export const OLD_ROWS = 64;
+/** How far east the town moved when the valley grew. */
+export const TOWN_SHIFT = 22;
 
 export const idx = (x: number, y: number) => y * W + x;
 export const inBounds = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H;
@@ -18,9 +27,9 @@ export const GATE_ROWS = [4, 6, 8, 14, 16, 18, 20, 22];
 /** Where you come out on your farm through its gate, and the tile on its road that leads back to town. */
 export const GARDEN_ENTRY = { x: 36, y: 11, facing: "left" as const };
 export const GARDEN_EXIT_X = 37;
-/** Market stalls stand in a row across the town square; the first one is yours. */
+/** Market stalls stand in a row in the market; the first one is yours. */
 export const STALL_ROW = 18;
-export const STALL_X0 = 53;
+export const STALL_X0 = 88;
 export const STALL_SIZE = 6;
 
 /** True when a farmer on their farm has walked to the end of its road. */
@@ -43,11 +52,21 @@ export interface Plot {
  * The farmland in 6×4-tile plots: 12 in the field by the house, 24 in the South Fields. A new
  * farm owns only plot 0 (nearest the house); the rest are bought or earned from quests.
  */
-export const PLOTS: Plot[] = [FARM, SOUTH].flatMap((a) => {
-  const out: Omit<Plot, "id">[] = [];
-  for (let y = a.y0; y + 3 <= a.y1; y += 4) for (let x = a.x0; x + 5 <= a.x1; x += 6) out.push({ x0: x, y0: y, x1: x + 5, y1: y + 3 });
-  return out;
-}).map((p, id) => ({ id, ...p }));
+export const PLOTS: Plot[] = [
+  ...[FARM, SOUTH].flatMap((a) => {
+    const out: Omit<Plot, "id">[] = [];
+    for (let y = a.y0; y + 3 <= a.y1; y += 4) for (let x = a.x0; x + 5 <= a.x1; x += 6) out.push({ x0: x, y0: y, x1: x + 5, y1: y + 3 });
+    return out;
+  }),
+  // Allotments in the park: small beds in town you can rent.
+  ...[34, 40].flatMap((y) => [66, 71, 76].map((x) => ({ x0: x, y0: y, x1: x + 3, y1: y + 2 }))),
+].map((p, id) => ({ id, ...p }));
+
+/** The first allotment's plot id (the farm has 36 plots before them). */
+export const ALLOTMENT0 = 36;
+export const isAllotment = (id: number) => id >= ALLOTMENT0;
+/** What an allotment costs to rent: the same for each one. */
+export const ALLOTMENT_RENT = 150;
 
 /** The plot a tile is in, or null outside the farmland. */
 export function plotAt(x: number, y: number): number | null {
@@ -58,13 +77,59 @@ export function plotAt(x: number, y: number): number | null {
 /** The price of the next plot, rising with how many you own. */
 export const plotPrice = (owned: number) => 100 + 40 * owned + 3 * owned * owned;
 
-/** The town: its square, the community garden, and where the road runs. */
+/** The town: its square, the market, the community garden, the park, and where the road runs. */
 export const TOWN = {
-  x0: 42,
+  x0: 64,
   road: 11,
-  square: { x0: 52, y0: 13, x1: 60, y1: 19 },
-  garden: { x0: 63, y0: 21, x1: 69, y1: 27 },
+  square: { x0: 74, y0: 13, x1: 82, y1: 19 },
+  market: { x0: 86, y0: 13, x1: 97, y1: 19 },
+  garden: { x0: 85, y0: 21, x1: 91, y1: 27 },
+  park: { x0: 64, y0: 31, x1: 99, y1: 72 },
 };
+
+/** The river runs south down the valley into the sea, with bridges at the road and in the park. */
+export const RIVER = { x0: 100, x1: 103, y1: 78, bridges: [10, 11, 12, 45] };
+/** Beach sand, then the sea; the dock reaches out from the sand. */
+export const BEACH_Y = 73;
+export const SEA_Y = 79;
+export const DOCK = { x0: 70, x1: 71, y0: 76, y1: 82 };
+/** The mountains: three rock terraces, each higher than the last (elevation 1, 2, 3). */
+export const MOUNTAINS = { x0: 104, y0: 3, x1: 125, y1: 38 };
+export const TERRACES = [
+  { x0: 106, y0: 3, x1: 125, y1: 34 },
+  { x0: 110, y0: 3, x1: 125, y1: 28 },
+  { x0: 115, y0: 3, x1: 125, y1: 20 },
+];
+/** The forest east of the river, with a pond in the middle. */
+export const FOREST = { x0: 104, y0: 39, x1: 125, y1: 72 };
+export const POND = { cx: 115, cy: 56, rx: 5, ry: 4 };
+
+/** Walking up the mountain: the trail, as [x, y, ramp] (ramps climb one terrace). */
+export const TRAIL: [number, number, boolean?][] = [
+  [104, 11], [105, 11], [106, 11, true],
+  ...Array.from({ length: 15 }, (_, i) => [107, 12 + i] as [number, number]),
+  [107, 11], [108, 26], [109, 26], [110, 26, true],
+  ...Array.from({ length: 13 }, (_, i) => [111, 13 + i] as [number, number]),
+  [111, 26], [112, 13], [113, 13], [114, 13], [115, 13, true], [116, 13],
+  ...Array.from({ length: 5 }, (_, i) => [117, 9 + i] as [number, number]),
+  [118, 9], [119, 9], [120, 9], [121, 9],
+];
+
+/** How high a tile is: the number of terraces it's on (0 off the mountains). */
+export function elevationAt(x: number, y: number): number {
+  return TERRACES.filter((t) => x >= t.x0 && x <= t.x1 && y >= t.y0 && y <= t.y1).length;
+}
+
+/** Signposts, and the places they can take you (where you arrive, facing). */
+export const DESTINATIONS = [
+  { id: "farm", name: "Your farm gate", icon: "🏡", x: 40, y: 5, facing: "left" as const },
+  { id: "square", name: "Town square", icon: "⛲", x: 75, y: 17, facing: "right" as const },
+  { id: "market", name: "Market", icon: "🧺", x: 90, y: 16, facing: "down" as const },
+  { id: "park", name: "Park & allotments", icon: "🌳", x: 72, y: 38, facing: "up" as const },
+  { id: "beach", name: "Beach & dock", icon: "🏖️", x: 69, y: 76, facing: "right" as const },
+  { id: "trail", name: "Mountain trail", icon: "⛰️", x: 105, y: 11, facing: "right" as const },
+  { id: "pond", name: "Forest pond", icon: "🌲", x: 107, y: 50, facing: "right" as const },
+];
 
 export const BUILDING_SIZE: Record<Building["kind"], [number, number]> = {
   house: [5, 4], store: [5, 4], shippingBin: [1, 1],
@@ -75,11 +140,11 @@ export const BUILDING_SIZE: Record<Building["kind"], [number, number]> = {
   barn: [4, 4], silo: [2, 2], windmill: [3, 2], waterTower: [2, 2],
   mineEntrance: [2, 2], ladderUp: [1, 1], ladderDown: [1, 1],
   workbench: [1, 1], grinder: [1, 1], spinningWheel: [1, 1], furnace: [1, 1], stove: [1, 1], oven: [1, 1],
-  gardenGate: [1, 1], marketStall: [1, 1],
+  gardenGate: [1, 1], marketStall: [1, 1], signpost: [1, 1], fishingHut: [3, 2],
 };
 
-/** The mine entrance (2×2, opening south onto the road), and the size of each mine floor. */
-export const MINE_ENTRANCE = { x: 71, y: 8 };
+/** The mine entrance (2×2, opening south onto the trail at the top of the mountain), and the size of each mine floor. */
+export const MINE_ENTRANCE = { x: 119, y: 7 };
 export const MINE_W = 24;
 export const MINE_H = 18;
 
@@ -140,33 +205,51 @@ export function farmBuildings(): Building[] {
   ];
 }
 
-/** Everything in town. Ids are fixed so old saves can be upgraded by adding what's missing. */
+/** Everything in town and around the valley. Ids are fixed so old saves can be upgraded by id. */
 export function townBuildings(): Building[] {
   const lamp = (id: string, x: number, y: number): Building => ({ id, kind: "lamp", x, y, data: {} });
   const prop = (id: string, x: number, y: number, model: string): Building => ({ id, kind: "prop", x, y, data: { model } });
+  const sign = (id: string, x: number, y: number): Building => ({ id, kind: "signpost", x, y, data: {} });
   return [
-    { id: "store", kind: "store", x: 43, y: 6, data: { owner: "mei", sign: "Seed & Soil Co." } },
-    { id: "extension", kind: "extension", x: 50, y: 6, data: { owner: "amara", sign: "County Extension Office" } },
-    { id: "june-cottage", kind: "cottage", x: 61, y: 6, data: { owner: "june" } },
-    { id: "ortega-cottage", kind: "cottage", x: 43, y: 22, data: { owner: "luis" } },
-    { id: "ortega-field", kind: "field", x: 49, y: 23, data: { owner: "luis" } },
-    { id: "fountain", kind: "fountain", x: 55, y: 15, data: {} },
-    { id: "notice-board", kind: "noticeBoard", x: 58, y: 13, data: {} },
-    lamp("lamp-1", 52, 13), lamp("lamp-2", 60, 13), lamp("lamp-3", 52, 19), lamp("lamp-4", 60, 19), lamp("lamp-5", 41, 10),
-    prop("cart", 47, 9, "town/cart"),
-    { id: "june-flowers-1", kind: "flowerBed", x: 60, y: 9, data: {} },
-    { id: "june-flowers-2", kind: "flowerBed", x: 65, y: 9, data: {} },
-    { id: "square-flowers-1", kind: "flowerBed", x: 53, y: 19, data: {} },
-    { id: "square-flowers-2", kind: "flowerBed", x: 59, y: 19, data: {} },
-    { id: "garden-hive", kind: "beehive", x: 70, y: 22, data: { owner: "june" } },
-    { id: "ortega-barn", kind: "barn", x: 55, y: 22, data: { owner: "luis" } },
-    { id: "ortega-silo", kind: "silo", x: 59, y: 22, data: { owner: "luis" } },
-    { id: "town-windmill", kind: "windmill", x: 67, y: 14, data: {} },
-    { id: "water-tower", kind: "waterTower", x: 43, y: 14, data: {} },
-    // The old mine, past the town at the east end of the road.
+    { id: "store", kind: "store", x: 65, y: 6, data: { owner: "mei", sign: "Seed & Soil Co." } },
+    { id: "extension", kind: "extension", x: 72, y: 6, data: { owner: "amara", sign: "County Extension Office" } },
+    { id: "june-cottage", kind: "cottage", x: 83, y: 6, data: { owner: "june" } },
+    { id: "ortega-cottage", kind: "cottage", x: 65, y: 22, data: { owner: "luis" } },
+    { id: "ortega-field", kind: "field", x: 71, y: 23, data: { owner: "luis" } },
+    { id: "fountain", kind: "fountain", x: 77, y: 15, data: {} },
+    { id: "notice-board", kind: "noticeBoard", x: 80, y: 13, data: {} },
+    lamp("lamp-1", 74, 13), lamp("lamp-2", 82, 13), lamp("lamp-3", 74, 19), lamp("lamp-4", 82, 19), lamp("lamp-5", 41, 10),
+    prop("cart", 69, 9, "town/cart"),
+    { id: "june-flowers-1", kind: "flowerBed", x: 82, y: 9, data: {} },
+    { id: "june-flowers-2", kind: "flowerBed", x: 87, y: 9, data: {} },
+    { id: "square-flowers-1", kind: "flowerBed", x: 75, y: 19, data: {} },
+    { id: "square-flowers-2", kind: "flowerBed", x: 81, y: 19, data: {} },
+    { id: "garden-hive", kind: "beehive", x: 92, y: 22, data: { owner: "june" } },
+    { id: "ortega-barn", kind: "barn", x: 77, y: 22, data: { owner: "luis" } },
+    { id: "ortega-silo", kind: "silo", x: 81, y: 22, data: { owner: "luis" } },
+    { id: "town-windmill", kind: "windmill", x: 92, y: 36, data: {} },
+    { id: "water-tower", kind: "waterTower", x: 65, y: 14, data: {} },
+    // The old mine, up at the top of the mountain trail.
     { id: "mine-entrance", kind: "mineEntrance", x: MINE_ENTRANCE.x, y: MINE_ENTRANCE.y, data: {} },
+    // The country road, and signposts that take you around the valley.
+    prop("road-fence-1", 48, 10, "nature/fence_simple"), prop("road-fence-2", 49, 10, "nature/fence_simple"),
+    prop("road-fence-3", 56, 12, "nature/fence_simple"), prop("road-fence-4", 57, 12, "nature/fence_simple"),
+    sign("sign-lane", 42, 10), sign("sign-square", 73, 13), sign("sign-beach", 69, 74), sign("sign-trail", 104, 10),
+    // The market: townsfolk's produce stands across from the stalls.
+    prop("stand-1", 88, 14, "town/stall-red"), prop("stand-2", 91, 14, "town/stall-green"), prop("stand-3", 94, 14, "town/stall-red"),
+    // The park: townsfolk's gardens, flowers, and benches.
+    { id: "june-garden", kind: "field", x: 86, y: 40, data: { owner: "june" } },
+    { id: "park-flowers-1", kind: "flowerBed", x: 66, y: 46, data: {} },
+    { id: "park-flowers-2", kind: "flowerBed", x: 83, y: 47, data: {} },
+    { id: "park-flowers-3", kind: "flowerBed", x: 88, y: 48, data: {} },
+    prop("bench-1", 70, 46, "town/stall-bench"), prop("bench-2", 86, 46, "town/stall-bench"),
+    lamp("lamp-6", 85, 33), lamp("lamp-7", 85, 60),
+    // The beach: Kai's fishing hut by the dock.
+    { id: "fishing-hut", kind: "fishingHut", x: 73, y: 74, data: { owner: "kai", sign: "Kai's Fishing Hut" } },
   ];
 }
+
+const inRect = (r: { x0: number; y0: number; x1: number; y1: number }, x: number, y: number) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
 
 export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] } {
   let s = seed;
@@ -179,12 +262,14 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const soil = degradedSoil(rand);
-      // Forest around the edges, and a strip between the farm and town with a gap for the road.
-      const strip = x >= FARM_W && x < TOWN.x0 && (y < TOWN.road - 1 || y > TOWN.road + 1);
+      if (x >= FARM_W) {
+        tiles.push(valleyTile(x, y, soil, rand));
+        continue;
+      }
       // The old south edge is now a forest belt between the field and the South Fields.
       const belt = y > OLD_H - 3 && y < OLD_H;
       const south = y >= OLD_H;
-      const forest = y < 3 || x < 2 || x > W - 3 || y > H - 3 || belt || (x < 7 && y > 26 && !south) || strip || (south && x >= FARM_W);
+      const forest = y < 3 || x < 2 || y > H - 3 || belt || (x < 7 && y > 26 && !south);
       if (south && !forest) {
         const inSouth = x >= SOUTH.x0 && x <= SOUTH.x1 && y >= SOUTH.y0 && y <= SOUTH.y1;
         if (inSouth) {
@@ -195,8 +280,7 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
         continue;
       }
       if (forest) {
-        const t = tile("forest", { ...soil, om: 55 + Math.round(rand() * 15), life: 60 }, rand() < 0.55 ? "tree" : rand() < 0.15 ? "log" : null);
-        tiles.push(t);
+        tiles.push(forestTile(soil, rand));
         continue;
       }
       const inFarm = x >= FARM.x0 && x <= FARM.x1 && y >= FARM.y0 && y <= FARM.y1;
@@ -212,15 +296,8 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
         continue;
       }
       const shore = (x - 33) ** 2 / 25 + (y - 27) ** 2 / 14 < 1;
-      const inGarden = x >= TOWN.garden.x0 && x <= TOWN.garden.x1 && y >= TOWN.garden.y0 && y <= TOWN.garden.y1;
-      if (inGarden) {
-        // The town's neglected community garden: overgrown, waiting to be restored.
-        const r = rand();
-        tiles.push(tile("farm", soil, r < 0.08 ? "stick" : r < 0.12 ? "stone" : null, r >= 0.12 && rand() < 0.85));
-        continue;
-      }
-      // Town land is kept clear for buildings and paths; the farm side has a few trees.
-      const scatterTrees = x < FARM_W && !shore && rand() < 0.04;
+      // The farm side has a few trees.
+      const scatterTrees = !shore && rand() < 0.04;
       tiles.push(tile(shore ? "sand" : "grass", soil, scatterTrees ? "tree" : null));
     }
   }
@@ -233,22 +310,59 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
     t.weeds = false;
   };
   for (let y = 9; y <= 12; y++) path(10, y);
-  // The road runs east from the farm through the forest gap into town.
-  for (let x = 10; x <= W - 4; x++) path(x, TOWN.road);
-  for (let x = TOWN.x0; x <= W - 4; x++) path(x, TOWN.road + 1);
-  // Town square.
+  // The road runs east from the farm, down the long country road, through town, and over the river.
+  for (let x = 10; x < RIVER.x0; x++) path(x, TOWN.road);
+  for (let x = TOWN.x0; x < RIVER.x0; x++) path(x, TOWN.road + 1);
+  // Town square and market.
   const sq = TOWN.square;
   for (let y = sq.y0; y <= sq.y1; y++) for (let x = sq.x0; x <= sq.x1; x++) path(x, y);
+  const mk = TOWN.market;
+  for (let y = mk.y0; y <= mk.y1; y++) for (let x = mk.x0; x <= mk.x1; x++) path(x, y);
   // Walkways to doors and the garden.
   // (Doors face south, so the Ortegas' walkway wraps around to the front of their cottage.)
-  for (const [x, y0, y1] of [[45, 10, 10], [52, 10, 10], [63, 10, 10], [47, 13, 26], [64, 13, 20], [72, 10, 10]] as const)
+  for (const [x, y0, y1] of [[67, 10, 10], [74, 10, 10], [85, 10, 10], [69, 13, 26], [86, 13, 20]] as const)
     for (let y = y0; y <= y1; y++) path(x, y);
-  for (let x = 45; x <= 47; x++) path(x, 26);
+  for (let x = 67; x <= 69; x++) path(x, 26);
   addGardenLane(tiles);
   // Down past the field and through the forest belt to the South Fields.
   for (const [x, y] of SOUTH_PATH) path(x, y);
-  for (let x = 48; x < sq.x0; x++) path(x, 16);
-  for (let x = sq.x1 + 1; x <= 64; x++) path(x, 16);
+  for (let x = 70; x < sq.x0; x++) path(x, 16);
+  for (let x = sq.x1 + 1; x < mk.x0; x++) path(x, 16);
+  // The shore path through the south woods, and the park path, both down to the beach.
+  for (let y = TOWN.road + 1; y < BEACH_Y; y++) path(52, y);
+  for (let y = 17; y < BEACH_Y; y++) path(84, y);
+  // Park paths, and the way over the river to the forest pond.
+  for (let x = TOWN.park.x0; x < RIVER.x0; x++) path(x, 32);
+  for (let x = 84; x <= 107; x++) path(x, 45);
+  for (let y = 33; y <= 44; y++) path(70, y);
+  for (let x = 64; x <= 80; x++) path(x, 38);
+  // Bridges over the river.
+  for (const y of RIVER.bridges) for (let x = RIVER.x0; x <= RIVER.x1; x++) {
+    const t = tiles[idx(x, y)];
+    t.ground = "dock";
+    t.obstacle = null;
+  }
+  // The trail around the forest pond, reached from the park bridge.
+  for (let y = 45; y <= 48; y++) path(107, y);
+  for (let x = 107; x <= 123; x++) {
+    path(x, 48);
+    path(x, 64);
+  }
+  for (let y = 48; y <= 64; y++) {
+    path(107, y);
+    path(123, y);
+  }
+  // The mountain trail: switchbacks up the terraces to the mine.
+  for (const [x, y, ramp] of TRAIL) {
+    path(x, y);
+    if (ramp) tiles[idx(x, y)].ramp = true;
+  }
+  // The dock, over the sand and out into the sea.
+  for (let y = DOCK.y0; y <= DOCK.y1; y++) for (let x = DOCK.x0; x <= DOCK.x1; x++) {
+    const t = tiles[idx(x, y)];
+    t.ground = "dock";
+    t.obstacle = null;
+  }
 
   const buildings: Building[] = [...farmBuildings(), ...townBuildings(), ...laneBuildings()];
   // Clear land under the buildings.
@@ -264,13 +378,50 @@ export function createMap(seed: number): { tiles: Tile[]; buildings: Building[] 
   return { tiles, buildings };
 }
 
+function forestTile(soil: SoilState, rand: () => number): Tile {
+  return tile("forest", { ...soil, om: 55 + Math.round(rand() * 15), life: 60 }, rand() < 0.55 ? "tree" : rand() < 0.15 ? "log" : null);
+}
+
+/** One tile of the valley east of the farm (before paths and buildings are laid over it). */
+function valleyTile(x: number, y: number, soil: SoilState, rand: () => number): Tile {
+  if (x >= RIVER.x0 && x <= RIVER.x1 && y <= RIVER.y1) return tile("river", soil);
+  if (y >= SEA_Y) return tile("sea", soil);
+  if (y >= BEACH_Y) return tile("sand", soil);
+  if (y < 3 || x > W - 3) return forestTile(soil, rand);
+  if (inRect(MOUNTAINS, x, y)) {
+    const r = rand();
+    const obstacle: Obstacle = r < 0.08 ? "stone" : r < 0.095 ? "copperOre" : r < 0.105 ? "tinOre" : r < 0.2 ? "tree" : null;
+    const t = tile("rock", { ...soil, om: 4, life: 6 }, obstacle);
+    const elev = elevationAt(x, y);
+    if (elev) t.elev = elev;
+    return t;
+  }
+  if (inRect(FOREST, x, y)) {
+    const p = (x - POND.cx) ** 2 / POND.rx ** 2 + (y - POND.cy) ** 2 / POND.ry ** 2;
+    if (p < 1) return tile("water", soil);
+    if (p < 1.6) return tile("sand", soil);
+    return forestTile(soil, rand);
+  }
+  // The country road and the south woods: meadow and trees.
+  if (x < TOWN.x0) return tile("grass", soil, rand() < (y > TOWN.road + 2 ? 0.18 : 0.1) ? "tree" : null);
+  if (inRect(TOWN.garden, x, y)) {
+    // The town's neglected community garden: overgrown, waiting to be restored.
+    const r = rand();
+    return tile("farm", soil, r < 0.08 ? "stick" : r < 0.12 ? "stone" : null, r >= 0.12 && rand() < 0.85);
+  }
+  if (PLOTS.some((p) => p.id >= ALLOTMENT0 && inRect(p, x, y))) return tile("farm", soil, null, rand() < 0.7);
+  // The park has a few trees; the town is kept clear for buildings and paths.
+  if (y >= TOWN.park.y0) return tile("grass", soil, rand() < 0.04 ? "tree" : null);
+  return tile("grass", soil);
+}
+
 /**
  * The forest strip between farm and town becomes a hedge with Garden Lane running through it,
  * joined to the road. Every farm, yours included, is reached through its gate on the lane.
  */
 export function addGardenLane(tiles: Tile[]) {
   const set = (x: number, y: number, patch: Partial<Tile>) => (tiles[idx(x, y)] = { ...tiles[idx(x, y)], ...patch });
-  for (let y = 3; y < H - 2; y++) for (let x = FARM_W; x < TOWN.x0; x++) set(x, y, { ground: "forest", obstacle: "tree", weeds: false });
+  for (let y = 3; y < H - 2; y++) for (let x = FARM_W; x < LANE_X + 2; x++) set(x, y, { ground: "forest", obstacle: "tree", weeds: false });
   for (let y = GATE_ROWS[0]; y <= GATE_ROWS[GATE_ROWS.length - 1]; y++) set(LANE_X, y, { ground: "path", obstacle: null, weeds: false });
   for (let y = TOWN.road - 1; y <= TOWN.road + 1; y++) set(LANE_X + 1, y, { ground: "path", obstacle: null, weeds: false });
 }

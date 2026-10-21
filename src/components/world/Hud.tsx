@@ -123,6 +123,7 @@ export function Messages() {
 
 const GROUND_NAME: Record<Tile["ground"], string> = {
   grass: "Grass", farm: "Garden soil", path: "Path", water: "Pond", sand: "Sandy shore", forest: "Forest", cave: "Cave floor", caveWall: "Rock wall",
+  river: "River", sea: "Sea", rock: "Mountain rock", dock: "Wooden dock",
 };
 
 function SoilRow({ label, value, known, unit = "", tip }: { label: string; value: number; known: boolean; unit?: string; tip: string }) {

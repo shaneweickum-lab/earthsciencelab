@@ -1,5 +1,5 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { MultiWorld } from "@/world/multi";
+import { packMultiWorld, unpackMultiWorld, type MultiWorld } from "@/world/multi";
 import type { Message } from "./protocol";
 import type { Presence, Transport } from "./transport";
 
@@ -58,14 +58,14 @@ export class SupabaseTransport implements Transport {
   }
 
   async saveSnapshot(seq: number, world: MultiWorld) {
-    const { error } = await this.db.from("worlds").update({ data: world, seq, updated_at: new Date().toISOString() }).eq("id", this.worldId);
+    const { error } = await this.db.from("worlds").update({ data: packMultiWorld(world), seq, updated_at: new Date().toISOString() }).eq("id", this.worldId);
     if (error) throw error;
   }
 
   async loadSnapshot() {
     const { data, error } = await this.db.from("worlds").select("data, seq").eq("id", this.worldId).single();
     if (error || !data?.data) return null;
-    return { seq: data.seq as number, world: data.data as MultiWorld };
+    return { seq: data.seq as number, world: unpackMultiWorld(data.data as MultiWorld) };
   }
 
   close() {

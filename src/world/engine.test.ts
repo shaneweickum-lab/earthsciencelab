@@ -504,7 +504,7 @@ describe("farm plots", () => {
     expect(plotLocked(s, 12, 14)).toBe(false);
     expect(plotLocked(s, 20, 20)).toBe(true);
     expect(plotLocked(s, 40, 20)).toBe(false); // not farmland
-    expect(PLOTS).toHaveLength(36);
+    expect(PLOTS).toHaveLength(42); // 36 on the farm, 6 allotments in the park
     const { x, y } = fieldTile(s, 4);
     let t = withTile(s, x, y, { obstacle: null, weeds: false, tilled: false });
     t = select({ ...t, player: { x, y: y - 1, facing: "down" } }, "hoe");

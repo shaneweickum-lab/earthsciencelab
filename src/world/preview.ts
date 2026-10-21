@@ -1,5 +1,6 @@
 import { CROPS } from "@/game/crops";
-import { buildingAt, canPlantHere, crittersHere, facingTile, mineOpen, nextPlotPrice, OBSTACLE_HP, obstacleName, plotLocked, ROCKS, selectedItem, STATIONS, tileAt } from "./engine";
+import { bitingNow, buildingAt, canPlantHere, crittersHere, facingTile, isWater, mineOpen, OBSTACLE_HP, obstacleName, plotLocked, priceOfPlot, ROCKS, selectedItem, STATIONS, tileAt, waterAt } from "./engine";
+import { isAllotment, plotAt } from "./map";
 import { ITEMS, TIERS, WORLD_CROPS, type ItemDef, type Station } from "./items";
 import { amendmentPoints, MAX_BOOST } from "./grades";
 import { on } from "./settings";
@@ -34,9 +35,13 @@ export function previewAction(state: WorldState): ActionPreview {
   if (critter) return { label: "Observe", text: "Look closely and add it to your Nature Journal.", ok: true };
 
   if (!b && plotLocked(state, x, y)) {
-    const price = nextPlotPrice(state);
+    const id = plotAt(x, y)!;
+    const price = priceOfPlot(state, id);
+    if (isAllotment(id)) return { label: "Rent", text: `A park allotment. Press E to rent it for ${price} coins and farm it as your own.`, ok: state.coins >= price };
     return { label: "Buy", text: `This plot isn't yours yet. Press E to buy it for ${price} coins, or earn it from a quest.`, ok: state.coins >= price };
   }
+  if (b?.kind === "signpost") return { label: "Travel", text: "A signpost. Press E to see where it points, and walk there in a few minutes.", ok: true };
+  if (b?.kind === "fishingHut") return { label: "Shop", text: "Kai's Fishing Hut: fishing rods, and Kai buys fish. Press E.", ok: true };
   if (b?.kind === "chest") return { label: "Open", text: "Open the chest to take things out or put them away.", ok: true };
   if (b?.kind === "gardenGate") return multiplayer
     ? { label: "Enter", text: "Go through the gate into this farmer's garden. Press E.", ok: true }
@@ -101,7 +106,8 @@ export function previewAction(state: WorldState): ActionPreview {
       if (t.tilled) return { label: "Till", text: "Already tilled.", ok: false };
       return { label: "Till", text: on(state, "tillage") ? "Loosen the soil for seeds. Tilling breaks soil crumbs a little (structure −2)." : "Loosen the soil for seeds.", ok: true };
     case "can":
-      if (t.ground === "water") return { label: "Refill", text: "Fill your watering can.", ok: true };
+      if (t.ground === "sea") return { label: "Refill", text: "Sea water is too salty for your garden.", ok: false };
+      if (isWater(t.ground)) return { label: "Refill", text: "Fill your watering can.", ok: true };
       if (b?.kind === "rainBarrel") return { label: "Refill", text: "Refill with rainwater.", ok: true };
       if (b?.kind === "well") return { label: "Refill", text: "Fill your can with groundwater from the well.", ok: true };
       if (state.water <= 0) return { label: "Water", text: "Your can is empty. Refill at the pond.", ok: false };
@@ -127,6 +133,14 @@ export function previewAction(state: WorldState): ActionPreview {
     case "ring":
       if (!isGarden) return { label: "Test", text: "Test the garden soil.", ok: false };
       return { label: "Test", text: "Infiltration test: time how fast water soaks in (water holding).", ok: true };
+    case "rod": {
+      const water = waterAt(t.ground);
+      if (!water) return { label: "Cast", text: "Face the water to fish: the river, a pond, or the sea.", ok: false };
+      const biting = bitingNow(state, water);
+      return biting.length
+        ? { label: "Cast", text: `Cast into the ${water}. Biting now: ${biting.map((c) => ITEMS[c.id].name).join(", ")}.`, ok: true }
+        : { label: "Cast", text: `Nothing bites in the ${water} at this time of year or day.`, ok: false };
+    }
   }
   return { label: "", text: "", ok: false };
 }
