@@ -480,6 +480,8 @@ export function boardRequests(s: WorldState): { id: string; board: NonNullable<A
   };
   const season = seasonOf(day, s.settings);
   const crops = (Object.keys(WORLD_CROPS) as CropId[]).filter((c) => !WORLD_CROPS[c].cover && (!s.settings.seasons || WORLD_CROPS[c].seasons.includes(season)));
+  // Nothing grows outdoors in winter, so nobody asks for crops then.
+  if (!crops.length) return [];
   const grades: (Grade | undefined)[] = [undefined, undefined, "D", "C", "B"];
   return [0, 1].map((n) => {
     const crop = crops[Math.floor(rand() * crops.length)];

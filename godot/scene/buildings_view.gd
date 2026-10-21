@@ -19,7 +19,7 @@ func refresh(world: Dictionary) -> void:
 	for b in _buildings:
 		var sz := WorldMap.size_of(b.kind)
 		var root := Node3D.new()
-		root.position = Vector3(b.x + (sz[0] - 1) / 2.0, 0, b.y + (sz[1] - 1) / 2.0)
+		root.position = Vector3(b.x + (sz[0] - 1) / 2.0, TerrainView.height_at(world.tiles, b.x, b.y + sz[1] - 1), b.y + (sz[1] - 1) / 2.0)
 		# Things you build can be turned (quarter turns).
 		root.rotation.y = int(b.get("rot", 0)) * PI / 2
 		_fancy(root, b, sz[0], sz[1])
@@ -331,6 +331,30 @@ func _procedural(root: Node3D, b: Dictionary, w: int, h: int) -> void:
 				var ys := [0.3, 0.7, 1.05]
 				for i in 3:
 					_box(root, Vector3(1.25, 0.14, 0.05), Vector3(0, ys[i], 0.42), "#a8774f", Vector3(0, 0, (i - 1) * 0.12))
+		"signpost":
+			_box(root, Vector3(0.12, 1.6, 0.12), Vector3(0, 0.8, 0), "#7a5636")
+			for arm in [[1.35, 0.25, "#c49a6c"], [1.05, -0.3, "#b08458"], [0.75, 0.6, "#a8774f"]]:
+				_box(root, Vector3(0.85, 0.2, 0.05), Vector3(0, arm[0], 0), arm[2], Vector3(0, arm[1], 0))
+		"fishingHut":
+			_box(root, Vector3(w, 0.5, h), Vector3(0, 0.25, 0), "#6b4423")
+			_box(root, Vector3(w - 0.5, 1.4, h - 0.6), Vector3(0, 1.2, -0.1), "#5f8fa8")
+			var roof := MeshInstance3D.new()
+			var cone := CylinderMesh.new()
+			cone.top_radius = 0
+			cone.bottom_radius = 1
+			cone.height = 1
+			cone.radial_segments = 4
+			roof.mesh = cone
+			roof.position = Vector3(0, 2.25, -0.1)
+			roof.rotation.y = PI / 4
+			roof.scale = Vector3((w - 0.3) * 0.72, 0.8, (h - 0.3) * 0.72)
+			roof.material_override = Models.mat("#c94f3d")
+			root.add_child(roof)
+			_box(root, Vector3(0.6, 0.9, 0.02), Vector3(0, 0.95, (h - 0.6) / 2.0 - 0.09), "#3a2a1c")
+			# Rods leaning by the door, and a net hung up to dry.
+			for x in [-0.9, -0.75]:
+				_cyl(root, 0.02, 0.02, 1.6, Vector3(x, 1, h / 2.0 - 0.15), "#9a6b3f", 4, Vector3(0, 0, 0.15))
+			_box(root, Vector3(0.6, 0.6, 0.02), Vector3(0.9, 1.1, h / 2.0 - 0.25), "#e8d9a8")
 		"noticeBoard":
 			for x in [-0.35, 0.35]:
 				_box(root, Vector3(0.08, 1.2, 0.08), Vector3(x, 0.6, 0), "#7a5636")

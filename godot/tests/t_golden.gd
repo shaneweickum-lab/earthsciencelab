@@ -47,14 +47,17 @@ func test_formulas() -> void:
 
 
 func test_maps() -> void:
-	const G := ["grass", "farm", "path", "water", "sand", "forest"]
-	const O := [null, "stone", "stick", "stump", "tree", "log"]
+	const G := ["grass", "farm", "path", "water", "sand", "forest", "river", "sea", "rock", "dock"]
+	const O := [null, "stone", "stick", "stump", "tree", "log", "copperOre", "tinOre"]
 	for m in golden("maps"):
 		var s := World.new_world(int(m.seed))
 		var tiles := []
 		for t in s.tiles:
 			var so: Dictionary = t.soil
-			tiles.append([G.find(t.ground), O.find(t.obstacle), 1 if t.weeds else 0, so.om, so.life, so.structure, so.water, so.nutrients, so.ph])
+			tiles.append([
+				G.find(t.ground), O.find(t.obstacle), 1 if t.weeds else 0, so.om, so.life, so.structure, so.water, so.nutrients, so.ph,
+				t.get("elev", 0), 1 if t.has("ramp") else 0, 1 if t.has("elev") else 0,
+			])
 		expect_same(tiles, m.tiles, "newWorld(%s).tiles" % m.seed)
 		expect_same(s.buildings, m.buildings, "newWorld(%s).buildings" % m.seed)
 		expect_same(s.weather, m.weather, "newWorld(%s).weather" % m.seed)
@@ -118,8 +121,24 @@ func test_old_saves() -> void:
 	var v3 := Js.with(s, {"version": 3, "tiles": tiles, "buildings": farm + [{"id": "store", "kind": "store", "x": 30, "y": 5, "data": {}}]})
 	var v1 := Js.with(v3, {"version": 1, "weather": "sunny"})
 	v1.erase("settings")
+	# A version 10 save, from before the valley grew: 76 by 64, with the community garden
+	# (mulched here) at its old spot, and the player out in the old town.
+	var v10_tiles := []
+	for i in WorldMap.OLD_W * WorldMap.OLD_ROWS:
+		var x := i % WorldMap.OLD_W
+		var y := i / WorldMap.OLD_W
+		var t: Dictionary = s.tiles[y * WorldMap.W + x]
+		v10_tiles.append(Js.with(t, {"ground": "farm", "mulch": x == y + 42}) if x >= 63 and x <= 69 and y >= 21 and y <= 27 else t)
+	var v10 := Js.with(s, {
+		"version": 10, "tiles": v10_tiles,
+		"buildings": s.buildings.filter(func(b): return b.x < 38) + [{"id": "old-lamp", "kind": "lamp", "x": 50, "y": 10, "data": {}}],
+		"critters": s.critters + [{"id": "old-town-bee", "kind": "ladybug", "x": 60, "y": 14, "until": s.minute + 600}],
+		"player": {"x": 50, "y": 11, "facing": "down"},
+	})
+	# Standing where a building now is: you're moved to the square.
+	var v10b := Js.with(v10, {"player": {"x": 43.2, "y": 6, "facing": "up"}})
 	var expected: Array = golden("migrations")
-	var olds := [v3, v1]
+	var olds := [v3, v1, v10, v10b]
 	for i in olds.size():
 		var up = World.load_world(Js.stringify(olds[i]))
 		expect_true(up != null, "old save %d loads" % i)
@@ -127,3 +146,21 @@ func test_old_saves() -> void:
 			expect_same(Play.final_state(up), expected[i], "old save %d" % i)
 	expect_true(World.load_world("{\"version\": 0, \"tiles\": []}") == null, "version 0 is rejected")
 	expect_true(World.load_world("not json") == null, "garbage is rejected")
+
+
+func test_packed_saves() -> void:
+	# A save the TS engine packed (unchanged tiles stored as 0) loads the same here, and packs
+	# the same way again.
+	var g: Dictionary = golden("packed")
+	var up = World.load_world(g.raw)
+	expect_true(up != null, "packed save loads")
+	if up == null:
+		return
+	expect_same(Play.final_state(up), g.final, "packed save")
+	var again: Dictionary = JSON.parse_string(World.save_world(up))
+	var changed := []
+	for i in again.tiles.size():
+		if again.tiles[i] is Dictionary:
+			changed.append(i)
+	expect_same(changed, g.changed, "tiles packed again")
+	expect_same(again, JSON.parse_string(g.raw), "repacked save")

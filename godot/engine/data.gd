@@ -28,6 +28,11 @@ static func items() -> Dictionary:
 	return load_json("items").items
 
 
+## What you can catch, where, and when: [{id, water, seasons?, hours?, weight}].
+static func catches() -> Array:
+	return load_json("items").catches
+
+
 static func upgrades() -> Dictionary:
 	return load_json("items").upgrades
 

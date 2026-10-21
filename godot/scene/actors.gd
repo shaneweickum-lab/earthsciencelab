@@ -117,8 +117,9 @@ static func _find_skeleton(n: Node) -> Skeleton3D:
 
 ## The farmer: follows the player's position and facing, holds the selected item, and plays an
 ## action animation ("swing", "use", "pickup") when one is given.
-func update_player(p: Dictionary, moving: bool, action: String, delta: float, daylight: float, held: String) -> void:
-	position = Vector3(p.x, 0, p.y)
+## `ground` is the height of the ground under them (mountain terraces).
+func update_player(p: Dictionary, moving: bool, action: String, delta: float, daylight: float, held: String, ground := 0.0) -> void:
+	position = Vector3(p.x, ground, p.y)
 	rotation.y = _turn(rotation.y, ROT[p.facing], delta * 14)
 	_set_held(held)
 	if _anim:
@@ -253,7 +254,7 @@ static func _tint_metal(n: Node, tint: Color) -> void:
 func update_npc(world: Dictionary, minute: float, player: Dictionary, delta: float) -> void:
 	var pose := Town.npc_pose(world, npc, minute)
 	visible = pose.visible
-	position = Vector3(pose.x, 0, pose.y)
+	position = Vector3(pose.x, TerrainView.height_at(world.tiles, pose.x, pose.y), pose.y)
 	rotation.y = _turn(rotation.y, ROT[pose.facing], delta * 10)
 	_play("walk" if pose.moving else "idle", 0.2)
 	if _tag:

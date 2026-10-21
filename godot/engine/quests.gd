@@ -312,6 +312,9 @@ static func board_requests(s: Dictionary) -> Array:
 		var wc: Dictionary = Data.world_crops()[c]
 		if not wc.get("cover", false) and (not s.settings.seasons or season in wc.seasons):
 			crops.append(c)
+	# Nothing grows outdoors in winter, so nobody asks for crops then.
+	if crops.is_empty():
+		return []
 	var grades := [null, null, "D", "C", "B"]
 	var npcs := Town.npcs()
 	var out := []
