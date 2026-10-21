@@ -106,19 +106,24 @@ await shot("06b-farm");
 
 // Walking is slow in a software-rendered browser, so tests move the player by editing the save.
 const SAVE = "earthsciencelab-world";
-const MAP_W = 76; // tiles per row (src/world/map.ts W)
+const MAP_W = 128; // tiles per row (src/world/map.ts W)
 async function teleport(x, y, facing, tiles = {}) {
   await page.goto(`${BASE}/soil/sources`); // leaving the game saves the farm
   await page.evaluate(({ SAVE, x, y, facing, tiles }) => {
     const w = JSON.parse(localStorage.getItem(SAVE));
     w.player = { x, y, facing };
     w.critters = [];
-    for (const [i, patch] of Object.entries(tiles)) Object.assign(w.tiles[Number(i)], patch);
     localStorage.setItem(SAVE, JSON.stringify(w));
-  }, { SAVE, x, y, facing, tiles });
+  }, { SAVE, x, y, facing });
   await page.goto(`${BASE}/soil/game`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: /Continue/ }).click();
   await page.getByRole("toolbar", { name: "Hotbar" }).waitFor();
+  // Saves only keep the tiles that changed, so tiles are edited in the running game.
+  if (Object.keys(tiles).length) {
+    await page.evaluate((tiles) => {
+      window.__soilGame.useWorld.getState().update((w) => ({ ...w, tiles: w.tiles.map((t, i) => (tiles[i] ? { ...t, ...tiles[i] } : t)) }));
+    }, tiles);
+  }
 }
 const inspector = page.getByLabel("Tile inspector");
 // The bag starts empty: take Grandma Rosa's scythe out of the chest beside the house.
@@ -215,7 +220,7 @@ const meters = await page.evaluate(() => {
 if (!meters.meter || meters.meter.bottom > meters.hotbar.top || Math.abs(meters.meter.left - meters.hotbar.left) > 400) throw new Error("The meters should sit above the hotbar");
 
 // Town: the notice board in the square and the quest log.
-await teleport(58, 14, "up");
+await teleport(80, 14, "up");
 await page.keyboard.press("e");
 await page.getByRole("dialog", { name: "Town notice board" }).waitFor();
 await page.getByRole("button", { name: "Take this request" }).first().click();
@@ -226,7 +231,7 @@ await page.getByRole("dialog", { name: "Quests" }).getByText(/Notice board/).fir
 await page.keyboard.press("Escape");
 
 // The store in town: buy seeds and a compost bin, then build it back on the farm.
-await teleport(45, 10, "up");
+await teleport(67, 10, "up");
 await page.keyboard.press("e");
 await page.getByRole("dialog", { name: "Seed & Soil Co." }).waitFor();
 await page.getByRole("button", { name: "Buy Carrot Seeds" }).click();
@@ -287,8 +292,42 @@ await shot("07d3-garden-lane");
 await page.keyboard.press("e");
 await page.getByText("Home sweet home.").waitFor();
 
+// The valley: a signpost on the lane walks you to the beach, where Kai's rod catches a fish off the dock.
+await teleport(42, 11, "up");
+await inspector.getByRole("heading", { name: "Signpost" }).waitFor();
+await page.keyboard.press("e");
+const signpost = page.getByRole("dialog", { name: "Signpost" });
+await signpost.waitFor();
+await shot("07d3b-signpost");
+await signpost.getByRole("button", { name: "Walk to Beach & dock" }).click();
+await page.waitForFunction(() => Math.round(window.__soilGame.runtime.player.y) === 76, null, { timeout: 10000 });
+await page.waitForTimeout(1200);
+await shot("07d3c-beach");
+await page.evaluate(() => {
+  const { runtime, useWorld } = window.__soilGame;
+  runtime.player = { x: 70, y: 80, facing: "left" };
+  useWorld.getState().update((w) => {
+    const inventory = [...w.inventory];
+    inventory[9] = { item: "rod", qty: 1 };
+    return { ...w, inventory, selected: 9, energy: 100, player: runtime.player };
+  });
+});
+await page.waitForFunction(() => {
+  const { useWorld } = window.__soilGame;
+  for (let i = 0; i < 40 && !useWorld.getState().world.tally?.fished; i++) useWorld.getState().run("act");
+  return useWorld.getState().world.tally?.fished > 0;
+});
+await page.waitForTimeout(800);
+await shot("07d3d-catch");
+// The districts, for a look: the market, the park's allotments, the river bridge, the trail, the cave, the forest pond.
+for (const [name, x, y, f] of [["market", 92, 20, "up"], ["park", 72, 45, "up"], ["river", 99, 45, "right"], ["trail", 110, 12, "right"], ["cave", 119, 10, "up"], ["pond", 108, 56, "right"]]) {
+  await teleport(x, y, f);
+  await page.waitForTimeout(1200);
+  await shot(`07d3e-${name}`);
+}
+
 // Your market stall in the square: townsfolk buy what you put out.
-await teleport(53, 17, "down");
+await teleport(88, 17, "down");
 await page.keyboard.press("e");
 const stall = page.getByRole("dialog", { name: "Your market stall" });
 await stall.getByText(/Townsfolk browse the square/).waitFor();
@@ -426,13 +465,12 @@ await shot("22-homestead");
 // save and the grade level, and its tools work. Software rendering runs it at a few frames
 // a second, so the player is placed through the save instead of walked there.
 if (existsSync("public/godot/index.html")) {
-  await page.evaluate(({ SAVE, MAP_W }) => {
-    const w = JSON.parse(localStorage.getItem(SAVE));
-    w.player = { x: 12, y: 13, facing: "down" };
-    w.selected = 0; // scythe
-    Object.assign(w.tiles[14 * MAP_W + 12], { obstacle: null, weeds: true, crop: null });
-    localStorage.setItem(SAVE, JSON.stringify(w));
-  }, { SAVE, MAP_W });
+  await teleport(12, 13, "down", { [14 * MAP_W + 12]: { obstacle: null, weeds: true, crop: null } });
+  await page.evaluate(() => {
+    const st = window.__soilGame.useWorld.getState();
+    st.update((w) => ({ ...w, selected: 0 })); // scythe
+    st.save();
+  });
   await page.goto(`${BASE}/soil/game/godot`);
   const canvas = page.frameLocator('iframe[title="Soil & Sprout"]').locator("canvas");
   await canvas.waitFor();
@@ -536,7 +574,7 @@ if (existsSync("public/godot/index.html")) {
   await game(ben, () => { const { useWorld } = window.__soilGame; useWorld.getState().remote("stock", [useWorld.getState().world.inventory.findIndex((s) => s?.item === "fiber"), 1, 7]); });
   await game(ana, () => window.__soilGame.useWorld.getState().remote("leaveGarden", []));
   await until(ana, async () => (await me(ana)).area.kind === "town", "Ana should be in town");
-  await game(ana, () => { const { runtime, useWorld } = window.__soilGame; runtime.player = { x: 54, y: 17, facing: "down" }; useWorld.setState((s) => ({ world: { ...s.world, player: runtime.player } })); });
+  await game(ana, () => { const { runtime, useWorld } = window.__soilGame; runtime.player = { x: 89, y: 17, facing: "down" }; useWorld.setState((s) => ({ world: { ...s.world, player: runtime.player } })); });
   await game(ana, () => window.__soilGame.doAction("interact"));
   await ana.getByRole("dialog", { name: "Ben's market stall" }).getByRole("button", { name: "Buy 1" }).click();
   await until(ben, async () => (await me(ben)).coins === 457, "Ben should be paid for his fiber");

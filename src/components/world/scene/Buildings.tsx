@@ -4,11 +4,12 @@ import { Html } from "@react-three/drei";
 import { memo, Suspense, useMemo } from "react";
 import { Box3, Matrix4, Vector3 } from "three";
 import { BUILDING_SIZE } from "@/world/map";
-import type { Building } from "@/world/types";
+import type { Building, Tile } from "@/world/types";
 import { mineOpen } from "@/world/engine";
 import { ownerOf } from "@/world/multi";
 import { useMulti } from "@/net/mp";
 import { labelLayer, useWorld } from "../useWorld";
+import { heightAt } from "./height";
 import { Model, model, useParts, type Pack } from "./models";
 
 const Mat = ({ color, ...rest }: { color: string; transparent?: boolean; opacity?: number; emissive?: string; emissiveIntensity?: number }) => (
@@ -303,6 +304,35 @@ const Procedural = memo(function Procedural({ b }: { b: Building }) {
           <mesh position={[0, 3, 0.85]} rotation-z={-Math.PI / 4}><boxGeometry args={[2.6, 0.25, 0.05]} /><Mat color="#fbf6ef" /></mesh>
         </group>
       );
+    case "prop":
+      return null;
+    case "signpost":
+      return (
+        <group>
+          <mesh position={[0, 0.8, 0]} castShadow><boxGeometry args={[0.12, 1.6, 0.12]} /><Mat color="#7a5636" /></mesh>
+          {[[1.35, 0.25, "#c49a6c"], [1.05, -0.3, "#b08458"], [0.75, 0.6, "#a8774f"]].map(([y, r, c], i) => (
+            <mesh key={i} position={[0, y as number, 0]} rotation-y={r as number} castShadow>
+              <boxGeometry args={[0.85, 0.2, 0.05]} /><Mat color={c as string} />
+            </mesh>
+          ))}
+        </group>
+      );
+    case "fishingHut":
+      return (
+        <group>
+          <mesh position={[0, 0.25, 0]} receiveShadow><boxGeometry args={[w, 0.5, h]} /><Mat color="#6b4423" /></mesh>
+          <mesh position={[0, 1.2, -0.1]} castShadow receiveShadow><boxGeometry args={[w - 0.5, 1.4, h - 0.6]} /><Mat color="#5f8fa8" /></mesh>
+          <mesh position={[0, 2.25, -0.1]} rotation={[0, Math.PI / 4, 0]} scale={[(w - 0.3) * 0.72, 0.8, (h - 0.3) * 0.72]} castShadow>
+            <coneGeometry args={[1, 1, 4]} /><Mat color="#c94f3d" />
+          </mesh>
+          <mesh position={[0, 0.95, (h - 0.6) / 2 - 0.09]}><boxGeometry args={[0.6, 0.9, 0.02]} /><Mat color="#3a2a1c" /></mesh>
+          {/* Rods leaning by the door, and a net hung up to dry. */}
+          {[-0.9, -0.75].map((x) => (
+            <mesh key={x} position={[x, 1, h / 2 - 0.15]} rotation-z={0.15}><cylinderGeometry args={[0.02, 0.02, 1.6, 4]} /><Mat color="#9a6b3f" /></mesh>
+          ))}
+          <mesh position={[0.9, 1.1, h / 2 - 0.25]}><boxGeometry args={[0.6, 0.6, 0.02]} /><Mat color="#e8d9a8" /></mesh>
+        </group>
+      );
     case "well":
       return (
         <group>
@@ -512,13 +542,13 @@ function GardenSign({ b }: { b: Building }) {
   );
 }
 
-export function Buildings({ buildings }: { buildings: Building[] }) {
+export function Buildings({ buildings, tiles }: { buildings: Building[]; tiles?: Tile[] }) {
   return (
     <group>
       {buildings.map((b) => {
         const [w, h] = BUILDING_SIZE[b.kind];
         return (
-          <group key={b.id} position={[b.x + (w - 1) / 2, 0, b.y + (h - 1) / 2]}>
+          <group key={b.id} position={[b.x + (w - 1) / 2, tiles ? heightAt(tiles, b.x, b.y + h - 1) : 0, b.y + (h - 1) / 2]}>
             <group rotation-y={((b.rot ?? 0) * Math.PI) / 2}>
               <Suspense fallback={<Procedural b={b} />}>
                 <Fancy b={b} />
@@ -528,7 +558,7 @@ export function Buildings({ buildings }: { buildings: Building[] }) {
             {b.data.sign && (
               <Html position={[0, 3.1, 0]} center zIndexRange={[30, 0]} portal={labelLayer as React.MutableRefObject<HTMLElement>} style={{ pointerEvents: "none" }}>
                 <div className="whitespace-nowrap rounded-full bg-soil px-3 py-1 text-xs font-black text-white shadow">
-                  {b.kind === "store" ? "🌱" : "🔬"} {b.data.sign}
+                  {b.kind === "store" ? "🌱" : b.kind === "fishingHut" ? "🎣" : "🔬"} {b.data.sign}
                 </div>
               </Html>
             )}

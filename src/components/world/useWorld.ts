@@ -11,7 +11,7 @@ import type { WorldState } from "@/world/types";
 
 export const SAVE_KEY = "earthsciencelab-world";
 
-export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "homestead" | "stall" | "bed" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests" | "cookbook";
+export type Menu = null | "intro" | "house" | "tv" | "store" | "shipping" | "chest" | "mine" | "craft" | "plot" | "homestead" | "stall" | "bed" | "bag" | "journal" | "summary" | "pause" | "npc" | "board" | "quests" | "cookbook" | "travel" | "hut";
 
 /** The tabs of the window that I opens: your bag, journal, quests, cookbook, and the game menu. */
 export const HUB_TABS = ["bag", "journal", "quests", "cookbook", "pause"] as const;

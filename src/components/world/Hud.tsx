@@ -211,6 +211,7 @@ function labelFor(kind: string) {
     house: "Farmhouse", store: "Seed & Soil Co.", shippingBin: "Shipping Bin", chest: "Tool Chest", extension: "Extension Office", cottage: "Cottage",
     fountain: "Fountain", noticeBoard: "Notice board", field: "Cornfield", lamp: "Street lamp", prop: "Market cart",
     mineEntrance: "Old Mine", ladderUp: "Ladder up", ladderDown: "Ladder down", gardenGate: "Garden gate", marketStall: "Market stall", stove: "Stove", oven: "Oven",
+    signpost: "Signpost", fishingHut: "Kai's Fishing Hut",
   }[kind] ?? kind;
 }
 
