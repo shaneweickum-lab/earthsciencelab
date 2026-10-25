@@ -325,14 +325,20 @@ for (const [name, x, y, f] of [["market", 92, 20, "up"], ["park", 72, 45, "up"],
   await page.waitForTimeout(1200);
   await shot(`07d3e-${name}`);
 }
-// The trees through the year, by the forest pond: summer leaves, fall colors, bare in winter.
-for (const [name, day] of [["spring", 8], ["summer", 30], ["fall", 50], ["winter", 70]]) {
-  await page.evaluate((day) => {
-    const { useWorld } = window.__soilGame;
-    useWorld.getState().update((w) => ({ ...w, minute: (day - 1) * 1440 + 11 * 60 }));
-  }, day);
+// The trees through the year, by the forest pond: fresh in spring, green in summer, red and gold
+// in fall, bare in winter. Step the clock until the HUD shows each season.
+let treeDay = 1;
+for (const season of ["Spring", "Summer", "Fall", "Winter"]) {
+  for (let k = 0; k < 60 && !(await page.getByText(new RegExp(`${season} ·`)).count()); k++) {
+    treeDay += 3;
+    await page.evaluate((day) => {
+      const { useWorld } = window.__soilGame;
+      useWorld.getState().update((w) => ({ ...w, minute: (day - 1) * 1440 + 11 * 60 }));
+    }, treeDay);
+    await page.waitForTimeout(200);
+  }
   await page.waitForTimeout(6000);
-  await shot(`07d3f-trees-${name}`);
+  await shot(`07d3f-trees-${season.toLowerCase()}`);
 }
 
 // Hit boxes: walk at a rock and stop flush against it, a step from its center (not a tile and a half).
