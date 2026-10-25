@@ -8,7 +8,7 @@ import { BUILDING_SIZE } from "@/world/map";
 import { isWater } from "@/world/engine";
 import { tileTop } from "./height";
 import { hash, Instanced, type Inst } from "./Instanced";
-import { groupBy, model, ModelGroups } from "./models";
+import { groupBy, model, ModelGroups, withTint } from "./models";
 
 const GRASS: Record<Season, string[]> = {
   Spring: ["#86b85f", "#7fb069", "#8cbf66"],
@@ -196,18 +196,51 @@ function ProceduralObstacles({ tiles, season }: { tiles: Tile[]; season: Season 
 }
 
 const ORE_COLOR: Record<string, string> = { copperOre: "#3fae7a", tinOre: "#5a5060", ironOre: "#b24a2c", goldOre: "#f2c230", mithrilOre: "#5fd8f0" };
-const PINES = ["tree_pineRoundA", "tree_pineRoundC", "tree_pineTallA", "tree_pineSmallB"];
-const LEAFY = ["tree_default", "tree_oak", "tree_detailed"];
-const LEAF_SUFFIX: Record<Season, string> = { Spring: "", Summer: "", Fall: "_fall", Winter: "_dark" };
 const pick = <T,>(list: T[], r: number) => list[Math.floor(r * list.length) % list.length];
 const n = (name: string) => model("nature", name);
+const q = (name: string) => model("qnature", name);
+const qt = (name: string) => model("qtrees", name);
 
-// Load every season's trees up front so the forest doesn't flicker back to simple shapes when the season changes.
-if (typeof window !== "undefined") {
-  for (const t of [...PINES, ...LEAFY.flatMap((l) => Object.values(LEAF_SUFFIX).map((sfx) => l + sfx))]) useGLTF.preload(n(t));
+/**
+ * Quaternius's textured trees, each scaled so its canopy is about two tiles across (the maples
+ * are modeled huge, the birches tall). Mirrored in godot/scene/terrain.gd.
+ */
+export const TREE_SCALE: Record<string, number> = {
+  BirchTree_1: 0.62, BirchTree_2: 0.45, BirchTree_3: 0.59, BirchTree_4: 0.79, BirchTree_5: 0.61,
+  MapleTree_1: 0.35, MapleTree_2: 0.33, MapleTree_3: 0.25, MapleTree_4: 0.79, MapleTree_5: 0.31,
+  DeadTree_1: 0.48, DeadTree_3: 0.47, DeadTree_5: 1.15, DeadTree_7: 0.33, DeadTree_9: 0.91,
+};
+const BIRCHES = [1, 2, 3, 4, 5].map((k) => `BirchTree_${k}`);
+const MAPLES = [1, 2, 3, 4, 5].map((k) => `MapleTree_${k}`);
+const SNAGS = [1, 3, 5, 7, 9].map((k) => `DeadTree_${k}`);
+/** Autumn leaves: maples go red-orange, birches gold. */
+const FALL_TINT = { maple: "e0672e", birch: "e8b73a" };
+const PINE_SUFFIX: Record<Season, string> = { Spring: "", Summer: "", Fall: "_Autumn", Winter: "_Snow" };
+const LOG_SUFFIX: Record<Season, string> = { Spring: "_Moss", Summer: "", Fall: "_Moss", Winter: "_Snow" };
+
+/**
+ * Which tree grows on a tile: pines on the mountain, birches and maples in the valley, and now and
+ * then a dead snag. In winter the leafy trees stand bare.
+ */
+export function treeModel(t: Tile, r: number, r2: number, season: Season): { url: string; s: number } {
+  if (t.ground === "rock") return { url: q(`PineTree${PINE_SUFFIX[season]}_${1 + Math.floor(r2 * 3)}`), s: 0.95 + r * 0.3 };
+  const jitter = 0.85 + r * 0.3;
+  const snag = (name: string) => ({ url: qt(name), s: TREE_SCALE[name] * jitter });
+  if (r > 0.96) return snag(pick(SNAGS, r2));
+  const birch = r2 < 0.45;
+  const name = birch ? pick(BIRCHES, r2 / 0.45) : pick(MAPLES, (r2 - 0.45) / 0.55);
+  if (season === "Winter") return snag(pick(SNAGS, r * 7 % 1));
+  const url = season === "Fall" ? withTint(qt(name), birch ? FALL_TINT.birch : FALL_TINT.maple) : qt(name);
+  return { url, s: TREE_SCALE[name] * jitter };
 }
 
-/** Kenney models for trees, rocks, stumps, logs, weeds, and wild plants. */
+// Load every tree up front so the forest doesn't flicker back to simple shapes when the season changes.
+if (typeof window !== "undefined") {
+  for (const t of [...BIRCHES, ...MAPLES, ...SNAGS]) useGLTF.preload(qt(t));
+  for (const sfx of Object.values(PINE_SUFFIX)) for (const k of [1, 2, 3]) useGLTF.preload(q(`PineTree${sfx}_${k}`));
+}
+
+/** Quaternius trees, stumps, and logs; Kenney rocks, weeds, and wild plants. */
 function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: Season; buildings: Building[] }) {
   const { tall, low, sticks, ores } = useMemo(() => {
     const covered = new Set<number>();
@@ -223,16 +256,20 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
       const y = tileTop(t);
       switch (t.obstacle) {
         case "tree": {
-          // Pines up on the mountain; a mix down in the valley.
-          const name = t.ground === "rock" || r < 0.35 ? pick(PINES, r2) : pick(LEAFY, r2) + LEAF_SUFFIX[season];
-          tallE.push([n(name), { x: x + (r2 - 0.5) * 0.2, y, z: z + (r - 0.5) * 0.2, s: 1.3 + r * 0.45, ry }]);
+          // The trunk stays inside the tree's 0.6-wide hit box.
+          const tree = treeModel(t, r, r2, season);
+          tallE.push([tree.url, { x: x + (r2 - 0.5) * 0.1, y, z: z + (r - 0.5) * 0.1, s: tree.s, ry }]);
           break;
         }
         case "stone": lowE.push([n(pick(["stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA"], r2)), { x, y, z, s: 1.9, ry }]); break;
-        case "stump": lowE.push([n(r2 > 0.5 ? "stump_round" : "stump_old"), { x, y, z, s: 2, ry }]); break;
-        case "log": lowE.push([n(r2 > 0.5 ? "log" : "log_large"), { x, y, z, s: 1.4, ry }]); break;
+        case "stump": lowE.push([q(`TreeStump${season === "Winter" ? "_Snow" : r2 > 0.5 ? "_Moss" : ""}`), { x, y, z, s: 0.6, ry }]); break;
+        case "log": lowE.push([q(`WoodLog${r2 > 0.5 || season === "Winter" ? LOG_SUFFIX[season] : ""}`), { x, y, z, s: 0.38, ry }]); break;
         case "stick": sticksL.push({ x, y: y + 0.05, z, ry, rz: 0.1 }); break;
-        case "sapling": lowE.push([n(pick(LEAFY, r2) + LEAF_SUFFIX[season]), { x, y, z, s: 0.45, ry }]); break;
+        case "sapling": {
+          const name = r2 < 0.5 ? "BirchTree_4" : "MapleTree_4";
+          lowE.push([season === "Fall" ? withTint(qt(name), r2 < 0.5 ? FALL_TINT.birch : FALL_TINT.maple) : qt(name), { x, y, z, s: 0.2, ry }]);
+          break;
+        }
         case "copperOre": case "tinOre": case "ironOre": case "goldOre": case "mithrilOre":
           // Ore poking out of the mountainside: a rock with colored crystals.
           lowE.push([n("stone_smallB"), { x, y, z, s: 2.1, ry }]);
@@ -252,7 +289,7 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
         if (t.ground === "grass" && season !== "Winter") {
           if (r < 0.1) lowE.push([n(r2 > 0.5 ? "grass" : "grass_large"), { x: x + (r2 - 0.5) * 0.5, z, s: 1.4, ry }]);
           else if (r < 0.13) lowE.push([n(pick(flowers, r2)), { x, z, s: 1.6, ry }]);
-          else if (r < 0.15) lowE.push([n(r2 > 0.5 ? "plant_bushSmall" : "plant_bush"), { x, z, s: 1.4, ry }]);
+          else if (r < 0.15) lowE.push([r2 > 0.5 ? qt("Bush_Small") : qt("Bush_Flowers"), { x, z, s: r2 > 0.5 ? 0.45 : 0.7, ry }]);
         }
         if (t.ground === "water" && r < 0.18) lowE.push([n(r2 > 0.5 ? "lily_large" : "lily_small"), { x, y: -0.06, z, s: 1.8, ry }]);
       }

@@ -11,7 +11,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
 const CACHE = path.join(ROOT, ".asset-cache");
 const MODELS = path.join(ROOT, "public/models");
 const ICONS = path.join(ROOT, "public/icons");
-// The Kenney nature models stay until the web game is replaced by the Godot version (which uses Quaternius's).
+// Kenney nature models for small things (stones, grass, flowers); trees, stumps, and logs are Quaternius's.
 const BUDGET_BYTES = 10 * 1024 * 1024;
 
 const PACKS = {
@@ -19,9 +19,7 @@ const PACKS = {
     title: "Nature Kit", url: "https://kenney.nl/media/pages/assets/nature-kit/37ac38a37b-1677698939/kenney_nature-kit.zip",
     page: "https://kenney.nl/assets/nature-kit", dir: "Models/GLTF format",
     models: [
-      "tree_default", "tree_default_fall", "tree_default_dark", "tree_oak", "tree_oak_fall", "tree_oak_dark",
-      "tree_detailed", "tree_detailed_fall", "tree_detailed_dark", "tree_pineRoundA", "tree_pineRoundC", "tree_pineTallA", "tree_pineSmallB",
-      "stump_round", "stump_old", "log", "log_large", "stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA",
+      "stone_smallA", "stone_smallB", "stone_smallC", "stone_smallFlatA",
       "grass", "grass_large", "grass_leafs", "plant_bushSmall", "plant_bush", "plant_flatShort",
       "flower_redA", "flower_yellowA", "flower_purpleA", "flower_yellowB",
       "mushroom_red", "mushroom_tan", "mushroom_redGroup", "mushroom_tanGroup", "lily_large", "lily_small",
@@ -99,7 +97,7 @@ async function makeLit(src, dest) {
 
 // `--only=<pack>` rebuilds one Kenney pack in place (e.g. --only=characters) and leaves the rest alone.
 const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
-if (ONLY && !PACKS[ONLY]) throw new Error(`No pack called ${ONLY}. Packs: ${Object.keys(PACKS).join(", ")}`);
+if (ONLY && !PACKS[ONLY] && ONLY !== "trees") throw new Error(`No pack called ${ONLY}. Packs: ${Object.keys(PACKS).join(", ")}, trees`);
 
 mkdirSync(CACHE, { recursive: true });
 if (!ONLY) {
@@ -157,8 +155,8 @@ const OBJ_PACKS = [
     // Trees, rocks, stumps, and logs in every season (autumn leaves, snow), plus bushes, grass, and plants.
     title: "Ultimate Nature", src: "quaternius-nature", out: "qnature", page: "https://quaternius.com/packs/ultimatenature.html",
     models: [
-      ...["CommonTree", "PineTree", "BirchTree"].flatMap((t) => SEASON.flatMap((s) => range(3).map((n) => `${t}${s}_${n}`))),
-      "CommonTree_Dead_1", "CommonTree_Dead_Snow_1", "BirchTree_Dead_1", "BirchTree_Dead_Snow_1",
+      // Pines for the mountain (the textured tree pack below has none).
+      ...SEASON.flatMap((s) => range(3).map((n) => `PineTree${s}_${n}`)),
       ...range(4).flatMap((n) => [`Rock_${n}`, `Rock_Snow_${n}`]), "Rock_Moss_1", "Rock_Moss_2",
       ...["TreeStump", "WoodLog"].flatMap((t) => [t, `${t}_Moss`, `${t}_Snow`]),
       "Bush_1", "Bush_2", "Bush_Snow_1", "BushBerries_1", "Grass", "Grass_2", "Grass_Short", "Flowers", "Plant_1", "Plant_2", "Plant_3", "Lilypad",
@@ -215,6 +213,44 @@ async function convertObjPack(pack) {
 
 if (!ONLY) for (const pack of OBJ_PACKS) await convertObjPack(pack);
 
+// ── Quaternius's textured trees: glTF with big textures, packed into small GLBs ──
+const TREE_PACK = {
+  title: "Stylized Trees", src: "quaternius-trees", out: "qtrees", page: "https://quaternius.com",
+  models: [...range(5).map((n) => `BirchTree_${n}`), ...range(5).map((n) => `MapleTree_${n}`), ...[1, 3, 5, 7, 9].map((n) => `DeadTree_${n}`), "Bush_Small", "Bush_Flowers"],
+};
+
+/**
+ * Bark becomes a 256px JPEG and leaves a 512px PNG (the 2048px originals and their 20 MB normal
+ * maps are far too heavy for the web, and too fine to see from the game's camera). See-through
+ * leaves are cut out (alpha mask) rather than blended, so thousands of instanced trees draw in
+ * the right order.
+ */
+async function convertTreePack(pack) {
+  const src = path.join(ROOT, "assets-src", pack.src);
+  if (!existsSync(src)) return;
+  const out = path.join(MODELS, pack.out);
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  for (const name of pack.models) {
+    const doc = await io.read(path.join(src, `${name}.gltf`));
+    for (const m of doc.getRoot().listMaterials()) {
+      m.setNormalTexture(null).setMetallicFactor(0).setRoughnessFactor(0.9);
+      if (m.getAlphaMode() === "BLEND") m.setAlphaMode("MASK").setAlphaCutoff(0.5);
+    }
+    await doc.transform(prune());
+    for (const tex of doc.getRoot().listTextures()) {
+      const leaves = tex.getMimeType() === "image/png";
+      const img = sharp(Buffer.from(tex.getImage())).resize(leaves ? 512 : 256, leaves ? 512 : 256);
+      tex.setImage(new Uint8Array(await (leaves ? img.png({ palette: true, quality: 90 }) : img.jpeg({ quality: 80 })).toBuffer()));
+    }
+    await doc.transform(dedup(), weld(), quantize());
+    writeFileSync(path.join(out, `${name}.glb`), await io.writeBinary(doc));
+  }
+  copyFileSync(path.join(src, "License.txt"), path.join(out, "License.txt"));
+}
+
+if (!ONLY || ONLY === "trees") await convertTreePack(TREE_PACK);
+
 function sizeOf(dir) {
   return readdirSync(dir).reduce((n, f) => {
     const p = path.join(dir, f);
@@ -232,6 +268,7 @@ from these models by \`npm run icons\`) are released under
 | --- | --- | --- | --- |
 ${Object.entries(PACKS).map(([k, p]) => `| \`${k}/\` | ${p.title} | Kenney | ${p.page} |`).join("\n")}
 ${OBJ_PACKS.map((p) => `| \`${p.out}/\` | ${p.title} (converted from OBJ in \`assets-src/${p.src}\`) | Quaternius | ${p.page} |`).join("\n")}
+| \`${TREE_PACK.out}/\` | ${TREE_PACK.title} (from glTF in \`assets-src/${TREE_PACK.src}\`, textures shrunk) | Quaternius | ${TREE_PACK.page} |
 
 Credit is not required by CC0, but we're grateful. Regenerate this folder with \`npm run assets\`.
 `);

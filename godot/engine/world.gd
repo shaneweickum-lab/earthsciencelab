@@ -145,12 +145,17 @@ static func is_water(g: String) -> bool:
 	return g == "water" or g == "river" or g == "sea"
 
 
-## Can the player stand on this tile?
-static func is_walkable(state: Dictionary, x: int, y: int) -> bool:
+## Sticks and saplings: you walk over them, though tools still reach them.
+const PASSABLE := ["stick", "sapling"]
+
+
+## Can the player stand on this tile? `passable` counts sticks and saplings as open ground, the
+## way walking does (townsfolk route through them too).
+static func is_walkable(state: Dictionary, x: int, y: int, passable := false) -> bool:
 	var t = tile_at(state, x, y)
 	if t == null or is_water(t.ground) or t.ground == "caveWall":
 		return false
-	if t.obstacle:
+	if t.obstacle and not (passable and t.obstacle in PASSABLE):
 		return false
 	var b = building_at(state, x, y)
 	if b == null:
@@ -1459,26 +1464,93 @@ static func _discover_if(state: Dictionary, cond: bool, id: String) -> Dictionar
 
 # ───────────────────────── movement ─────────────────────────
 
-const R := 0.3
+## Half the player's width: you're a 0.5 × 0.5 box.
+const PLAYER_R := 0.25
+const DIR_STEPS := [[1, 0], [-1, 0], [0, 1], [0, -1]]
+const FENCE_EDGE := {0: [0, 0.45], 1: [0.45, 0], 2: [0, -0.45], 3: [-0.45, 0]}
 
 
-## Move the player by (dx, dy) tiles, sliding along walls. Returns the new player.
+static func _box(cx: float, cy: float, hw: float, hd: float) -> Dictionary:
+	return {"x0": cx - hw, "y0": cy - hd, "x1": cx + hw, "y1": cy + hd}
+
+
+## A bar from a tile's center to its edge toward (dx, dy), half as thick as `h`.
+static func _join_box(x: int, y: int, dx: int, dy: int, h: float) -> Dictionary:
+	return _box(x + dx * 0.25, y, 0.25, h) if dx else _box(x, y + dy * 0.25, h, 0.25)
+
+
+## What blocks you on one tile, as boxes (see hitBoxes in engine.ts).
+static func hit_boxes(state: Dictionary, x: int, y: int, from: Dictionary) -> Array:
+	var t = tile_at(state, x, y)
+	if t == null or is_water(t.ground) or t.ground == "caveWall" or not can_step(state, from.x, from.y, x, y):
+		return [_box(x, y, 0.5, 0.5)]
+	var out := []
+	if t.obstacle and not (t.obstacle in PASSABLE):
+		var h: float = WorldMap.OBSTACLE_BOX.get(t.obstacle, 1) / 2.0
+		out.append(_box(x, y, h, h))
+		# Trees side by side grow into a solid row.
+		if t.obstacle == "tree":
+			for d in DIR_STEPS:
+				var n = tile_at(state, x + d[0], y + d[1])
+				if n != null and n.obstacle == "tree":
+					out.append(_join_box(x, y, d[0], d[1], h))
+	var b = building_at(state, x, y)
+	if b != null and not (b.kind in WorldMap.WALKABLE_BUILDINGS):
+		var sz := WorldMap.size_of(b.kind)
+		if b.kind == "greenhouse":
+			if not is_walkable(state, x, y):
+				out.append(_box(x, y, 0.5, 0.5))
+		elif b.kind == "fence":
+			var e: Array = FENCE_EDGE[int(b.get("rot", 0)) % 4]
+			out.append(_box(x, y + e[1], 0.5, 0.1) if e[0] == 0 else _box(x + e[0], y, 0.1, 0.5))
+			for d in DIR_STEPS:
+				var o = building_at(state, x + d[0], y + d[1])
+				if o != null and o.kind == "fence":
+					out.append(_join_box(x, y, d[0], d[1], 0.1))
+		elif sz[0] > 1 or sz[1] > 1:
+			var i := WorldMap.BUILDING_INSET
+			out.append({"x0": b.x - 0.5 + i, "y0": b.y - 0.5 + i, "x1": b.x + sz[0] - 0.5 - i, "y1": b.y + sz[1] - 0.5 - i})
+		else:
+			var hb: Array = WorldMap.HITBOX.get(b.kind, [1, 1])
+			var turned := int(b.get("rot", 0)) % 2 == 1
+			out.append(_box(x, y, (hb[1] if turned else hb[0]) / 2.0, (hb[0] if turned else hb[1]) / 2.0))
+	return out
+
+
+static func _blocking(state: Dictionary, from: Dictionary, x0: float, y0: float, x1: float, y1: float) -> Array:
+	var out := []
+	# One tile of margin: a fence's rail reaches a little past its own tile.
+	for ty in range(int(Js.round(y0)) - 1, int(Js.round(y1)) + 2):
+		for tx in range(int(Js.round(x0)) - 1, int(Js.round(x1)) + 2):
+			out.append_array(hit_boxes(state, tx, ty, from))
+	return out
+
+
+static func _hits(b: Dictionary, x: float, y: float) -> bool:
+	return x - PLAYER_R < b.x1 and x + PLAYER_R > b.x0 and y - PLAYER_R < b.y1 and y + PLAYER_R > b.y0
+
+
+## Walk: across first, then up or down, so you slide along whatever you bump. You stop flush
+## against it rather than short of it; something you're already overlapping never holds you in.
 static func move_player(state: Dictionary, dx: float, dy: float) -> Dictionary:
 	var p: Dictionary = state.player
 	var from := player_tile(state)
-	var free := func(x: float, y: float) -> bool:
-		for o in [[-R, -R], [R, -R], [-R, R], [R, R]]:
-			var tx := int(Js.round(x + o[0]))
-			var ty := int(Js.round(y + o[1]))
-			if not is_walkable(state, tx, ty) or not can_step(state, from.x, from.y, tx, ty):
-				return false
-		return true
 	var x: float = p.x
 	var y: float = p.y
-	if dx and free.call(x + dx, y):
-		x += dx
-	if dy and free.call(x, y + dy):
-		y += dy
+	if dx:
+		var nx := x + dx
+		for b in _blocking(state, from, minf(x, nx) - PLAYER_R, y - PLAYER_R, maxf(x, nx) + PLAYER_R, y + PLAYER_R):
+			if _hits(b, x, y) or not _hits(b, nx, y):
+				continue
+			nx = maxf(x, minf(nx, b.x0 - PLAYER_R)) if dx > 0 else minf(x, maxf(nx, b.x1 + PLAYER_R))
+		x = nx
+	if dy:
+		var ny := y + dy
+		for b in _blocking(state, from, x - PLAYER_R, minf(y, ny) - PLAYER_R, x + PLAYER_R, maxf(y, ny) + PLAYER_R):
+			if _hits(b, x, y) or not _hits(b, x, ny):
+				continue
+			ny = maxf(y, minf(ny, b.y0 - PLAYER_R)) if dy > 0 else minf(y, maxf(ny, b.y1 + PLAYER_R))
+		y = ny
 	var facing: String = p.facing
 	if absf(dx) > absf(dy):
 		facing = "right" if dx > 0 else "left"
