@@ -1,5 +1,5 @@
 class_name Models
-## CC0 models (Kenney, and Quaternius crops) copied from public/models by `npm run godot:export`.
+## CC0 models (Kenney, and Quaternius crops, nature, trees and farm buildings) copied from public/models by `npm run godot:export`.
 ##
 ## Kenney's Nature Kit uses a bright pastel palette and marks its colors as metallic, which
 ## renders nearly black without an environment map. Materials are repainted by name to match
@@ -39,11 +39,18 @@ static func _fix(mat: Material) -> void:
 		mat.albedo_color = Color(PALETTE[mat.resource_name])
 
 
-## Every mesh in a model ("pack/name") with its transform relative to the model root.
+## Every mesh in a model ("pack/name") with its transform relative to the model root. A
+## "#rrggbb" ending tints its leaves (autumn colors), the way models.tsx does.
 static func parts(name: String) -> Array:
 	if _parts.has(name):
 		return _parts[name]
 	var out := []
+	var bits := name.split("#")
+	if bits.size() > 1:
+		for p in parts(bits[0]):
+			out.append({"mesh": _tinted(p.mesh, Color("#" + bits[1])), "xform": p.xform})
+		_parts[name] = out
+		return out
 	var packed := scene(name)
 	if packed != null:
 		var root := packed.instantiate()
@@ -51,6 +58,18 @@ static func parts(name: String) -> Array:
 		root.free()
 	_parts[name] = out
 	return out
+
+
+## A copy of a mesh whose leaf materials are another color; bark and everything else is shared.
+static func _tinted(mesh: Mesh, tint: Color) -> Mesh:
+	var copy: Mesh = mesh.duplicate()
+	for s in copy.get_surface_count():
+		var m := copy.surface_get_material(s)
+		if m is BaseMaterial3D and "leaves" in m.resource_name.to_lower():
+			var t: BaseMaterial3D = m.duplicate()
+			t.albedo_color = tint
+			copy.surface_set_material(s, t)
+	return copy
 
 
 static func _collect(node: Node, parent: Transform3D, out: Array) -> void:

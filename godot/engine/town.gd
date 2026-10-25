@@ -76,7 +76,7 @@ static func route(state: Dictionary, from: Array, to: Array) -> Array:
 				continue
 			if n != goal:
 				if walk[n] == 2:
-					walk[n] = 1 if World.is_walkable(state, nx, ny) else 0
+					walk[n] = 1 if World.is_walkable(state, nx, ny, true) else 0
 				if walk[n] == 0:
 					continue
 			if not World.can_step(state, cx, cy, nx, ny):

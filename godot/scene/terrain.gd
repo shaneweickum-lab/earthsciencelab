@@ -10,10 +10,23 @@ const GRASS := {
 	"Fall": ["#a9a552", "#b49a4a", "#9fa04e"],
 	"Winter": ["#dfe6e8", "#d6dfe2", "#e6ecee"],
 }
-## Quaternius's Ultimate Nature models (public/models/qnature), with autumn and snowy versions.
-const TREES := ["CommonTree", "CommonTree", "PineTree", "BirchTree"]
+## Quaternius's Ultimate Nature models (public/models/qnature): pines with autumn and snowy
+## versions, stumps, logs, rocks, and wild plants.
 const SEASON_SUFFIX := {"Spring": "", "Summer": "", "Fall": "_Autumn", "Winter": "_Snow"}
 const N := "qnature/"
+## Quaternius's textured trees (public/models/qtrees), each scaled so its canopy is about two
+## tiles across (TREE_SCALE in Terrain.tsx).
+const QT := "qtrees/"
+const TREE_SCALE := {
+	"BirchTree_1": 0.62, "BirchTree_2": 0.45, "BirchTree_3": 0.59, "BirchTree_4": 0.79, "BirchTree_5": 0.61,
+	"MapleTree_1": 0.35, "MapleTree_2": 0.33, "MapleTree_3": 0.25, "MapleTree_4": 0.79, "MapleTree_5": 0.31,
+	"DeadTree_1": 0.48, "DeadTree_3": 0.47, "DeadTree_5": 1.15, "DeadTree_7": 0.33, "DeadTree_9": 0.91,
+}
+const BIRCHES := ["BirchTree_1", "BirchTree_2", "BirchTree_3", "BirchTree_4", "BirchTree_5"]
+const MAPLES := ["MapleTree_1", "MapleTree_2", "MapleTree_3", "MapleTree_4", "MapleTree_5"]
+const SNAGS := ["DeadTree_1", "DeadTree_3", "DeadTree_5", "DeadTree_7", "DeadTree_9"]
+## Autumn leaves: maples go red-orange, birches gold.
+const FALL_TINT := {"maple": "e0672e", "birch": "e8b73a"}
 ## How tall one mountain terrace is, in world units (height.ts).
 const STEP := 0.7
 ## Chunks of the valley, in tiles: each is drawn (or skipped, when it's off screen) on its own.
@@ -218,6 +231,26 @@ func _build_ground(tiles: Array, season: String) -> void:
 	_ground.add_child(edge)
 
 
+## Which tree grows on a tile: pines on the mountain, birches and maples in the valley, and now
+## and then a dead snag. In winter the leafy trees stand bare. (treeModel in Terrain.tsx.)
+static func tree_model(t: Dictionary, r: float, r2: float, season: String) -> Dictionary:
+	if t.ground == "rock":
+		return {"name": N + "PineTree%s_%d" % [SEASON_SUFFIX[season], 1 + int(floorf(r2 * 3))], "s": 0.95 + r * 0.3}
+	var jitter := 0.85 + r * 0.3
+	if r > 0.96:
+		var snag: String = _pick(SNAGS, r2)
+		return {"name": QT + snag, "s": TREE_SCALE[snag] * jitter}
+	var birch := r2 < 0.45
+	var name: String = _pick(BIRCHES, r2 / 0.45) if birch else _pick(MAPLES, (r2 - 0.45) / 0.55)
+	if season == "Winter":
+		var bare: String = _pick(SNAGS, fmod(r * 7, 1.0))
+		return {"name": QT + bare, "s": TREE_SCALE[bare] * jitter}
+	var url := QT + name
+	if season == "Fall":
+		url += "#" + (FALL_TINT.birch if birch else FALL_TINT.maple)
+	return {"name": url, "s": TREE_SCALE[name] * jitter}
+
+
 func _build_land(world: Dictionary, season: String) -> void:
 	_clear(_land)
 	var tiles: Array = world.tiles
@@ -229,7 +262,6 @@ func _build_land(world: Dictionary, season: String) -> void:
 			for x in range(b.x, b.x + sz[0]):
 				covered[int(y) * W + int(x)] = true
 	var winter := season == "Winter"
-	var suffix: String = SEASON_SUFFIX[season]
 	var tall := {}
 	var low := {}
 	var sticks := []
@@ -250,16 +282,9 @@ func _build_land(world: Dictionary, season: String) -> void:
 		var y := tile_top(t)
 		match t.obstacle:
 			"tree":
-				# Pines up on the mountain; a mix down in the valley.
-				var kind: String = "PineTree" if t.ground == "rock" else _pick(TREES, r2)
-				var name: String
-				if r > 0.96:
-					# A few old dead snags, for woodpeckers and fungi.
-					name = "%s_Dead%s_1" % ["BirchTree" if kind == "BirchTree" else "CommonTree", "_Snow" if winter else ""]
-				else:
-					name = "%s%s_%d" % [kind, suffix, 1 + int(floorf(_h(i * 9 + 4) * 3))]
-				var size := (0.75 if kind == "BirchTree" else 0.95) + r * 0.35
-				add.call(tall, N + name, Models.xf(Vector3(x + (r2 - 0.5) * 0.2, y, z + (r - 0.5) * 0.2), Vector3(0, ry, 0), size))
+				# The trunk stays inside the tree's 0.6-wide hit box.
+				var tree := tree_model(t, r, r2, season)
+				add.call(tall, tree.name, Models.xf(Vector3(x + (r2 - 0.5) * 0.1, y, z + (r - 0.5) * 0.1), Vector3(0, ry, 0), tree.s))
 			"stone":
 				var rock := "Rock_Snow_%d" % (1 + int(r2 * 4)) if winter else ("Rock_Moss_%d" % (1 + int(r2 * 2)) if r > 0.8 else "Rock_%d" % (1 + int(r2 * 4)))
 				add.call(low, N + rock, Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.55))
@@ -268,8 +293,11 @@ func _build_land(world: Dictionary, season: String) -> void:
 			"log":
 				add.call(low, N + ("WoodLog_Snow" if winter else ("WoodLog_Moss" if r2 > 0.5 else "WoodLog")), Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.38))
 			"sapling":
-				var kind: String = _pick(TREES, r2)
-				add.call(low, N + "%s%s_1" % [kind, suffix], Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.35))
+				var name := "BirchTree_4" if r2 < 0.5 else "MapleTree_4"
+				var url := QT + name
+				if season == "Fall":
+					url += "#" + (FALL_TINT.birch if r2 < 0.5 else FALL_TINT.maple)
+				add.call(low, url, Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.2))
 			"stick":
 				sticks.append({"xf": Models.xf(Vector3(x, y + 0.05, z), Vector3(0, ry, 0.1)), "color": Color("#7a5636")})
 			"copperOre", "tinOre", "ironOre", "goldOre", "mithrilOre":
@@ -296,7 +324,7 @@ func _build_land(world: Dictionary, season: String) -> void:
 				elif r < 0.13:
 					add.call(low, N + ("Flowers" if r2 > 0.3 else "Plant_2"), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.55))
 				elif r < 0.15:
-					add.call(low, N + _pick(["Bush_1", "Bush_2", "BushBerries_1", "Plant_3"], r2), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.5))
+					add.call(low, QT + ("Bush_Small" if r2 > 0.5 else "Bush_Flowers"), Models.xf(Vector3(x, 0, z), Vector3(0, ry, 0), 0.45 if r2 > 0.5 else 0.7))
 			if t.ground == "water" and r < 0.18:
 				add.call(low, N + "Lilypad", Models.xf(Vector3(x, -0.06, z), Vector3(0, ry, 0), 0.4 + r2 * 0.3))
 	for key in tall:

@@ -196,6 +196,23 @@ const MINE_START := {"x": 12, "y": 8}
 const CHEST_SIZE := 20
 
 ## Buildings you can walk over.
+## What a 1×1 building blocks when you walk into it: [width, depth] of a box centered on its tile
+## (turned with the building). Bigger buildings block their whole footprint, a little inset;
+## fences are a rail along one edge (see World.hit_boxes). Mirrors HITBOX in map.ts.
+const HITBOX := {
+	"lamp": [0.3, 0.3], "birdHouse": [0.3, 0.3], "scarecrow": [0.4, 0.3],
+	"signpost": [0.6, 0.6], "noticeBoard": [1, 0.6], "chest": [0.8, 0.6], "shippingBin": [0.9, 0.75], "composter": [0.85, 0.85],
+	"rainBarrel": [0.7, 0.7], "beehive": [0.7, 0.6], "bugHotel": [0.7, 0.6], "well": [0.85, 0.85],
+	"workbench": [0.9, 0.7], "grinder": [0.9, 0.7], "spinningWheel": [0.9, 0.6], "furnace": [0.85, 0.8], "stove": [0.85, 0.8], "oven": [0.85, 0.8],
+	"marketStall": [0.9, 0.7], "prop": [0.9, 0.6], "ladderUp": [0.6, 0.6], "ladderDown": [0.6, 0.6], "gardenGate": [1, 1],
+}
+## How much big buildings' blocking boxes are pulled in from their footprint.
+const BUILDING_INSET := 0.1
+## Obstacles' blocking boxes (centered on the tile); sticks and saplings don't block at all.
+const OBSTACLE_BOX := {
+	"tree": 0.6, "stump": 0.6, "stone": 0.6, "log": 0.7, "copperOre": 0.6, "tinOre": 0.6, "ironOre": 0.6, "goldOre": 0.6, "mithrilOre": 0.6,
+}
+
 const WALKABLE_BUILDINGS := ["pathStone", "flowerBed"]
 
 ## Town buildings the player can't build, pick up, or build over.

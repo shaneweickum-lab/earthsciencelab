@@ -432,6 +432,27 @@ function valley(id: (kind: string) => string | undefined, today: () => number): 
   for (let m = 0; m < 6; m++) add({ op: "move", dx: 0.35, dy: 0 });
   add({ op: "player", x: 110, y: 20, facing: "left" });
   for (let m = 0; m < 6; m++) add({ op: "move", dx: -0.35, dy: 0 });
+  // Hit boxes: stop flush at a rock, brush past a tree's trunk, walk over a stick, bump a fence's rail.
+  for (let y = 16; y <= 22; y++) for (let x = 19; x <= 25; x++) add({ op: "tile", i: y * W + x, patch: { obstacle: null, weeds: false, crop: null } });
+  add({ op: "tile", i: 20 * W + 23, patch: { obstacle: "stone" } });
+  add({ op: "tile", i: 17 * W + 22, patch: { obstacle: "tree" } });
+  add({ op: "tile", i: 17 * W + 23, patch: { obstacle: "tree" } });
+  add({ op: "tile", i: 21 * W + 21, patch: { obstacle: "stick" } });
+  add({ op: "player", x: 20, y: 20, facing: "right" });
+  for (let m = 0; m < 8; m++) add({ op: "move", dx: 0.35, dy: 0 });
+  add({ op: "player", x: 21.6, y: 16, facing: "down" });
+  for (let m = 0; m < 10; m++) add({ op: "move", dx: 0, dy: 0.35 });
+  add({ op: "player", x: 22.5, y: 16, facing: "down" });
+  for (let m = 0; m < 6; m++) add({ op: "move", dx: 0, dy: 0.35 });
+  add({ op: "player", x: 20, y: 21, facing: "right" });
+  for (let m = 0; m < 6; m++) add({ op: "move", dx: 0.35, dy: 0.05 });
+  add({ op: "give", item: "kit_fence", qty: 2, grade: null });
+  add({ op: "selectItem", item: "kit_fence" });
+  add({ op: "player", x: 24, y: 18, facing: "down" });
+  add({ op: "act" });
+  add({ op: "player", x: 24, y: 21, facing: "up" });
+  for (let m = 0; m < 6; m++) add({ op: "move", dx: 0, dy: -0.35 });
+  add({ op: "move", dx: 0.3, dy: -0.35 });
   // Rent allotments in the park (a flat price, not the next plot's), and dig in.
   const a = PLOTS[ALLOTMENT0];
   add({ op: "player", x: a.x0, y: a.y0 - 1, facing: "down" });

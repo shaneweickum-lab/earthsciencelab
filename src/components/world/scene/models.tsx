@@ -6,8 +6,8 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { Matrix4, Object3D, type BufferGeometry, type InstancedMesh, type Material, type Mesh, type MeshStandardMaterial } from "three";
 import { chunked, type Inst } from "./Instanced";
 
-/** CC0 models (Kenney, and Quaternius crops, nature and farm buildings) prepared in public/models by `npm run assets`. */
-export type Pack = "nature" | "town" | "survival" | "food" | "crops" | "characters" | "qnature" | "qbuildings" | "furniture";
+/** CC0 models (Kenney, and Quaternius crops, nature, trees and farm buildings) prepared in public/models by `npm run assets`. */
+export type Pack = "nature" | "town" | "survival" | "food" | "crops" | "characters" | "qnature" | "qbuildings" | "furniture" | "qtrees";
 
 export const model = (pack: Pack, name: string) => `/models/${pack}/${name}.glb`;
 
@@ -40,20 +40,40 @@ function fixMaterial(mat: Material) {
   if (color && std.color) std.color.set(color);
 }
 
-/** Every mesh in a model with its transform relative to the model root. */
+const tinted = new Map<string, Material>();
+
+/** A copy of a leaf material in another color (autumn leaves); bark and everything else stays as it is. */
+function tintLeaves(mat: Material, tint: string | undefined): Material {
+  if (!tint || !/leaves/i.test(mat.name)) return mat;
+  const key = `${mat.uuid}#${tint}`;
+  let out = tinted.get(key);
+  if (!out) {
+    out = mat.clone();
+    (out as MeshStandardMaterial).color.set(`#${tint}`);
+    tinted.set(key, out);
+  }
+  return out;
+}
+
+/** A model URL whose leaves are tinted: `withTint(url, "e0672e")`. */
+export const withTint = (url: string, tint: string) => `${url}#${tint}`;
+
+/** Every mesh in a model with its transform relative to the model root (a `#rrggbb` ending tints its leaves). */
 export function useParts(url: string): Part[] {
-  const { scene } = useGLTF(url);
+  const [file, tint] = url.split("#");
+  const { scene } = useGLTF(file);
   return useMemo(() => {
     scene.updateMatrixWorld(true);
     const parts: Part[] = [];
     scene.traverse((o) => {
       const m = o as Mesh;
       if (!m.isMesh) return;
-      (Array.isArray(m.material) ? m.material : [m.material]).forEach(fixMaterial);
-      parts.push({ geometry: m.geometry, material: m.material, matrix: m.matrixWorld.clone() });
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      mats.forEach(fixMaterial);
+      parts.push({ geometry: m.geometry, material: Array.isArray(m.material) ? mats.map((x) => tintLeaves(x, tint)) : tintLeaves(m.material, tint), matrix: m.matrixWorld.clone() });
     });
     return parts;
-  }, [scene]);
+  }, [scene, tint]);
 }
 
 const dummy = new Object3D();

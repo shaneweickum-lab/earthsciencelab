@@ -87,7 +87,7 @@ export const SCIENCE_FEATURES = [
   {
     id: "weeds", category: "Weeds & pests", icon: "🌿", label: "Weeds",
     science: "Weed seeds sprout on bare soil and compete with crops for water, light, and nutrients.",
-    on: "Weeds sprout overnight on uncovered soil and slow your crops.", off: "No new weeds.",
+    on: "Weeds sprout overnight on bare soil, never where something is planted. Cut them before you plant.", off: "No new weeds.",
   },
   {
     id: "pests", category: "Weeds & pests", icon: "🐛", label: "Pests",

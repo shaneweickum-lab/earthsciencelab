@@ -157,6 +157,26 @@ export const SOUTH_PATH: [number, number][] = [
 /** Slots in a storage chest. */
 export const CHEST_SIZE = 20;
 
+/**
+ * What a 1×1 building blocks when you walk into it: [width, depth] of a box centered on its tile
+ * (turned with the building). Bigger buildings block their whole footprint, a little inset;
+ * fences are a rail along one edge (see hitBoxes in engine.ts). Interactive things are at least
+ * 0.6 across, so you're never standing on their tile when you face them.
+ */
+export const HITBOX: Partial<Record<Building["kind"], [number, number]>> = {
+  lamp: [0.3, 0.3], birdHouse: [0.3, 0.3], scarecrow: [0.4, 0.3],
+  signpost: [0.6, 0.6], noticeBoard: [1, 0.6], chest: [0.8, 0.6], shippingBin: [0.9, 0.75], composter: [0.85, 0.85],
+  rainBarrel: [0.7, 0.7], beehive: [0.7, 0.6], bugHotel: [0.7, 0.6], well: [0.85, 0.85],
+  workbench: [0.9, 0.7], grinder: [0.9, 0.7], spinningWheel: [0.9, 0.6], furnace: [0.85, 0.8], stove: [0.85, 0.8], oven: [0.85, 0.8],
+  marketStall: [0.9, 0.7], prop: [0.9, 0.6], ladderUp: [0.6, 0.6], ladderDown: [0.6, 0.6], gardenGate: [1, 1],
+};
+/** How much big buildings' blocking boxes are pulled in from their footprint, so you can walk flush along the walls. */
+export const BUILDING_INSET = 0.1;
+/** Obstacles' blocking boxes (centered on the tile); sticks and saplings don't block at all. */
+export const OBSTACLE_BOX: Partial<Record<NonNullable<Obstacle>, number>> = {
+  tree: 0.6, stump: 0.6, stone: 0.6, log: 0.7, copperOre: 0.6, tinOre: 0.6, ironOre: 0.6, goldOre: 0.6, mithrilOre: 0.6,
+};
+
 /** Buildings you can walk over. */
 export const WALKABLE_BUILDINGS: Building["kind"][] = ["pathStone", "flowerBed"];
 
