@@ -219,6 +219,12 @@ const TREE_PACK = {
   models: [...range(5).map((n) => `BirchTree_${n}`), ...range(5).map((n) => `MapleTree_${n}`), ...[1, 3, 5, 7, 9].map((n) => `DeadTree_${n}`), "Bush_Small", "Bush_Flowers"],
 };
 
+/** Gray leaf textures (same layout as the colored ones) and the summer green that tints them. */
+const LEAVES_GRAY = {
+  MapleTree_Leaves: { file: "MapleTree_Leaves_BW.png", green: [0.42, 0.78, 0.26, 1] },
+  BirchTree_Leaves: { file: "Leaves_BW.png", green: [0.45, 0.72, 0.25, 1] },
+};
+
 /**
  * Bark becomes a 256px JPEG and leaves a 512px PNG (the 2048px originals and their 20 MB normal
  * maps are far too heavy for the web, and too fine to see from the game's camera). See-through
@@ -236,6 +242,13 @@ async function convertTreePack(pack) {
     for (const m of doc.getRoot().listMaterials()) {
       m.setNormalTexture(null).setMetallicFactor(0).setRoughnessFactor(0.9);
       if (m.getAlphaMode() === "BLEND") m.setAlphaMode("MASK").setAlphaCutoff(0.5);
+      // The pack's maple leaves are red and its birch leaves gold (autumn). Swap in its gray
+      // leaves and color them summer green; the games tint them for spring and fall.
+      const gray = LEAVES_GRAY[m.getName()];
+      if (gray) {
+        m.getBaseColorTexture().setImage(new Uint8Array(readFileSync(path.join(src, gray.file)))).setURI("");
+        m.setBaseColorFactor(gray.green);
+      }
     }
     await doc.transform(prune());
     for (const tex of doc.getRoot().listTextures()) {

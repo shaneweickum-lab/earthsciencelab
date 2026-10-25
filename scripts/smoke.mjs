@@ -326,19 +326,21 @@ for (const [name, x, y, f] of [["market", 92, 20, "up"], ["park", 72, 45, "up"],
   await shot(`07d3e-${name}`);
 }
 // The trees through the year, by the forest pond: summer leaves, fall colors, bare in winter.
-for (const [name, day] of [["summer", 20], ["fall", 35], ["winter", 50]]) {
+for (const [name, day] of [["spring", 8], ["summer", 30], ["fall", 50], ["winter", 70]]) {
   await page.evaluate((day) => {
     const { useWorld } = window.__soilGame;
     useWorld.getState().update((w) => ({ ...w, minute: (day - 1) * 1440 + 11 * 60 }));
   }, day);
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(6000);
   await shot(`07d3f-trees-${name}`);
 }
 
 // Hit boxes: walk at a rock and stop flush against it, a step from its center (not a tile and a half).
 await teleport(19, 20, "right", { [20 * MAP_W + 20]: { obstacle: null, weeds: false, crop: null }, [20 * MAP_W + 21]: { obstacle: null, weeds: false, crop: null }, [20 * MAP_W + 22]: { obstacle: "stone", weeds: false, crop: null } });
+// Software rendering is slow, so hold the key until the player has stopped moving.
 await page.keyboard.down("d");
-await page.waitForTimeout(2500);
+await page.waitForFunction(() => window.__soilGame.runtime.player.x > 21.3, null, { timeout: 60000, polling: 100 });
+await page.waitForTimeout(1500);
 await page.keyboard.up("d");
 const stopped = await page.evaluate(() => window.__soilGame.runtime.player.x);
 if (Math.abs(stopped - 21.45) > 0.02) throw new Error(`Should stop flush against the rock at x 21.45, stopped at ${stopped}`);

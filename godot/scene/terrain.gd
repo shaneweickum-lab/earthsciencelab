@@ -25,8 +25,18 @@ const TREE_SCALE := {
 const BIRCHES := ["BirchTree_1", "BirchTree_2", "BirchTree_3", "BirchTree_4", "BirchTree_5"]
 const MAPLES := ["MapleTree_1", "MapleTree_2", "MapleTree_3", "MapleTree_4", "MapleTree_5"]
 const SNAGS := ["DeadTree_1", "DeadTree_3", "DeadTree_5", "DeadTree_7", "DeadTree_9"]
-## Autumn leaves: maples go red-orange, birches gold.
-const FALL_TINT := {"maple": "e0672e", "birch": "e8b73a"}
+## Leaf colors by season (the models' own leaves are summer green): fresh in spring; in fall
+## maples go red-orange, birches gold.
+const LEAF_TINT := {
+	"Spring": {"maple": "8fd060", "birch": "9ad860"},
+	"Fall": {"maple": "ff6a2a", "birch": "f2c23a"},
+}
+
+
+static func _leafy(name: String, birch: bool, season: String) -> String:
+	if not LEAF_TINT.has(season):
+		return QT + name
+	return QT + name + "#" + (LEAF_TINT[season].birch if birch else LEAF_TINT[season].maple)
 ## How tall one mountain terrace is, in world units (height.ts).
 const STEP := 0.7
 ## Chunks of the valley, in tiles: each is drawn (or skipped, when it's off screen) on its own.
@@ -245,10 +255,7 @@ static func tree_model(t: Dictionary, r: float, r2: float, season: String) -> Di
 	if season == "Winter":
 		var bare: String = _pick(SNAGS, fmod(r * 7, 1.0))
 		return {"name": QT + bare, "s": TREE_SCALE[bare] * jitter}
-	var url := QT + name
-	if season == "Fall":
-		url += "#" + (FALL_TINT.birch if birch else FALL_TINT.maple)
-	return {"name": url, "s": TREE_SCALE[name] * jitter}
+	return {"name": _leafy(name, birch, season), "s": TREE_SCALE[name] * jitter}
 
 
 func _build_land(world: Dictionary, season: String) -> void:
@@ -293,11 +300,7 @@ func _build_land(world: Dictionary, season: String) -> void:
 			"log":
 				add.call(low, N + ("WoodLog_Snow" if winter else ("WoodLog_Moss" if r2 > 0.5 else "WoodLog")), Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.38))
 			"sapling":
-				var name := "BirchTree_4" if r2 < 0.5 else "MapleTree_4"
-				var url := QT + name
-				if season == "Fall":
-					url += "#" + (FALL_TINT.birch if r2 < 0.5 else FALL_TINT.maple)
-				add.call(low, url, Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.2))
+				add.call(low, _leafy("BirchTree_4" if r2 < 0.5 else "MapleTree_4", r2 < 0.5, season), Models.xf(Vector3(x, y, z), Vector3(0, ry, 0), 0.2))
 			"stick":
 				sticks.append({"xf": Models.xf(Vector3(x, y + 0.05, z), Vector3(0, ry, 0.1)), "color": Color("#7a5636")})
 			"copperOre", "tinOre", "ironOre", "goldOre", "mithrilOre":

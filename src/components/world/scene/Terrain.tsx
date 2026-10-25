@@ -213,8 +213,15 @@ export const TREE_SCALE: Record<string, number> = {
 const BIRCHES = [1, 2, 3, 4, 5].map((k) => `BirchTree_${k}`);
 const MAPLES = [1, 2, 3, 4, 5].map((k) => `MapleTree_${k}`);
 const SNAGS = [1, 3, 5, 7, 9].map((k) => `DeadTree_${k}`);
-/** Autumn leaves: maples go red-orange, birches gold. */
-const FALL_TINT = { maple: "e0672e", birch: "e8b73a" };
+/** Leaf colors by season (the models' own leaves are summer green): fresh in spring; in fall maples go red-orange, birches gold. */
+const LEAF_TINT: Partial<Record<Season, { maple: string; birch: string }>> = {
+  Spring: { maple: "8fd060", birch: "9ad860" },
+  Fall: { maple: "ff6a2a", birch: "f2c23a" },
+};
+const leafy = (name: string, birch: boolean, season: Season) => {
+  const tint = LEAF_TINT[season];
+  return tint ? withTint(qt(name), birch ? tint.birch : tint.maple) : qt(name);
+};
 const PINE_SUFFIX: Record<Season, string> = { Spring: "", Summer: "", Fall: "_Autumn", Winter: "_Snow" };
 const LOG_SUFFIX: Record<Season, string> = { Spring: "_Moss", Summer: "", Fall: "_Moss", Winter: "_Snow" };
 
@@ -230,8 +237,7 @@ export function treeModel(t: Tile, r: number, r2: number, season: Season): { url
   const birch = r2 < 0.45;
   const name = birch ? pick(BIRCHES, r2 / 0.45) : pick(MAPLES, (r2 - 0.45) / 0.55);
   if (season === "Winter") return snag(pick(SNAGS, r * 7 % 1));
-  const url = season === "Fall" ? withTint(qt(name), birch ? FALL_TINT.birch : FALL_TINT.maple) : qt(name);
-  return { url, s: TREE_SCALE[name] * jitter };
+  return { url: leafy(name, birch, season), s: TREE_SCALE[name] * jitter };
 }
 
 // Load every tree up front so the forest doesn't flicker back to simple shapes when the season changes.
@@ -267,7 +273,7 @@ function ModelObstacles({ tiles, season, buildings }: { tiles: Tile[]; season: S
         case "stick": sticksL.push({ x, y: y + 0.05, z, ry, rz: 0.1 }); break;
         case "sapling": {
           const name = r2 < 0.5 ? "BirchTree_4" : "MapleTree_4";
-          lowE.push([season === "Fall" ? withTint(qt(name), r2 < 0.5 ? FALL_TINT.birch : FALL_TINT.maple) : qt(name), { x, y, z, s: 0.2, ry }]);
+          lowE.push([leafy(name, r2 < 0.5, season), { x, y, z, s: 0.2, ry }]);
           break;
         }
         case "copperOre": case "tinOre": case "ironOre": case "goldOre": case "mithrilOre":
