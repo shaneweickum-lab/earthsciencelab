@@ -482,11 +482,9 @@ static func _start_day(prev: Dictionary, new_day: int) -> Dictionary:
 				next.regrow = new_day + REGROW_DAYS
 			elif was == "sapling":
 				next.obstacle = "tree"
-		# Weeds sprout on uncovered farm soil.
+		# Weeds sprout on bare farm soil; where something is planted, they can't take hold.
 		if Settings.on(state, "weeds") and next.ground == "farm" and not next.greenhouse and not next.weeds and not next.obstacle and not next.mulch and building_at(state, x, y) == null:
-			var nc = next.crop
-			var covered: bool = nc != null and not nc.dead and Items.crop(nc.id).get("coversSoil", false)
-			var chance := 0.01 if season == "Winter" else (0.0 if covered else (0.05 if nc else (0.08 if next.tilled else 0.12)))
+			var chance := 0.0 if next.crop else (0.01 if season == "Winter" else (0.08 if next.tilled else 0.12))
 			if rand.next() < chance:
 				next = Js.with(next, {"weeds": true})
 				new_weeds += 1
@@ -548,7 +546,7 @@ static func _start_day(prev: Dictionary, new_day: int) -> Dictionary:
 	if killed_season:
 		notes.append("%d crop%s died because %s arrived and they don't grow this season." % [killed_season, "s" if killed_season > 1 else "", season])
 	if new_weeds:
-		notes.append("%d new weed%s sprouted on uncovered soil. Mulch and cover crops keep weeds down." % [new_weeds, "s" if new_weeds > 1 else ""])
+		notes.append("%d new weed%s sprouted on bare soil. Plant it, mulch it, or sow a cover crop to keep weeds out." % [new_weeds, "s" if new_weeds > 1 else ""])
 	if new_pests:
 		notes.append("Pests found %d crop%s. Rotating plant families and a bug hotel or bird house help." % [new_pests, "s" if new_pests > 1 else ""])
 	if new_season:

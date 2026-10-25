@@ -2,7 +2,7 @@ import { CROPS, type CropId } from "@/game/crops";
 import { nextRandom } from "@/game/rng";
 import { DAY_END, DAY_START, dayOf, seasonOf, startOfDay, timeOfDay } from "./clock";
 import { CATCHES, cropDays, ITEMS, item, RECIPES, sellPrice, SHOP_UNLOCKS, tempFactor, TIERS, UPGRADES, WORLD_CROPS, type Recipe, type Station, type ToolUse, type Water } from "./items";
-import { ALLOTMENT_RENT, DESTINATIONS, isAllotment, OLD_ROWS, OLD_W, TOWN, TOWN_SHIFT, addGardenLane, atGardenExit, BUILDING_SIZE, CHEST_SIZE, GARDEN_ENTRY, GATE_ROWS, LANE_X, laneBuildings, STALL_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
+import { ALLOTMENT_RENT, DESTINATIONS, isAllotment, OLD_ROWS, OLD_W, TOWN, TOWN_SHIFT, addGardenLane, atGardenExit, BUILDING_SIZE, CHEST_SIZE, GARDEN_ENTRY, GATE_ROWS, HITBOX, BUILDING_INSET, OBSTACLE_BOX, LANE_X, laneBuildings, STALL_SIZE, OLD_H, PLOTS, plotAt, plotPrice, SOUTH_PATH, MINE_ENTRANCE, MINE_H, MINE_START, MINE_W, mineFloor, createMap, doorOf, farmBuildings, townBuildings, FARM, FARM_W, greenhouseInterior, H, idx, inBounds, W, WALKABLE_BUILDINGS } from "./map";
 import { amendmentPoints, expectedGrade, harvestAmount, MAX_BOOST } from "./grades";
 import { journalEntry } from "./journal";
 import { spawnCritters } from "./nature";
@@ -127,11 +127,17 @@ export function buildingAt(state: WorldState, x: number, y: number): Building | 
 /** Ponds, the river, and the sea. */
 export const isWater = (g: Tile["ground"]) => g === "water" || g === "river" || g === "sea";
 
-/** Can the player stand on this tile? */
-export function isWalkable(state: WorldState, x: number, y: number): boolean {
+/** Sticks and saplings: you walk over them, though tools still reach them. */
+const PASSABLE: NonNullable<Obstacle>[] = ["stick", "sapling"];
+
+/**
+ * Can the player stand on this tile? `passable` counts sticks and saplings as open ground, the
+ * way walking does (townsfolk route through them too).
+ */
+export function isWalkable(state: WorldState, x: number, y: number, passable = false): boolean {
   const t = tileAt(state, x, y);
   if (!t || isWater(t.ground) || t.ground === "caveWall") return false;
-  if (t.obstacle) return false;
+  if (t.obstacle && !(passable && PASSABLE.includes(t.obstacle))) return false;
   const b = buildingAt(state, x, y);
   if (!b) return true;
   if (WALKABLE_BUILDINGS.includes(b.kind)) return true;
@@ -412,10 +418,9 @@ function startDay(prev: WorldState, newDay: number): WorldState {
       if (next.obstacle === "stump") next = { ...rest, obstacle: "sapling", regrow: newDay + REGROW_DAYS };
       else next = next.obstacle === "sapling" ? { ...rest, obstacle: "tree" } : rest;
     }
-    // Weeds sprout on uncovered farm soil.
+    // Weeds sprout on bare farm soil; where something is planted, they can't take hold.
     if (on(state, "weeds") && next.ground === "farm" && !next.greenhouse && !next.weeds && !next.obstacle && !next.mulch && !buildingAt(state, x, y)) {
-      const covered = next.crop && !next.crop.dead && CROPS[next.crop.id].coversSoil;
-      const chance = season === "Winter" ? 0.01 : covered ? 0 : next.crop ? 0.05 : next.tilled ? 0.08 : 0.12;
+      const chance = next.crop ? 0 : season === "Winter" ? 0.01 : next.tilled ? 0.08 : 0.12;
       if (rand() < chance) {
         next = { ...next, weeds: true };
         newWeeds++;
@@ -465,7 +470,7 @@ function startDay(prev: WorldState, newDay: number): WorldState {
 
   if (killedFrost) notes.push(`It dropped to ${formatTemp(climate.low, state.settings.units)} overnight, and the cold killed ${killedFrost} tender crop${killedFrost > 1 ? "s" : ""} outside. A greenhouse protects plants from frost.`);
   if (killedSeason) notes.push(`${killedSeason} crop${killedSeason > 1 ? "s" : ""} died because ${season} arrived and they don't grow this season.`);
-  if (newWeeds) notes.push(`${newWeeds} new weed${newWeeds > 1 ? "s" : ""} sprouted on uncovered soil. Mulch and cover crops keep weeds down.`);
+  if (newWeeds) notes.push(`${newWeeds} new weed${newWeeds > 1 ? "s" : ""} sprouted on bare soil. Plant it, mulch it, or sow a cover crop to keep weeds out.`);
   if (newPests) notes.push(`Pests found ${newPests} crop${newPests > 1 ? "s" : ""}. Rotating plant families and a bug hotel or bird house help.`);
   if (newSeason) notes.unshift(`${season} begins today!`);
   const tomorrow = weather[newDay + 1];
@@ -1212,20 +1217,97 @@ function discoverIf(state: WorldState, cond: boolean, id: string) {
 
 // ───────────────────────── movement ─────────────────────────
 
-const R = 0.3;
+/** Half the player's width: you're a 0.5 × 0.5 box. */
+export const PLAYER_R = 0.25;
+
+/** A blocking box in world units (tile centers sit on whole numbers). */
+export interface Box { x0: number; y0: number; x1: number; y1: number }
+
+const box = (cx: number, cy: number, hw: number, hd: number): Box => ({ x0: cx - hw, y0: cy - hd, x1: cx + hw, y1: cy + hd });
+const fullTile = (x: number, y: number) => box(x, y, 0.5, 0.5);
+const FENCE_EDGE: Record<number, [number, number]> = { 0: [0, 0.45], 1: [0.45, 0], 2: [0, -0.45], 3: [-0.45, 0] };
+
+/**
+ * What blocks you on one tile, as boxes. Water, cave walls, and cliffs you can't climb from where
+ * you stand fill the tile; a tree is its trunk (joined to the trees beside it, so a hedge stays a
+ * wall); a rock its base; a fence a rail along its edge (joined to the fences beside it); a lamp a
+ * post; big buildings their footprint, pulled in a little.
+ */
+export function hitBoxes(state: WorldState, x: number, y: number, from: { x: number; y: number }): Box[] {
+  const t = tileAt(state, x, y);
+  if (!t || isWater(t.ground) || t.ground === "caveWall" || !canStep(state, from.x, from.y, x, y)) return [fullTile(x, y)];
+  const out: Box[] = [];
+  if (t.obstacle && !PASSABLE.includes(t.obstacle)) {
+    const h = (OBSTACLE_BOX[t.obstacle] ?? 1) / 2;
+    out.push(box(x, y, h, h));
+    // Trees side by side grow into a solid row.
+    if (t.obstacle === "tree") {
+      for (const [dx, dy] of DIR_STEPS) if (tileAt(state, x + dx, y + dy)?.obstacle === "tree") out.push(joinBox(x, y, dx, dy, h));
+    }
+  }
+  const b = buildingAt(state, x, y);
+  if (b && !WALKABLE_BUILDINGS.includes(b.kind)) {
+    const [w, h] = BUILDING_SIZE[b.kind];
+    if (b.kind === "greenhouse") {
+      if (!isWalkable(state, x, y)) out.push(fullTile(x, y));
+    } else if (b.kind === "fence") {
+      const [ex, ey] = FENCE_EDGE[(b.rot ?? 0) % 4];
+      out.push(ex === 0 ? box(x, y + ey, 0.5, 0.1) : box(x + ex, y, 0.1, 0.5));
+      for (const [dx, dy] of DIR_STEPS) {
+        const o = buildingAt(state, x + dx, y + dy);
+        if (o?.kind === "fence") out.push(joinBox(x, y, dx, dy, 0.1));
+      }
+    } else if (w > 1 || h > 1) {
+      out.push({ x0: b.x - 0.5 + BUILDING_INSET, y0: b.y - 0.5 + BUILDING_INSET, x1: b.x + w - 0.5 - BUILDING_INSET, y1: b.y + h - 0.5 - BUILDING_INSET });
+    } else {
+      const [bw, bd] = HITBOX[b.kind] ?? [1, 1];
+      const turned = (b.rot ?? 0) % 2 === 1;
+      out.push(box(x, y, (turned ? bd : bw) / 2, (turned ? bw : bd) / 2));
+    }
+  }
+  return out;
+}
+
+const DIR_STEPS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+/** A bar from a tile's center to its edge toward (dx, dy), half as thick as `h`. */
+function joinBox(x: number, y: number, dx: number, dy: number, h: number): Box {
+  return dx ? box(x + dx * 0.25, y, 0.25, h) : box(x, y + dy * 0.25, h, 0.25);
+}
 
 /** Move the player by (dx, dy) tiles, sliding along walls. */
+/**
+ * Walk: across first, then up or down, so you slide along whatever you bump. You stop flush
+ * against it rather than short of it. Something you're already overlapping (you were set down
+ * there) never holds you in.
+ */
 export function movePlayer(state: WorldState, dx: number, dy: number): WorldState["player"] {
   const p = state.player;
   const from = { x: Math.round(p.x), y: Math.round(p.y) };
-  const free = (x: number, y: number) =>
-    [[-R, -R], [R, -R], [-R, R], [R, R]].every(([ox, oy]) => {
-      const tx = Math.round(x + ox), ty = Math.round(y + oy);
-      return isWalkable(state, tx, ty) && canStep(state, from.x, from.y, tx, ty);
-    });
+  const blocking = (x0: number, y0: number, x1: number, y1: number) => {
+    const out: Box[] = [];
+    // One tile of margin: a fence's rail reaches a little past its own tile.
+    for (let ty = Math.round(y0) - 1; ty <= Math.round(y1) + 1; ty++) for (let tx = Math.round(x0) - 1; tx <= Math.round(x1) + 1; tx++) out.push(...hitBoxes(state, tx, ty, from));
+    return out;
+  };
+  const hits = (b: Box, x: number, y: number) => x - PLAYER_R < b.x1 && x + PLAYER_R > b.x0 && y - PLAYER_R < b.y1 && y + PLAYER_R > b.y0;
   let { x, y } = p;
-  if (dx && free(x + dx, y)) x += dx;
-  if (dy && free(x, y + dy)) y += dy;
+  if (dx) {
+    let nx = x + dx;
+    for (const b of blocking(Math.min(x, nx) - PLAYER_R, y - PLAYER_R, Math.max(x, nx) + PLAYER_R, y + PLAYER_R)) {
+      if (hits(b, x, y) || !hits(b, nx, y)) continue;
+      nx = dx > 0 ? Math.max(x, Math.min(nx, b.x0 - PLAYER_R)) : Math.min(x, Math.max(nx, b.x1 + PLAYER_R));
+    }
+    x = nx;
+  }
+  if (dy) {
+    let ny = y + dy;
+    for (const b of blocking(x - PLAYER_R, Math.min(y, ny) - PLAYER_R, x + PLAYER_R, Math.max(y, ny) + PLAYER_R)) {
+      if (hits(b, x, y) || !hits(b, x, ny)) continue;
+      ny = dy > 0 ? Math.max(y, Math.min(ny, b.y0 - PLAYER_R)) : Math.min(y, Math.max(ny, b.y1 + PLAYER_R));
+    }
+    y = ny;
+  }
   const facing: Dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy !== 0 ? (dy > 0 ? "down" : "up") : p.facing;
   return { x, y, facing };
 }

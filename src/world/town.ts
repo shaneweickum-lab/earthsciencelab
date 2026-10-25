@@ -198,7 +198,7 @@ export function route(state: WorldState, from: [number, number], to: [number, nu
   const walk = cache.walk;
   const walkable = (x: number, y: number) => {
     const i = y * W + x;
-    if (walk[i] < 0) walk[i] = isWalkable(state, x, y) ? 1 : 0;
+    if (walk[i] < 0) walk[i] = isWalkable(state, x, y, true) ? 1 : 0;
     return walk[i] === 1;
   };
   const start = from[1] * W + from[0], goal = to[1] * W + to[0];
